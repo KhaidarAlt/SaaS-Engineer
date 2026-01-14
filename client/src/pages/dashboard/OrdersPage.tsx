@@ -1,0 +1,311 @@
+import { useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { motion } from "framer-motion";
+import {
+  Search,
+  ShoppingCart,
+  Eye,
+  Phone,
+  MapPin,
+  MessageCircle,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { DashboardLayout } from "@/components/DashboardLayout";
+import { TableRowSkeleton } from "@/components/LoadingSpinner";
+import { useToast } from "@/hooks/use-toast";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import type { Order, OrderItem } from "@shared/schema";
+
+const statusOptions = [
+  { value: "new", label: "Новый", variant: "default" as const },
+  { value: "in_progress", label: "В работе", variant: "secondary" as const },
+  { value: "completed", label: "Выполнен", variant: "outline" as const },
+  { value: "cancelled", label: "Отменён", variant: "destructive" as const },
+];
+
+interface OrderWithItems extends Order {
+  items?: OrderItem[];
+}
+
+export default function OrdersPage() {
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [selectedOrder, setSelectedOrder] = useState<OrderWithItems | null>(null);
+  const { toast } = useToast();
+
+  const { data: orders, isLoading } = useQuery<Order[]>({
+    queryKey: ["/api/orders"],
+  });
+
+  const updateStatusMutation = useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: string }) => {
+      return apiRequest("PATCH", `/api/orders/${id}`, { status });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      toast({ title: "Статус обновлён" });
+    },
+  });
+
+  const filteredOrders = orders?.filter((order) => {
+    const matchesSearch =
+      order.orderNumber.toLowerCase().includes(search.toLowerCase()) ||
+      order.customerName.toLowerCase().includes(search.toLowerCase()) ||
+      order.customerPhone.includes(search);
+    const matchesStatus = statusFilter === "all" || order.status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
+
+  const formatPrice = (price: string) => {
+    return new Intl.NumberFormat("ru-KZ").format(parseFloat(price)) + " ₸";
+  };
+
+  const formatDate = (date: string | Date) => {
+    return new Date(date).toLocaleString("ru-RU", {
+      day: "numeric",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
+  const getStatusBadge = (status: string) => {
+    const option = statusOptions.find((s) => s.value === status);
+    return option || { label: status, variant: "secondary" as const };
+  };
+
+  return (
+    <DashboardLayout>
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Заказы</h1>
+          <p className="text-muted-foreground">Управляйте заказами клиентов</p>
+        </div>
+
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex flex-col sm:flex-row gap-4">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Поиск по номеру, имени или телефону..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="pl-10"
+                  data-testid="input-search"
+                />
+              </div>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-full sm:w-48" data-testid="select-status">
+                  <SelectValue placeholder="Статус" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Все статусы</SelectItem>
+                  {statusOptions.map((status) => (
+                    <SelectItem key={status.value} value={status.value}>
+                      {status.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Номер</TableHead>
+                  <TableHead>Клиент</TableHead>
+                  <TableHead>Сумма</TableHead>
+                  <TableHead>Статус</TableHead>
+                  <TableHead>WhatsApp</TableHead>
+                  <TableHead>Дата</TableHead>
+                  <TableHead className="w-16"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {isLoading ? (
+                  [...Array(5)].map((_, i) => <TableRowSkeleton key={i} cols={7} />)
+                ) : filteredOrders && filteredOrders.length > 0 ? (
+                  filteredOrders.map((order, index) => (
+                    <motion.tr
+                      key={order.id}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ delay: index * 0.05 }}
+                      className="group"
+                    >
+                      <TableCell className="font-medium">
+                        #{order.orderNumber}
+                      </TableCell>
+                      <TableCell>
+                        <div>
+                          <p className="font-medium">{order.customerName}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {order.customerPhone}
+                          </p>
+                        </div>
+                      </TableCell>
+                      <TableCell className="font-medium">
+                        {formatPrice(order.total)}
+                      </TableCell>
+                      <TableCell>
+                        <Select
+                          value={order.status}
+                          onValueChange={(status) =>
+                            updateStatusMutation.mutate({ id: order.id, status })
+                          }
+                        >
+                          <SelectTrigger className="w-32 h-8">
+                            <Badge variant={getStatusBadge(order.status).variant}>
+                              {getStatusBadge(order.status).label}
+                            </Badge>
+                          </SelectTrigger>
+                          <SelectContent>
+                            {statusOptions.map((status) => (
+                              <SelectItem key={status.value} value={status.value}>
+                                {status.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={order.whatsappSent ? "default" : "secondary"}
+                        >
+                          {order.whatsappSent ? "Отправлен" : "Не отправлен"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {formatDate(order.createdAt)}
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setSelectedOrder(order)}
+                          data-testid={`view-order-${order.id}`}
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </motion.tr>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={7} className="h-48">
+                      <div className="flex flex-col items-center justify-center text-center">
+                        <ShoppingCart className="h-12 w-12 text-muted-foreground/50 mb-3" />
+                        <p className="font-medium">Нет заказов</p>
+                        <p className="text-sm text-muted-foreground">
+                          Заказы появятся здесь после оформления клиентами
+                        </p>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </Card>
+
+        <Dialog open={!!selectedOrder} onOpenChange={() => setSelectedOrder(null)}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Заказ #{selectedOrder?.orderNumber}</DialogTitle>
+            </DialogHeader>
+            {selectedOrder && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <p className="text-sm text-muted-foreground">Клиент</p>
+                    <p className="font-medium">{selectedOrder.customerName}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm text-muted-foreground">Статус</p>
+                    <Badge variant={getStatusBadge(selectedOrder.status).variant}>
+                      {getStatusBadge(selectedOrder.status).label}
+                    </Badge>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-sm">
+                    <Phone className="h-4 w-4 text-muted-foreground" />
+                    <span>{selectedOrder.customerPhone}</span>
+                  </div>
+                  {selectedOrder.deliveryAddress && (
+                    <div className="flex items-start gap-2 text-sm">
+                      <MapPin className="h-4 w-4 text-muted-foreground mt-0.5" />
+                      <span>{selectedOrder.deliveryAddress}</span>
+                    </div>
+                  )}
+                  {selectedOrder.comment && (
+                    <div className="flex items-start gap-2 text-sm">
+                      <MessageCircle className="h-4 w-4 text-muted-foreground mt-0.5" />
+                      <span>{selectedOrder.comment}</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="border-t pt-4">
+                  <div className="flex justify-between mb-2">
+                    <span className="text-muted-foreground">Сумма товаров</span>
+                    <span>{formatPrice(selectedOrder.subtotal)}</span>
+                  </div>
+                  {parseFloat(selectedOrder.discountTotal) > 0 && (
+                    <div className="flex justify-between mb-2 text-green-600">
+                      <span>Скидка</span>
+                      <span>-{formatPrice(selectedOrder.discountTotal)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between font-semibold text-lg">
+                    <span>Итого</span>
+                    <span>{formatPrice(selectedOrder.total)}</span>
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-4">
+                  <Button
+                    variant="outline"
+                    onClick={() => setSelectedOrder(null)}
+                  >
+                    Закрыть
+                  </Button>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+      </div>
+    </DashboardLayout>
+  );
+}
