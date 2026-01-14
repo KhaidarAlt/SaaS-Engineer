@@ -71,3 +71,47 @@ Preferred communication style: Simple, everyday language.
 
 ### Payment Processing (Prepared)
 - Stripe integration scaffolded for subscription billing
+
+## Recent Changes
+
+### January 2026
+- Implemented complete database storage layer with PostgreSQL
+- Added authentication with Passport.js and bcrypt password hashing
+- Created all CRUD API endpoints for products, categories, discounts, orders
+- Implemented plan limit enforcement (products, categories, discounts) 
+- Fixed product creation to handle empty optional fields
+- Default pricing plans created on server startup
+- Multi-tenant data isolation verified and working
+
+## API Endpoints
+
+### Authentication
+- `POST /api/auth/register` - Register new user and tenant
+- `POST /api/auth/login` - User login
+- `POST /api/auth/logout` - User logout
+- `GET /api/auth/me` - Get current user
+
+### Tenant Dashboard
+- `GET /api/products` - List tenant products
+- `POST /api/products` - Create product (plan limits enforced)
+- `PUT /api/products/:id` - Update product
+- `DELETE /api/products/:id` - Delete product
+- `GET /api/categories` - List categories
+- `POST /api/categories` - Create category (plan limits enforced)
+- `GET /api/discounts` - List discounts
+- `POST /api/discounts` - Create discount (plan limits enforced)
+- `GET /api/orders` - List orders
+- `PATCH /api/orders/:id` - Update order status
+- `GET /api/analytics` - Get analytics data
+- `GET /api/billing` - Get subscription and usage info
+
+### Public Catalog
+- `GET /api/catalog/:slug` - Get public catalog data
+- `POST /api/orders` - Create order (public checkout)
+
+### Super Admin
+- `GET /api/admin/stats` - Platform statistics
+- `GET /api/admin/tenants` - List all tenants
+- `PATCH /api/admin/tenants/:id` - Update tenant
+- `GET /api/admin/plans` - List all plans
+- `POST /api/admin/subscriptions/extend` - Extend subscription

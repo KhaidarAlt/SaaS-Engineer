@@ -377,19 +377,30 @@ export async function registerRoutes(
         return res.status(403).json({ message: limitCheck.message });
       }
       
+      const { categoryId, mainImageUrl, description, ...rest } = req.body;
       const product = await storage.createProduct({
-        ...req.body,
+        ...rest,
+        categoryId: categoryId && categoryId.trim() !== "" ? categoryId : null,
+        mainImageUrl: mainImageUrl && mainImageUrl.trim() !== "" ? mainImageUrl : null,
+        description: description && description.trim() !== "" ? description : null,
         tenantId: req.user!.tenantId!,
       });
       res.json(product);
     } catch (error) {
+      console.error("Product creation error:", error);
       res.status(500).json({ message: "Ошибка создания товара" });
     }
   });
 
   app.put("/api/products/:id", requireAuth, async (req, res) => {
     try {
-      const product = await storage.updateProduct(req.params.id, req.user!.tenantId!, req.body);
+      const { categoryId, mainImageUrl, description, ...rest } = req.body;
+      const product = await storage.updateProduct(req.params.id, req.user!.tenantId!, {
+        ...rest,
+        categoryId: categoryId && categoryId.trim() !== "" ? categoryId : null,
+        mainImageUrl: mainImageUrl && mainImageUrl.trim() !== "" ? mainImageUrl : null,
+        description: description && description.trim() !== "" ? description : null,
+      });
       res.json(product);
     } catch (error) {
       res.status(500).json({ message: "Ошибка обновления товара" });
