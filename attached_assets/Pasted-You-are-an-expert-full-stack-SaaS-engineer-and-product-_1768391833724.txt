@@ -1,0 +1,268 @@
+You are an expert full-stack SaaS engineer and product designer. Build a production-ready, modern, beautiful multi-tenant SaaS called “SmartCatalog” with a Russian-first UI (IMPORTANT: all UI text, labels, placeholders, menus, buttons, validation messages, notifications, seed data must be in Russian by default). The code can be in English, but the app language must be Russian. Use a clean Apple-like design: minimal, modern typography, lots of whitespace, smooth animations.
+
+GOAL
+A SaaS platform that lets a business quickly create a beautiful online catalog of any products/services, manage stock/availability, discounts and promotions, accept orders via WhatsApp (priority) using WAHA instances, and optionally use an AI sales assistant that answers strictly from the business data (catalog, discounts, promotions, FAQ, knowledge base) and follows a configurable sales script (5 stages). The platform also provides analytics funnel (visits → add to cart → orders), abandoned carts, revenue by period, top products. Include a Super Admin panel for SaaS owner with user/tenant management, plans/subscriptions, manual adding days, suspend/ban, and expiring subscription notifications.
+
+STACK (choose one cohesive stack and implement fully)
+- Monorepo (single repo) with:
+  - Frontend: Next.js 14+ App Router, TypeScript, TailwindCSS, shadcn/ui, Framer Motion for animations.
+  - Backend: Next.js API routes (fullstack in one app).
+  - Database: PostgreSQL with Prisma ORM.
+  - Auth: NextAuth Credentials (email+password) + role-based access. Must support multi-tenant roles.
+  - File storage: local filesystem for development (Replit) with an abstraction to later swap to S3-compatible.
+  - Background jobs: cron-like scheduled tasks in server (node-cron) + DB-based queue table for reliability.
+  - AI: OpenAI API (optional) + RAG:
+    - Prefer pgvector if available; fallback to “search over text” (Postgres full-text search).
+    - Must enforce “answer only from sources” guardrails.
+  - Messaging: WAHA integration via HTTP API (priority). Prepare interface for Meta WhatsApp Cloud API (stub).
+  - Notifications: WhatsApp notifications via WAHA (primary) + Telegram Bot API (fallback).
+
+IMPORTANT LANGUAGE REQUIREMENTS
+- Russian-first UI. No English visible in the app by default.
+- Use i18n structure so later we can add KZ/EN, but default Russian.
+- Seed demo content in Russian.
+
+MULTI-TENANCY
+- Each business is a Tenant.
+- Roles: superadmin (SaaS owner), owner (tenant), manager (tenant).
+- Data isolation: all tenant data scoped by tenant_id.
+- Superadmin sees all tenants and can manage them.
+
+PLANS & LIMITS (MUST IMPLEMENT)
+Define 3 plans (seed them) with Russian names and clear limits:
+
+PLAN 1: “Старт”
+- Цена: 19 900 ₸ / месяц (store as number, currency KZT)
+- Лимиты:
+  - Товаров: до 300
+  - Категорий: до 30
+  - Акций: до 5
+  - Скидок: до 20 правил
+  - Менеджеров: 1
+  - WhatsApp канал: WAHA (1 инстанс)
+  - AI: включено, лимит 500 сообщений/месяц
+  - Уведомления: WhatsApp + Telegram
+- Подходит для малого бизнеса.
+
+PLAN 2: “Про”
+- Цена: 49 900 ₸ / месяц
+- Лимиты:
+  - Товаров: до 3 000
+  - Категорий: до 200
+  - Акций: до 30
+  - Скидок: до 200 правил
+  - Менеджеров: до 5
+  - WhatsApp: WAHA (до 3 инстансов)
+  - AI: 5 000 сообщений/месяц
+  - Экспорт/импорт: все форматы
+  - Приоритетные уведомления и SLA
+
+PLAN 3: “Бизнес”
+- Цена: 99 900 ₸ / месяц
+- Лимиты:
+  - Товаров: до 20 000
+  - Категорий: до 1 000
+  - Акций: до 200
+  - Скидок: до 1 000 правил
+  - Менеджеров: до 20
+  - WhatsApp: WAHA (до 10 инстансов) + подготовка к Cloud API (UI/модели)
+  - AI: 20 000 сообщений/месяц
+  - Расширенная аналитика (включить флаги, но MVP метрики те же)
+
+PLAN ENFORCEMENT (MVP)
+- On exceeding limits, show friendly RU errors and prevent creation.
+- If subscription expired:
+  - Catalog storefront stays readable but “Оформить заказ” is disabled with message “Подписка истекла — обратитесь к владельцу магазина.”
+  - Tenant admin becomes read-only except Billing/Support pages.
+- Grace period: 3 days (configurable) before hard lock.
+- Superadmin can override by adding days.
+
+BILLING SKELETON (NO REAL PAYMENTS YET)
+- Implement DB models: plans, subscriptions, invoices, payments (payments optional).
+- Implement PaymentProvider interface stub for future acquiring.
+- Implement subscription extension:
+  - Superadmin can add +N days with mandatory reason.
+  - Tenant owner can request extension (creates ticket/notification).
+
+NOTIFICATIONS TEXTS (MUST IMPLEMENT, RUSSIAN)
+Implement default RU notification templates for:
+1) Subscription expiring in 3 days:
+- Title: “Подписка скоро закончится”
+- Body: “Ваша подписка на тариф «{planName}» закончится через 3 дня ({date}). Продлите, чтобы каталог и приём заказов работали без перерыва.”
+2) Subscription expires today:
+- Title: “Подписка закончилась”
+- Body: “Сегодня закончился срок тарифа «{planName}». Приём заказов в каталоге будет ограничен. Продлите подписку.”
+3) Handoff to human:
+- “Клиент просит менеджера. Откройте диалог: {link}”
+4) No AI answer:
+- “ИИ не нашёл ответа в базе. Нужно вмешаться: {link}”
+5) Complaint detected:
+- “Похоже на жалобу/негатив. Проверьте диалог: {link}”
+6) SLA breach:
+- “Нет ответа менеджера {minutes} минут. Срочно ответьте: {link}”
+7) High-value abandoned cart:
+- “Брошенная корзина на сумму {amount}. Можно вернуть клиента: {link}”
+
+Channels:
+- Primary WhatsApp (via WAHA) to configured owner/manager numbers.
+- Fallback Telegram (Bot) to configured chat_id.
+
+CORE FEATURES (MUST IMPLEMENT MVP)
+1) Authentication & onboarding
+- Beautiful RU registration/login pages.
+- After signup, onboarding wizard (3 steps):
+  (1) “Создание магазина”: name, currency, timezone, default language.
+  (2) “Загрузка каталога”: Smart Import (CSV/XLSX) + preview/validation.
+  (3) “Подключение WhatsApp”: connect WAHA instance via QR; configure notification destinations; enable AI.
+- After onboarding, user lands in Tenant Dashboard.
+
+2) Catalog (public storefront)
+- Public catalog URL per tenant (e.g., /c/[tenantSlug]).
+- Pages: Catalog Home, Product page, Promotions page, Cart, Checkout, Thank you.
+- Modern card design with smooth animations.
+- Filters: “В наличии”, “Со скидкой”, “Акционные”, categories, search.
+- Product card shows: image, name, price, discounted price, badges, stock availability.
+- Promotions tab shows promotions and conditions.
+
+3) Products & inventory (tenant admin)
+- CRUD Products and Categories.
+- Product fields:
+  sku (unique per tenant), name_ru, description_ru, price, stock_qty, in_stock toggle, always_in_stock checkbox, is_active, category, images (main + gallery).
+- Inventory logic:
+  - always_in_stock=true → always “В наличии”
+  - else stock_qty<=0 → “Нет в наличии”
+  - in_stock toggle controls display but cannot override stock_qty=0 (force out of stock).
+- Bulk actions: activate/deactivate, apply discount to selected product(s), change category, set stock.
+
+4) Discounts & Promotions
+- Discount rules:
+  - scope: product or category
+  - type: percent or amount
+  - value
+  - optional start/end
+  - priority system:
+    promotions > product discount > category discount > base price
+- Promotions module:
+  title, conditions_text, start/end, priority, scopes (products/categories).
+- Storefront must apply pricing and show badges accordingly.
+- AI must “read” discounts and promotions as structured data.
+
+5) Orders + WhatsApp via WAHA (priority)
+- Checkout creates an Order in DB and then sends the order message to WhatsApp via WAHA (server-side).
+- WAHA provider integration:
+  - Store WAHA base URL and instance name, plus status.
+  - Implement “connect via QR” flow: show QR from WAHA endpoint, track connection status.
+  - Send order message: include items, qty, total, discounts, customer name/phone/address/comment.
+- Orders admin:
+  list, detail, statuses: new, in_progress, completed, cancelled.
+  show WhatsApp send logs: sent/failed with error.
+- Provider abstraction:
+  WhatsAppProvider interface with WAHAProvider implemented, CloudAPIProvider stubbed (not functional yet).
+
+6) Smart Import (killer feature)
+- Import catalog from CSV/XLSX with:
+  - auto column mapping (recognize RU/EN headers: “Артикул/SKU”, “Название”, “Цена”, “Категория”, “Остаток”, “Описание”, “Всегда в наличии”, “Наличие”, “Скидка тип”, “Скидка значение”, “Фото”).
+  - preview first 20 rows.
+  - validation (hard errors: missing sku/name/price/category; warnings: missing stock, discount without type, etc.).
+  - mode: Upsert (default), Create only, Replace catalog (archive missing).
+  - choose which fields to update (price/stock/descriptions/discounts/images).
+- Photo import ZIP:
+  - match images by SKU filename (SKU123.jpg) OR folder by SKU (/SKU123/1.jpg).
+  - attach as main + gallery.
+  - show “unmatched images” list and allow manual mapping.
+- Export catalog in formats: CSV, XLSX, JSON (RU headers for CSV/XLSX).
+
+7) Analytics dashboard (tenant)
+- Track events: catalog_view, product_view, add_to_cart, checkout_start, order_created, order_sent_whatsapp.
+- Dashboard metrics with date range filters:
+  - Visits (unique + total) into catalog
+  - Orders created
+  - Abandoned carts (rule: add_to_cart but no order_created within 24h; make threshold configurable)
+  - Conversion rate %: orders/visits, add_to_cart/visits, abandoned/add_to_cart
+  - Revenue (sum of order totals) by period chart
+  - Top products by units and revenue
+- Abandoned carts list (if phone is known at checkout step, show ability to notify later).
+
+8) AI Sales Assistant (Russian, bounded to data)
+- Web chat widget in storefront and tenant inbox for WhatsApp conversations.
+- AI can answer ONLY using:
+  catalog + stock + discounts + promotions + FAQ + knowledge base + sales playbook + tags rules.
+- Guardrails:
+  - If answer not found in sources: respond in Russian “У меня нет этой информации в каталоге/базе знаний. Могу передать менеджеру.”
+  - No hallucinated prices/availability.
+- Sales Playbook editor:
+  - default playbook: 5 stages (контакт, выявление потребности, презентация, работа с возражениями, закрытие)
+  - editable stages in RU
+  - constraints: forbidden promises/phrases.
+- Tags & rules inside playbook section:
+  - define tags like: handoff_human (“хочу менеджера”), no_ai_answer, complaint, catalog_request, delivery_question, price_objection, etc.
+  - for each tag: detection (keywords list + optional AI classification), action (handoff, send catalog link, notify), priority.
+- AI response correction:
+  - in Conversations/Inbox, allow manager to edit AI suggested answers and save correction as a FAQ entry or rule.
+- Human-in-the-loop mode:
+  - default: AI suggests, manager approves to send (for WhatsApp).
+  - allow auto-reply for safe FAQs.
+
+9) Notifications: “Need to intervene”
+- Triggers:
+  - handoff_human
+  - no_ai_answer
+  - complaint
+  - SLA breach (conversation needs_attention and no manager reply within N minutes)
+  - high value abandoned cart (total > X)
+- Channels:
+  - WhatsApp notification to owner/manager via WAHA (primary)
+  - Telegram bot notification (fallback)
+- Provide UI settings to configure destinations and quiet hours.
+- Store notification logs.
+
+10) Super Admin panel (SaaS owner)
+- Russian UI.
+- Pages:
+  - Overview: total tenants, new tenants, active/suspended/banned.
+  - Tenants list: registered date, plan, status, paid_until, days_left, actions.
+  - Tenant detail: profile, users, subscription, audit.
+  - Plans CRUD: price, period_days, limits/features.
+  - Subscriptions: manual adjust days (+N days) with mandatory reason; optionally notify tenant.
+  - Actions: suspend/unsuspend, ban/unban.
+  - Audit logs for all changes.
+- Subscription expiry notifications:
+  - scheduled task: 3 days before ends_at, send notification to tenant owner (WhatsApp or Telegram if configured) and email (optional).
+- Ability to manually add days to any tenant subscription.
+
+CLOUD API (META) FUTURE SUPPORT (ARCHITECTURE ONLY)
+- Add data models and UI placeholders for Cloud API credentials:
+  waba_id, phone_number_id, access_token (encrypted), webhook verify token.
+- Add provider stub implementing interface but returns “не настроено” until future.
+
+DESIGN REQUIREMENTS
+- Modern, responsive, beautiful UI. Use shadcn/ui components and Tailwind.
+- Animations via Framer Motion in storefront cards and onboarding.
+- Consistent layout, sidebar nav for dashboards, clear typography.
+- All text in Russian.
+
+DELIVERABLES
+- Fully working Replit project that runs with “npm install && npm run dev”.
+- Prisma schema + migrations.
+- Seed script that creates:
+  - a superadmin user (email: admin@smartcatalog.local, password: Admin123!)
+  - a demo tenant with sample products/categories/promotions/FAQ in Russian
+  - plans “Старт/Про/Бизнес” with the limits above and an active subscription for demo tenant
+- .env.example with required variables:
+  DATABASE_URL
+  NEXTAUTH_SECRET
+  WAHA_BASE_URL
+  TELEGRAM_BOT_TOKEN (optional)
+  TELEGRAM_DEFAULT_CHAT_ID (optional)
+  OPENAI_API_KEY (optional)
+- README in Russian: setup, run, seed, connect WAHA, how to test.
+
+IMPLEMENTATION NOTES
+- Use server-side order sending to WhatsApp through WAHA to ensure “order_sent_whatsapp” is trackable.
+- Use event tracking middleware for storefront routes.
+- Use secure multi-tenant access control in API routes.
+- Use Zod validation for forms and API payloads (messages in Russian).
+- Use robust error handling and user-friendly RU error toasts.
+- Ensure code quality: ESLint, Prettier, typed APIs, components structured cleanly.
+
+Now generate the full project with all pages, API routes, Prisma models, seeds, UI components, and default RU content. Make it clean, production-minded, and immediately runnable.
