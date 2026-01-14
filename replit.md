@@ -82,6 +82,7 @@ Preferred communication style: Simple, everyday language.
 - Fixed product creation to handle empty optional fields
 - Default pricing plans created on server startup
 - Multi-tenant data isolation verified and working
+- Added WhatsApp button in orders panel to contact customers directly
 
 ## API Endpoints
 

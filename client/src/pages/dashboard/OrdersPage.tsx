@@ -8,7 +8,9 @@ import {
   Phone,
   MapPin,
   MessageCircle,
+  ExternalLink,
 } from "lucide-react";
+import { SiWhatsapp } from "react-icons/si";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -96,6 +98,30 @@ export default function OrdersPage() {
   const getStatusBadge = (status: string) => {
     const option = statusOptions.find((s) => s.value === status);
     return option || { label: status, variant: "secondary" as const };
+  };
+
+  const formatPhoneForWhatsApp = (phone: string) => {
+    // Remove all non-digit characters
+    let digits = phone.replace(/\D/g, "");
+    // If starts with 8, replace with 7 (Kazakhstan/Russia format)
+    if (digits.startsWith("8") && digits.length === 11) {
+      digits = "7" + digits.slice(1);
+    }
+    // If no country code, assume Kazakhstan (+7)
+    if (digits.length === 10) {
+      digits = "7" + digits;
+    }
+    return digits;
+  };
+
+  const createWhatsAppLink = (order: Order) => {
+    const phone = formatPhoneForWhatsApp(order.customerPhone);
+    const message = encodeURIComponent(
+      `Здравствуйте, ${order.customerName}!\n\n` +
+      `Ваш заказ #${order.orderNumber} на сумму ${formatPrice(order.total)} принят.\n\n` +
+      `Спасибо за заказ!`
+    );
+    return `https://wa.me/${phone}?text=${message}`;
   };
 
   return (
@@ -198,11 +224,16 @@ export default function OrdersPage() {
                         </Select>
                       </TableCell>
                       <TableCell>
-                        <Badge
-                          variant={order.whatsappSent ? "default" : "secondary"}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-2"
+                          onClick={() => window.open(createWhatsAppLink(order), "_blank")}
+                          data-testid={`whatsapp-order-${order.id}`}
                         >
-                          {order.whatsappSent ? "Отправлен" : "Не отправлен"}
-                        </Badge>
+                          <SiWhatsapp className="h-4 w-4 text-green-600" />
+                          Написать
+                        </Button>
                       </TableCell>
                       <TableCell className="text-muted-foreground">
                         {formatDate(order.createdAt)}
@@ -299,6 +330,14 @@ export default function OrdersPage() {
                     onClick={() => setSelectedOrder(null)}
                   >
                     Закрыть
+                  </Button>
+                  <Button
+                    className="gap-2 bg-green-600 hover:bg-green-700"
+                    onClick={() => window.open(createWhatsAppLink(selectedOrder), "_blank")}
+                    data-testid="button-whatsapp-dialog"
+                  >
+                    <SiWhatsapp className="h-4 w-4" />
+                    Написать клиенту
                   </Button>
                 </div>
               </div>
