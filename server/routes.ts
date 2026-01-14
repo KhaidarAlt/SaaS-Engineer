@@ -115,6 +115,51 @@ const requireSuperAdmin = (req: Request, res: Response, next: NextFunction) => {
   next();
 };
 
+type LimitType = 'products' | 'categories' | 'promotions' | 'discounts';
+
+async function checkPlanLimit(tenantId: string, limitType: LimitType): Promise<{ allowed: boolean; message?: string }> {
+  const subscription = await storage.getSubscription(tenantId);
+  if (!subscription || !subscription.plan) {
+    return { allowed: false, message: "Подписка не найдена" };
+  }
+
+  const plan = subscription.plan;
+  const limits: Record<LimitType, { max: number; getCurrent: () => Promise<number>; name: string }> = {
+    products: {
+      max: plan.maxProducts,
+      getCurrent: async () => (await storage.getProducts(tenantId)).length,
+      name: "товаров",
+    },
+    categories: {
+      max: plan.maxCategories,
+      getCurrent: async () => (await storage.getCategories(tenantId)).length,
+      name: "категорий",
+    },
+    promotions: {
+      max: plan.maxPromotions,
+      getCurrent: async () => (await storage.getPromotions(tenantId)).length,
+      name: "акций",
+    },
+    discounts: {
+      max: plan.maxDiscountRules,
+      getCurrent: async () => (await storage.getDiscounts(tenantId)).length,
+      name: "скидок",
+    },
+  };
+
+  const limit = limits[limitType];
+  const current = await limit.getCurrent();
+  
+  if (current >= limit.max) {
+    return {
+      allowed: false,
+      message: `Достигнут лимит ${limit.name} (${current}/${limit.max}). Обновите тарифный план для увеличения лимитов.`,
+    };
+  }
+
+  return { allowed: true };
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -327,6 +372,11 @@ export async function registerRoutes(
 
   app.post("/api/products", requireAuth, async (req, res) => {
     try {
+      const limitCheck = await checkPlanLimit(req.user!.tenantId!, 'products');
+      if (!limitCheck.allowed) {
+        return res.status(403).json({ message: limitCheck.message });
+      }
+      
       const product = await storage.createProduct({
         ...req.body,
         tenantId: req.user!.tenantId!,
@@ -375,6 +425,11 @@ export async function registerRoutes(
 
   app.post("/api/categories", requireAuth, async (req, res) => {
     try {
+      const limitCheck = await checkPlanLimit(req.user!.tenantId!, 'categories');
+      if (!limitCheck.allowed) {
+        return res.status(403).json({ message: limitCheck.message });
+      }
+      
       const category = await storage.createCategory({
         ...req.body,
         tenantId: req.user!.tenantId!,
@@ -414,6 +469,11 @@ export async function registerRoutes(
 
   app.post("/api/discounts", requireAuth, async (req, res) => {
     try {
+      const limitCheck = await checkPlanLimit(req.user!.tenantId!, 'discounts');
+      if (!limitCheck.allowed) {
+        return res.status(403).json({ message: limitCheck.message });
+      }
+      
       const discount = await storage.createDiscount({
         ...req.body,
         tenantId: req.user!.tenantId!,

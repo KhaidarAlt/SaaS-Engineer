@@ -106,7 +106,7 @@ export default function DashboardOverview() {
   });
 
   const { data: recentOrders, isLoading: ordersLoading } = useQuery<RecentOrder[]>({
-    queryKey: ["/api/orders", { limit: 5 }],
+    queryKey: ["/api/orders"],
   });
 
   const formatCurrency = (value: number) => {
@@ -207,7 +207,7 @@ export default function DashboardOverview() {
                   </div>
                 ) : recentOrders && recentOrders.length > 0 ? (
                   <div className="space-y-3">
-                    {recentOrders.map((order) => (
+                    {recentOrders.slice(0, 5).map((order) => (
                       <Link key={order.id} href={`/dashboard/orders/${order.id}`}>
                         <div className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer">
                           <div>
