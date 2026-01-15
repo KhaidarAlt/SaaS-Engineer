@@ -9,6 +9,7 @@ import {
   Tag,
   Sparkles,
   Package,
+  Percent,
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -25,23 +26,43 @@ import {
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { CardSkeleton } from "@/components/LoadingSpinner";
 import { useCart } from "@/contexts/CartContext";
+import { useToast } from "@/hooks/use-toast";
 import type { Tenant, Product, Category, Promotion } from "@shared/schema";
+
+interface ProductWithPrice extends Product {
+  computedPrice: string;
+  originalPrice: string;
+  discountPercent: number | null;
+  discountType: string | null;
+  hasDiscount: boolean;
+  promotionName?: string;
+  discountName?: string;
+}
 
 interface CatalogData {
   tenant: Tenant;
-  products: Product[];
+  products: ProductWithPrice[];
   categories: Category[];
   promotions: Promotion[];
 }
 
-function ProductCard({ product, tenantSlug }: { product: Product; tenantSlug: string }) {
+function ProductCard({ product, tenantSlug }: { product: ProductWithPrice; tenantSlug: string }) {
   const { addItem } = useCart();
-  const price = parseFloat(product.price);
+  const { toast } = useToast();
   
   const isInStock = product.alwaysInStock || product.stockQty > 0;
 
-  const formatPrice = (value: number) => {
-    return new Intl.NumberFormat("ru-KZ").format(value) + " ₸";
+  const formatPrice = (value: number | string) => {
+    const num = typeof value === "string" ? parseFloat(value) : value;
+    return new Intl.NumberFormat("ru-KZ").format(num) + " ₸";
+  };
+
+  const handleAddToCart = () => {
+    addItem(product);
+    toast({
+      title: "Добавлено в корзину",
+      description: product.name,
+    });
   };
 
   return (
@@ -65,6 +86,20 @@ function ProductCard({ product, tenantSlug }: { product: Product; tenantSlug: st
                 <Package className="h-16 w-16 text-muted-foreground/30" />
               </div>
             )}
+            <div className="absolute top-2 left-2 flex flex-col gap-1">
+              {product.hasDiscount && product.discountPercent && (
+                <Badge className="bg-red-500 text-white">
+                  <Percent className="h-3 w-3 mr-1" />
+                  -{Math.round(product.discountPercent)}%
+                </Badge>
+              )}
+              {product.discountType === "promotion" && product.promotionName && (
+                <Badge variant="secondary" className="bg-orange-500 text-white">
+                  <Sparkles className="h-3 w-3 mr-1" />
+                  {product.promotionName}
+                </Badge>
+              )}
+            </div>
             <div className="absolute top-2 right-2 flex flex-col gap-1">
               {!isInStock && (
                 <Badge variant="destructive">Нет в наличии</Badge>
@@ -78,14 +113,25 @@ function ProductCard({ product, tenantSlug }: { product: Product; tenantSlug: st
               {product.name}
             </h3>
           </Link>
-          <div className="flex items-center justify-between mt-auto">
-            <div>
-              <p className="text-lg font-bold">{formatPrice(price)}</p>
+          <div className="flex items-center justify-between mt-auto gap-2">
+            <div className="flex flex-col">
+              {product.hasDiscount ? (
+                <>
+                  <p className="text-lg font-bold text-red-500">
+                    {formatPrice(product.computedPrice)}
+                  </p>
+                  <p className="text-sm text-muted-foreground line-through">
+                    {formatPrice(product.originalPrice)}
+                  </p>
+                </>
+              ) : (
+                <p className="text-lg font-bold">{formatPrice(product.computedPrice)}</p>
+              )}
             </div>
             <Button
               size="sm"
               disabled={!isInStock}
-              onClick={() => addItem(product)}
+              onClick={handleAddToCart}
               data-testid={`button-add-cart-${product.id}`}
             >
               <ShoppingCart className="h-4 w-4" />
