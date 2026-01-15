@@ -481,7 +481,20 @@ export async function registerRoutes(
   app.get("/api/products", requireAuth, async (req, res) => {
     try {
       const products = await storage.getProducts(req.user!.tenantId!);
-      res.json(products);
+      
+      // Include main image from product_images if mainImageUrl is null
+      const productsWithImages = await Promise.all(products.map(async (product) => {
+        if (!product.mainImageUrl) {
+          const productImages = await storage.getProductImages(product.id, req.user!.tenantId!);
+          const mainImage = productImages.find(img => img.isMain) || productImages[0];
+          if (mainImage) {
+            return { ...product, mainImageUrl: mainImage.url };
+          }
+        }
+        return product;
+      }));
+      
+      res.json(productsWithImages);
     } catch (error) {
       res.status(500).json({ message: "Ошибка получения товаров" });
     }

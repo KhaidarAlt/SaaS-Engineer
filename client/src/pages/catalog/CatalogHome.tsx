@@ -162,21 +162,27 @@ export default function CatalogHome() {
     return data?.categories?.filter(c => c.parentId === parentId).map(c => c.id) || [];
   };
 
-  const availableSizes = [...new Set(
-    data?.products?.flatMap(p => 
-      ((p as any).sizes || []).map((s: {size: string; qty: number}) => s.size)
-    ) || []
-  )].sort();
+  const availableSizes = Array.from(new Set(
+    data?.products?.flatMap(p => {
+      const sizes = (p as any).sizes || [];
+      return sizes.map((s: string | {size: string; qty: number}) => 
+        typeof s === 'object' ? s.size : s
+      );
+    }) || []
+  )).sort() as string[];
 
-  const availableColors = [...new Map(
-    data?.products?.flatMap(p => 
-      ((p as any).colors || []).map((c: {name: string; hex: string}) => [c.hex, c])
-    ) || []
-  ).values()] as {name: string; hex: string}[];
+  const colorMap = new Map<string, {name: string; hex: string}>();
+  data?.products?.forEach(p => {
+    const colors = (p as any).colors || [];
+    colors.forEach((c: {name: string; hex: string}) => {
+      if (!colorMap.has(c.hex)) colorMap.set(c.hex, c);
+    });
+  });
+  const availableColors = Array.from(colorMap.values());
 
-  const availableGenders = [...new Set(
+  const availableGenders = Array.from(new Set(
     data?.products?.map(p => (p as any).gender).filter(Boolean) || []
-  )];
+  )) as string[];
 
   const genderLabels: Record<string, string> = {
     male: "Мужской",
@@ -201,9 +207,13 @@ export default function CatalogHome() {
       (stockFilter === "in_stock" && isInStock) ||
       (stockFilter === "out_of_stock" && !isInStock);
     
-    const productSizes = ((product as any).sizes || []) as {size: string; qty: number}[];
+    const productSizes = ((product as any).sizes || []) as Array<string | {size: string; qty: number}>;
     const matchesSize = sizeFilter === "all" || 
-      productSizes.some(s => s.size === sizeFilter && (s.qty > 0 || product.alwaysInStock));
+      productSizes.some(s => {
+        const sizeLabel = typeof s === 'object' ? s.size : s;
+        const isAvailable = typeof s === 'object' ? (s.qty > 0 || product.alwaysInStock) : true;
+        return sizeLabel === sizeFilter && isAvailable;
+      });
     
     const productColors = ((product as any).colors || []) as {name: string; hex: string}[];
     const matchesColor = colorFilter === "all" || 

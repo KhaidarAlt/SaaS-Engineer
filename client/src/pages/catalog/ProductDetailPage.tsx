@@ -352,19 +352,19 @@ export default function ProductDetailPage() {
               <div className="space-y-3">
                 <span className="text-sm font-medium">Доступные размеры:</span>
                 <div className="flex flex-wrap gap-2">
-                  {((product as any).sizes as {size: string; qty: number}[]).map((sizeItem) => {
-                    const isAvailable = sizeItem.qty > 0 || product.alwaysInStock;
+                  {((product as any).sizes as Array<string | {size: string; qty: number}>).map((sizeItem, idx) => {
+                    // Handle both old string[] and new {size, qty}[] format
+                    const isObject = typeof sizeItem === 'object' && sizeItem !== null;
+                    const sizeLabel = isObject ? sizeItem.size : sizeItem;
+                    const isAvailable = isObject ? (sizeItem.qty > 0 || product.alwaysInStock) : true;
                     return (
                       <Badge
-                        key={sizeItem.size}
+                        key={isObject ? sizeItem.size : `${sizeItem}-${idx}`}
                         variant={isAvailable ? "outline" : "secondary"}
                         className={isAvailable ? "" : "opacity-50"}
-                        data-testid={`size-${sizeItem.size}`}
+                        data-testid={`size-${sizeLabel}`}
                       >
-                        <span className="font-medium">{sizeItem.size}</span>
-                        {!product.alwaysInStock && (
-                          <span className="ml-1 text-xs opacity-70">({sizeItem.qty})</span>
-                        )}
+                        {sizeLabel}
                       </Badge>
                     );
                   })}
