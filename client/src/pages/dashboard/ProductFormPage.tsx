@@ -1,10 +1,10 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation, useRoute } from "wouter";
 import { motion } from "framer-motion";
-import { ArrowLeft, Save, Package } from "lucide-react";
+import { ArrowLeft, Save, Package, Wand2, Plus, X, Palette } from "lucide-react";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -19,6 +20,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { PageLoader } from "@/components/LoadingSpinner";
 import { ProductVariantsSection } from "@/components/ProductVariantsSection";
@@ -26,6 +32,26 @@ import { ProductImagesSection } from "@/components/ProductImagesSection";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Product, Category } from "@shared/schema";
+
+const CLOTHING_SIZES = ["XXS", "XS", "S", "M", "L", "XL", "XXL", "3XL", "4XL", "5XL"];
+const SHOE_SIZES = ["35", "36", "37", "38", "39", "40", "41", "42", "43", "44", "45", "46", "47", "48"];
+const PRESET_COLORS = [
+  { name: "Белый", hex: "#FFFFFF" },
+  { name: "Чёрный", hex: "#000000" },
+  { name: "Серый", hex: "#808080" },
+  { name: "Красный", hex: "#EF4444" },
+  { name: "Синий", hex: "#3B82F6" },
+  { name: "Зелёный", hex: "#22C55E" },
+  { name: "Жёлтый", hex: "#EAB308" },
+  { name: "Розовый", hex: "#EC4899" },
+  { name: "Фиолетовый", hex: "#A855F7" },
+  { name: "Оранжевый", hex: "#F97316" },
+  { name: "Бежевый", hex: "#D4B896" },
+  { name: "Коричневый", hex: "#8B4513" },
+  { name: "Бордовый", hex: "#800020" },
+  { name: "Тёмно-синий", hex: "#1E3A5F" },
+  { name: "Голубой", hex: "#87CEEB" },
+];
 
 const productFormSchema = z.object({
   sku: z.string().min(1, "Артикул обязателен"),
@@ -38,9 +64,17 @@ const productFormSchema = z.object({
   alwaysInStock: z.boolean(),
   isActive: z.boolean(),
   mainImageUrl: z.string().optional(),
+  sizes: z.array(z.string()).optional(),
+  colors: z.array(z.object({ name: z.string(), hex: z.string() })).optional(),
 });
 
 type ProductFormData = z.infer<typeof productFormSchema>;
+
+function generateSKU(): string {
+  const timestamp = Date.now().toString(36).toUpperCase();
+  const random = Math.random().toString(36).substring(2, 6).toUpperCase();
+  return `SKU-${timestamp}-${random}`;
+}
 
 export default function ProductFormPage() {
   const [, setLocation] = useLocation();
@@ -48,6 +82,12 @@ export default function ProductFormPage() {
   const isEdit = match && params?.id !== "new";
   const productId = isEdit ? params?.id : null;
   const { toast } = useToast();
+
+  const [selectedSizes, setSelectedSizes] = useState<string[]>([]);
+  const [selectedColors, setSelectedColors] = useState<{name: string; hex: string}[]>([]);
+  const [customColorName, setCustomColorName] = useState("");
+  const [customColorHex, setCustomColorHex] = useState("#000000");
+  const [sizeType, setSizeType] = useState<"clothing" | "shoes">("clothing");
 
   const { data: product, isLoading: productLoading } = useQuery<Product>({
     queryKey: ["/api/products", productId],
@@ -71,11 +111,19 @@ export default function ProductFormPage() {
       alwaysInStock: false,
       isActive: true,
       mainImageUrl: "",
+      sizes: [],
+      colors: [],
     },
   });
 
   useEffect(() => {
     if (product) {
+      const productSizes = (product as any).sizes || [];
+      const productColors = (product as any).colors || [];
+      
+      setSelectedSizes(productSizes);
+      setSelectedColors(productColors);
+      
       form.reset({
         sku: product.sku,
         name: product.name,
@@ -87,16 +135,23 @@ export default function ProductFormPage() {
         alwaysInStock: product.alwaysInStock,
         isActive: product.isActive,
         mainImageUrl: product.mainImageUrl || "",
+        sizes: productSizes,
+        colors: productColors,
       });
     }
   }, [product, form]);
 
   const mutation = useMutation({
     mutationFn: async (data: ProductFormData) => {
+      const payload = {
+        ...data,
+        sizes: selectedSizes,
+        colors: selectedColors,
+      };
       if (isEdit && productId) {
-        return apiRequest("PUT", `/api/products/${productId}`, data);
+        return apiRequest("PUT", `/api/products/${productId}`, payload);
       }
-      return apiRequest("POST", "/api/products", data);
+      return apiRequest("POST", "/api/products", payload);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/products"] });
@@ -118,9 +173,47 @@ export default function ProductFormPage() {
     mutation.mutate(data);
   };
 
+  const handleGenerateSKU = () => {
+    const newSKU = generateSKU();
+    form.setValue("sku", newSKU);
+  };
+
+  const toggleSize = (size: string) => {
+    setSelectedSizes(prev => 
+      prev.includes(size) ? prev.filter(s => s !== size) : [...prev, size]
+    );
+  };
+
+  const toggleColor = (color: {name: string; hex: string}) => {
+    setSelectedColors(prev => {
+      const exists = prev.find(c => c.hex === color.hex);
+      if (exists) {
+        return prev.filter(c => c.hex !== color.hex);
+      }
+      return [...prev, color];
+    });
+  };
+
+  const addCustomColor = () => {
+    if (customColorName.trim() && customColorHex) {
+      const newColor = { name: customColorName.trim(), hex: customColorHex };
+      if (!selectedColors.find(c => c.hex === newColor.hex)) {
+        setSelectedColors(prev => [...prev, newColor]);
+      }
+      setCustomColorName("");
+      setCustomColorHex("#000000");
+    }
+  };
+
+  const removeColor = (hex: string) => {
+    setSelectedColors(prev => prev.filter(c => c.hex !== hex));
+  };
+
   if (productLoading && isEdit) {
     return <PageLoader />;
   }
+
+  const sizesArray = sizeType === "clothing" ? CLOTHING_SIZES : SHOE_SIZES;
 
   return (
     <DashboardLayout>
@@ -160,12 +253,25 @@ export default function ProductFormPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="sku">Артикул (SKU) *</Label>
-                  <Input
-                    id="sku"
-                    placeholder="например: SKU-001"
-                    {...form.register("sku")}
-                    data-testid="input-sku"
-                  />
+                  <div className="flex gap-2">
+                    <Input
+                      id="sku"
+                      placeholder="например: SKU-001"
+                      {...form.register("sku")}
+                      data-testid="input-sku"
+                      className="flex-1"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={handleGenerateSKU}
+                      title="Сгенерировать автоматически"
+                      data-testid="button-generate-sku"
+                    >
+                      <Wand2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                   {form.formState.errors.sku && (
                     <p className="text-sm text-destructive">
                       {form.formState.errors.sku.message}
@@ -244,6 +350,175 @@ export default function ProductFormPage() {
                   data-testid="input-image"
                 />
               </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Размеры</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex gap-2 mb-3">
+                <Button
+                  type="button"
+                  variant={sizeType === "clothing" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setSizeType("clothing")}
+                  data-testid="button-size-clothing"
+                >
+                  Одежда
+                </Button>
+                <Button
+                  type="button"
+                  variant={sizeType === "shoes" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setSizeType("shoes")}
+                  data-testid="button-size-shoes"
+                >
+                  Обувь
+                </Button>
+              </div>
+              
+              <div className="flex flex-wrap gap-2">
+                {sizesArray.map((size) => (
+                  <Badge
+                    key={size}
+                    variant={selectedSizes.includes(size) ? "default" : "outline"}
+                    className="cursor-pointer hover-elevate px-3 py-1"
+                    onClick={() => toggleSize(size)}
+                    data-testid={`badge-size-${size}`}
+                  >
+                    {size}
+                  </Badge>
+                ))}
+              </div>
+              
+              {selectedSizes.length > 0 && (
+                <div className="pt-2">
+                  <Label className="text-xs text-muted-foreground">Выбранные размеры:</Label>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {selectedSizes.map((size) => (
+                      <Badge key={size} variant="secondary" className="text-xs">
+                        {size}
+                        <button
+                          type="button"
+                          onClick={() => toggleSize(size)}
+                          className="ml-1 hover:text-destructive"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Palette className="h-5 w-5" />
+                Цвета
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex flex-wrap gap-2">
+                {PRESET_COLORS.map((color) => (
+                  <button
+                    key={color.hex}
+                    type="button"
+                    onClick={() => toggleColor(color)}
+                    className={`w-8 h-8 rounded-full border-2 transition-all ${
+                      selectedColors.find(c => c.hex === color.hex)
+                        ? "ring-2 ring-primary ring-offset-2"
+                        : "border-border"
+                    }`}
+                    style={{ backgroundColor: color.hex }}
+                    title={color.name}
+                    data-testid={`button-color-${color.name}`}
+                  />
+                ))}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button type="button" variant="outline" size="sm" data-testid="button-add-custom-color">
+                      <Plus className="h-4 w-4 mr-1" />
+                      Свой цвет
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-64">
+                    <div className="space-y-3">
+                      <div className="space-y-1">
+                        <Label className="text-xs">Название</Label>
+                        <Input
+                          value={customColorName}
+                          onChange={(e) => setCustomColorName(e.target.value)}
+                          placeholder="например: Мятный"
+                          className="h-8"
+                          data-testid="input-custom-color-name"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Цвет</Label>
+                        <div className="flex gap-2">
+                          <input
+                            type="color"
+                            value={customColorHex}
+                            onChange={(e) => setCustomColorHex(e.target.value)}
+                            className="w-10 h-8 rounded cursor-pointer"
+                            data-testid="input-custom-color-hex"
+                          />
+                          <Input
+                            value={customColorHex}
+                            onChange={(e) => setCustomColorHex(e.target.value)}
+                            className="h-8 flex-1 font-mono text-xs"
+                          />
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={addCustomColor}
+                        className="w-full"
+                        data-testid="button-confirm-custom-color"
+                      >
+                        Добавить
+                      </Button>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              {selectedColors.length > 0 && (
+                <div className="pt-2">
+                  <Label className="text-xs text-muted-foreground">Выбранные цвета:</Label>
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {selectedColors.map((color) => (
+                      <Badge
+                        key={color.hex}
+                        variant="secondary"
+                        className="flex items-center gap-2 pr-1"
+                      >
+                        <span
+                          className="w-4 h-4 rounded-full border border-border"
+                          style={{ backgroundColor: color.hex }}
+                        />
+                        {color.name}
+                        <button
+                          type="button"
+                          onClick={() => removeColor(color.hex)}
+                          className="hover:text-destructive"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
 

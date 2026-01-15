@@ -93,6 +93,10 @@ Preferred communication style: Simple, everyday language.
 - Added import modes: upsert by SKU (selective field updates), create_only, replace catalog
 - Implemented ZIP photo import: JSZip parsing, SKU-based matching, unmatched image detection
 - Created API endpoint /api/import/product for upsert/create operations with field selection
+- Enhanced ProductFormPage: auto-generate SKU button, clothing/shoe size selector, color picker with presets and custom colors
+- Added product size (sizes JSONB) and color (colors JSONB) fields to products table
+- Enhanced ProductImagesSection: image preview before upload, automatic compression to 1920px max, file size display
+- Sizes and colors displayed in public catalog ProductDetailPage
 
 ## API Endpoints
 

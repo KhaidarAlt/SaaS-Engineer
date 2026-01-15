@@ -334,6 +334,45 @@ export default function ProductDetailPage() {
               </span>
             </div>
 
+            {((product as any).sizes?.length > 0) && (
+              <div className="space-y-2">
+                <span className="text-sm font-medium">Размеры:</span>
+                <div className="flex flex-wrap gap-2">
+                  {((product as any).sizes as string[]).map((size) => (
+                    <Badge
+                      key={size}
+                      variant="outline"
+                      className="px-3 py-1"
+                      data-testid={`size-${size}`}
+                    >
+                      {size}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {((product as any).colors?.length > 0) && (
+              <div className="space-y-2">
+                <span className="text-sm font-medium">Цвета:</span>
+                <div className="flex flex-wrap gap-2">
+                  {((product as any).colors as {name: string; hex: string}[]).map((color) => (
+                    <div
+                      key={color.hex}
+                      className="flex items-center gap-2 px-3 py-1 border rounded-full text-sm"
+                      data-testid={`color-${color.name}`}
+                    >
+                      <span
+                        className="w-4 h-4 rounded-full border border-border"
+                        style={{ backgroundColor: color.hex }}
+                      />
+                      {color.name}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="flex items-center gap-4 pt-4">
               <div className="flex items-center border rounded-lg">
                 <Button

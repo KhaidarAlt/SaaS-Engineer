@@ -146,6 +146,8 @@ export const products = pgTable("products", {
   isActive: boolean("is_active").notNull().default(true),
   mainImageUrl: text("main_image_url"),
   galleryUrls: jsonb("gallery_urls").$type<string[]>(),
+  sizes: jsonb("sizes").$type<string[]>(),
+  colors: jsonb("colors").$type<{name: string; hex: string}[]>(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
