@@ -2,9 +2,9 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation } from "@tanstack/react-query";
-import { useRoute, Link, useLocation } from "wouter";
+import { useRoute, Link } from "wouter";
 import { motion } from "framer-motion";
-import { ArrowLeft, Send, CheckCircle2, Package, MessageCircle } from "lucide-react";
+import { ArrowLeft, Send, CheckCircle2, Package } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,15 +16,44 @@ import { useToast } from "@/hooks/use-toast";
 import { useCart } from "@/contexts/CartContext";
 import { apiRequest } from "@/lib/queryClient";
 import { checkoutSchema, type CheckoutInput } from "@shared/schema";
+import { WhatsAppSendButton } from "@/components/WhatsAppSendButton";
+import type { OrderForWhatsApp } from "@/lib/whatsapp";
+
+interface OrderResponse {
+  orderId: string;
+  orderNumber: string;
+  ownerWhatsAppPhone: string | null;
+  order: {
+    id: string;
+    orderNumber: string;
+    customerName: string;
+    customerPhone: string;
+    customerEmail: string | null;
+    deliveryAddress: string | null;
+    comment: string | null;
+    subtotal: string;
+    discountTotal: string;
+    total: string;
+    createdAt: string;
+    items: Array<{
+      productId: string;
+      productName: string;
+      productSku: string;
+      quantity: number;
+      unitPrice: string;
+      total: string;
+    }>;
+  };
+  catalogUrl: string;
+}
 
 export default function CheckoutPage() {
   const [, params] = useRoute("/c/:slug/checkout");
-  const [, setLocation] = useLocation();
   const slug = params?.slug || "";
   const { items, subtotal, clearCart } = useCart();
   const { toast } = useToast();
   const [orderSuccess, setOrderSuccess] = useState(false);
-  const [orderNumber, setOrderNumber] = useState("");
+  const [orderData, setOrderData] = useState<OrderResponse | null>(null);
 
   const form = useForm<CheckoutInput>({
     resolver: zodResolver(checkoutSchema),
@@ -39,7 +68,7 @@ export default function CheckoutPage() {
 
   const mutation = useMutation({
     mutationFn: async (data: CheckoutInput) => {
-      const orderData = {
+      const orderPayload = {
         ...data,
         tenantSlug: slug,
         items: items.map((item) => ({
@@ -47,11 +76,11 @@ export default function CheckoutPage() {
           quantity: item.quantity,
         })),
       };
-      return apiRequest("POST", "/api/orders", orderData);
+      return apiRequest("POST", "/api/orders", orderPayload);
     },
     onSuccess: async (response) => {
-      const data = await response.json();
-      setOrderNumber(data.orderNumber);
+      const data: OrderResponse = await response.json();
+      setOrderData(data);
       setOrderSuccess(true);
       clearCart();
     },
@@ -64,6 +93,30 @@ export default function CheckoutPage() {
     },
   });
 
+  const buildWhatsAppOrder = (): OrderForWhatsApp | null => {
+    if (!orderData) return null;
+    const order = orderData.order;
+    return {
+      orderNumber: order.orderNumber,
+      createdAtISO: order.createdAt,
+      currencySymbol: "₸",
+      items: order.items.map((item) => ({
+        name: item.productName,
+        qty: item.quantity,
+        unitPrice: parseFloat(item.unitPrice),
+        lineTotal: parseFloat(item.total),
+      })),
+      subtotal: parseFloat(order.subtotal),
+      discountTotal: parseFloat(order.discountTotal),
+      total: parseFloat(order.total),
+      customerName: order.customerName,
+      customerPhone: order.customerPhone,
+      customerAddress: order.deliveryAddress || undefined,
+      comment: order.comment || undefined,
+      catalogUrl: orderData.catalogUrl,
+    };
+  };
+
   const onSubmit = (data: CheckoutInput) => {
     mutation.mutate(data);
   };
@@ -72,32 +125,37 @@ export default function CheckoutPage() {
     return new Intl.NumberFormat("ru-KZ").format(value) + " ₸";
   };
 
-  if (orderSuccess) {
+  if (orderSuccess && orderData) {
+    const whatsAppOrder = buildWhatsAppOrder();
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center px-4">
+      <div className="min-h-screen bg-background flex items-center justify-center px-4 py-8">
         <motion.div
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
-          className="text-center max-w-md"
+          className="text-center max-w-xl w-full"
         >
           <div className="w-20 h-20 rounded-full bg-green-500/10 flex items-center justify-center mx-auto mb-6">
             <CheckCircle2 className="h-10 w-10 text-green-500" />
           </div>
-          <h1 className="text-2xl font-bold mb-2">Заказ оформлен!</h1>
-          <p className="text-muted-foreground mb-4">
-            Номер вашего заказа: <strong>#{orderNumber}</strong>
+          <h1 className="text-2xl font-bold mb-2">Спасибо! Заказ создан.</h1>
+          <p className="text-muted-foreground mb-6">
+            Номер вашего заказа: <strong>#{orderData.orderNumber}</strong>
           </p>
-          <div className="p-4 rounded-lg bg-muted mb-6">
-            <div className="flex items-center gap-2 text-sm">
-              <MessageCircle className="h-5 w-5 text-green-500" />
-              <span>Информация о заказе отправлена в WhatsApp</span>
+          
+          {whatsAppOrder && (
+            <div className="mb-6">
+              <WhatsAppSendButton 
+                recipientPhone={orderData.ownerWhatsAppPhone}
+                order={whatsAppOrder}
+              />
             </div>
-          </div>
+          )}
+
           <p className="text-sm text-muted-foreground mb-6">
             Мы свяжемся с вами для подтверждения заказа
           </p>
           <Link href={`/c/${slug}`}>
-            <Button data-testid="button-continue-shopping">
+            <Button variant="outline" data-testid="button-continue-shopping">
               Вернуться к каталогу
             </Button>
           </Link>
@@ -267,12 +325,9 @@ export default function CheckoutPage() {
                   <span>Итого</span>
                   <span>{formatPrice(subtotal)}</span>
                 </div>
-                <div className="pt-2 p-3 rounded-lg bg-green-500/10 text-sm">
-                  <div className="flex items-center gap-2">
-                    <MessageCircle className="h-4 w-4 text-green-500" />
-                    <span>Заказ придёт в WhatsApp</span>
-                  </div>
-                </div>
+                <p className="text-xs text-muted-foreground pt-2">
+                  После оформления вы сможете отправить заказ в WhatsApp
+                </p>
               </CardContent>
             </Card>
           </motion.div>

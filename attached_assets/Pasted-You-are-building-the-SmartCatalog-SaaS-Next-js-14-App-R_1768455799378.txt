@@ -1,0 +1,285 @@
+You are building the SmartCatalog SaaS (Next.js 14 App Router + TypeScript + Tailwind + shadcn/ui). IMPORTANT: all UI text in Russian.
+
+RIGHT NOW IMPLEMENT THIS BEHAVIOR (NO WAHA, NO CLOUD API):
+After the user fills the catalog, creates an order in the system (saved to DB), and clicks “Отправить в WhatsApp”, the app must open WhatsApp chat to the STORE OWNER phone number using wa.me with a pre-filled order text. The user will then press Send in WhatsApp.
+
+ADDITIONAL MUST-HAVES (UX + analytics correctness):
+1) On checkout the customer phone is REQUIRED (обязательно), because it is needed for abandoned cart recovery later.
+2) The system MUST persist order_created to DB BEFORE redirecting/opening WhatsApp.
+   - Even if WhatsApp doesn’t open or the user cancels, the order remains saved and visible in Orders.
+   - Track event order_created immediately after DB save.
+
+Deliver:
+1) A reusable React component <WhatsAppSendButton /> (client component) for the order confirmation page.
+2) Helper functions:
+   - normalizeKzPhoneToWhatsApp(phone: string): string  // returns "7XXXXXXXXXX" or throws error
+   - buildOrderWhatsAppText(order: OrderForWhatsApp): string
+   - openWhatsAppOrFallback({ phone, text }): opens wa.me safely; if it fails, show UI to copy.
+3) UI:
+   - Primary button “Отправить заказ в WhatsApp”
+   - Secondary button “Скопировать текст заказа”
+   - A small RU hint: “Откроется WhatsApp с готовым сообщением — нажмите «Отправить».”
+   - Toast messages in Russian on copy success/failure and validation errors.
+4) Requirements:
+   - Phone number must be normalized to "7XXXXXXXXXX" (KZ). Accept inputs with "+7", "8", spaces, dashes, parentheses.
+   - Text must be encodeURIComponent encoded.
+   - Must trigger on user click (avoid automatic redirects).
+   - Must work on mobile and desktop. If popup blocked, fallback to copy.
+   - No English UI text.
+
+IMPLEMENTATION INSTRUCTIONS (Next.js 14 App Router)
+- Put helpers in /src/lib/whatsapp.ts
+- Put component in /src/components/WhatsAppSendButton.tsx
+- Implement checkout flow:
+  - /c/[tenantSlug]/cart
+  - /c/[tenantSlug]/checkout
+  - /c/[tenantSlug]/checkout/success?orderId=...
+- On POST /api/orders/create (or server action):
+  - Validate required fields (RU messages), especially customerPhone required.
+  - Create Order + OrderItems in DB (Prisma).
+  - Track events: order_created.
+  - Return created order id.
+- On success page:
+  - Fetch order data from DB using orderId.
+  - Read store owner WhatsApp recipient phone from tenant settings:
+    field name: tenantSettings.ownerWhatsAppPhone
+  - Render <WhatsAppSendButton recipientPhone={ownerWhatsAppPhone} order={mappedOrder} />
+- Add “Скопировать текст заказа” fallback.
+- Add a <Toaster /> (Sonner) in layout for RU toasts.
+
+CODE TO INCLUDE (TypeScript):
+
+// src/lib/whatsapp.ts
+export type OrderItemForWhatsApp = {
+  name: string;
+  qty: number;
+  unitPrice: number;        // in KZT
+  lineTotal: number;        // in KZT
+};
+
+export type OrderForWhatsApp = {
+  orderNumber: string;
+  createdAtISO: string;     // ISO string
+  currencySymbol?: string;  // default "₸"
+  items: OrderItemForWhatsApp[];
+  subtotal: number;
+  discountTotal: number;
+  total: number;
+
+  customerName?: string;
+  customerPhone?: string;
+  customerAddress?: string;
+  comment?: string;
+
+  catalogUrl?: string;      // optional link to storefront
+};
+
+export function normalizeKzPhoneToWhatsApp(input: string): string {
+  // Goal: return "7XXXXXXXXXX" (11 digits, starts with 7) or throw.
+  // Accept: +7 701 123-45-67, 8(701)1234567, 77011234567, etc.
+  if (!input) throw new Error("Не указан номер телефона получателя.");
+
+  const digits = String(input).replace(/\D/g, "");
+
+  // Possible forms:
+  //  - 11 digits starting with 7 => OK
+  //  - 11 digits starting with 8 => convert 8XXXXXXXXXX -> 7XXXXXXXXXX
+  //  - 10 digits (701...) => prefix with 7
+  let normalized = digits;
+
+  if (digits.length === 11 && digits.startsWith("7")) {
+    normalized = digits;
+  } else if (digits.length === 11 && digits.startsWith("8")) {
+    normalized = "7" + digits.slice(1);
+  } else if (digits.length === 10) {
+    normalized = "7" + digits;
+  } else {
+    throw new Error("Неверный формат номера. Укажите номер в формате +7XXXXXXXXXX или 8XXXXXXXXXX.");
+  }
+
+  // Final validation: 11 digits, starts with 7
+  if (!/^7\d{10}$/.test(normalized)) {
+    throw new Error("Номер должен быть в формате 7XXXXXXXXXX.");
+  }
+
+  return normalized;
+}
+
+export function formatKzt(amount: number): string {
+  const n = Math.round(amount);
+  return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+}
+
+export function buildOrderWhatsAppText(order: OrderForWhatsApp): string {
+  const cur = order.currencySymbol ?? "₸";
+  const lines: string[] = [];
+
+  lines.push(`Новый заказ №${order.orderNumber}`);
+  lines.push(`Дата: ${new Date(order.createdAtISO).toLocaleString("ru-RU")}`);
+  lines.push(`------------------------------`);
+
+  if (!order.items?.length) {
+    lines.push("Позиции: (пусто)");
+  } else {
+    order.items.forEach((it, idx) => {
+      lines.push(
+        `${idx + 1}) ${it.name} — ${it.qty} шт × ${formatKzt(it.unitPrice)} ${cur} = ${formatKzt(it.lineTotal)} ${cur}`
+      );
+    });
+  }
+
+  lines.push(`------------------------------`);
+  if (order.discountTotal > 0) {
+    lines.push(`Скидка: -${formatKzt(order.discountTotal)} ${cur}`);
+  }
+  lines.push(`Итого: ${formatKzt(order.total)} ${cur}`);
+
+  lines.push("");
+  lines.push("Контакт клиента:");
+  if (order.customerName) lines.push(`Имя: ${order.customerName}`);
+  if (order.customerPhone) lines.push(`Телефон: ${order.customerPhone}`);
+  if (order.customerAddress) lines.push(`Адрес: ${order.customerAddress}`);
+  if (order.comment) lines.push(`Комментарий: ${order.comment}`);
+
+  if (order.catalogUrl) {
+    lines.push("");
+    lines.push(`Ссылка на каталог: ${order.catalogUrl}`);
+  }
+
+  return lines.join("\n");
+}
+
+export async function copyToClipboard(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.left = "-9999px";
+      ta.style.top = "-9999px";
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      const ok = document.execCommand("copy");
+      document.body.removeChild(ta);
+      return ok;
+    } catch {
+      return false;
+    }
+  }
+}
+
+export async function openWhatsAppOrFallback(params: { recipientPhone: string; text: string }): Promise<{ opened: boolean; url: string }> {
+  const recipient = normalizeKzPhoneToWhatsApp(params.recipientPhone);
+  const encoded = encodeURIComponent(params.text);
+
+  const url = `https://wa.me/${recipient}?text=${encoded}`;
+
+  // Must be called from a user gesture (button click).
+  let opened = false;
+  const w = window.open(url, "_blank", "noopener,noreferrer");
+  if (w && !w.closed) {
+    opened = true;
+  } else {
+    try {
+      window.location.href = url;
+      opened = true;
+    } catch {
+      opened = false;
+    }
+  }
+
+  return { opened, url };
+}
+
+Now add the React component:
+
+// src/components/WhatsAppSendButton.tsx
+"use client";
+
+import * as React from "react";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
+import type { OrderForWhatsApp } from "@/lib/whatsapp";
+import { buildOrderWhatsAppText, copyToClipboard, openWhatsAppOrFallback } from "@/lib/whatsapp";
+
+export function WhatsAppSendButton(props: { recipientPhone: string; order: OrderForWhatsApp }) {
+  const [busy, setBusy] = React.useState(false);
+
+  const text = React.useMemo(() => buildOrderWhatsAppText(props.order), [props.order]);
+
+  const onSend = async () => {
+    setBusy(true);
+    try {
+      const { opened } = await openWhatsAppOrFallback({ recipientPhone: props.recipientPhone, text });
+      if (!opened) {
+        toast.error("Не удалось открыть WhatsApp автоматически. Скопируйте текст заказа и отправьте вручную.");
+      }
+    } catch (e: any) {
+      toast.error(e?.message ?? "Ошибка при подготовке сообщения для WhatsApp.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onCopy = async () => {
+    const ok = await copyToClipboard(text);
+    if (ok) toast.success("Текст заказа скопирован.");
+    else toast.error("Не удалось скопировать текст. Выделите и скопируйте вручную.");
+  };
+
+  return (
+    <div className="w-full max-w-xl space-y-3">
+      <div className="rounded-2xl border bg-background p-5 shadow-sm">
+        <div className="space-y-2">
+          <h3 className="text-lg font-semibold">Отправка заказа</h3>
+          <p className="text-sm text-muted-foreground">
+            Откроется WhatsApp с готовым сообщением — нажмите «Отправить».
+          </p>
+        </div>
+
+        <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+          <Button onClick={onSend} disabled={busy} className="rounded-2xl">
+            {busy ? "Подготовка..." : "Отправить заказ в WhatsApp"}
+          </Button>
+          <Button onClick={onCopy} variant="secondary" className="rounded-2xl">
+            Скопировать текст заказа
+          </Button>
+        </div>
+
+        <details className="mt-4">
+          <summary className="cursor-pointer text-sm text-muted-foreground">Показать текст заказа</summary>
+          <pre className="mt-2 whitespace-pre-wrap rounded-xl bg-muted p-3 text-xs">{text}</pre>
+        </details>
+      </div>
+    </div>
+  );
+}
+
+CHECKOUT REQUIREMENTS (MUST ENFORCE)
+- On checkout form:
+  - customerPhone is required with RU validation message:
+    “Укажите номер телефона, чтобы мы могли связаться с вами.”
+  - Optional: name, address, comment
+- On submit:
+  - Call API route or server action to create order in DB.
+  - Only after success navigate to success page.
+  - Never redirect directly to WhatsApp before saving the order.
+
+SUCCESS PAGE BEHAVIOR
+- The success page shows:
+  - “Спасибо! Заказ создан.”
+  - Buttons: “Отправить заказ в WhatsApp”, “Скопировать текст заказа”
+  - Order summary
+- Pass store owner phone number from tenant settings.
+- If owner phone is missing, show RU warning: “Владелец магазина не настроил номер WhatsApp для получения заказов.”
+
+FINISH
+Make sure everything compiles and runs in Replit.
+Add a short RU README section “Тестирование WhatsApp”:
+- Configure tenantSettings.ownerWhatsAppPhone
+- Create a test order
+- Click button and verify WhatsApp opens with prefilled text to the owner number.

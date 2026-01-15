@@ -83,6 +83,9 @@ Preferred communication style: Simple, everyday language.
 - Default pricing plans created on server startup
 - Multi-tenant data isolation verified and working
 - Added WhatsApp button in orders panel to contact customers directly
+- Implemented WhatsApp checkout flow: order saved to DB first, then customer can send order details to store owner via WhatsApp
+- Created WhatsAppSendButton component with copy fallback for blocked popups
+- Helper functions for KZ phone normalization and order text formatting
 
 ## API Endpoints
 

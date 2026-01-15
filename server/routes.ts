@@ -709,7 +709,16 @@ export async function registerRoutes(
         orderId: order.id,
       });
 
-      res.json({ orderId: order.id, orderNumber: order.orderNumber });
+      res.json({ 
+        orderId: order.id, 
+        orderNumber: order.orderNumber,
+        ownerWhatsAppPhone: tenant.notificationPhone || tenant.contactPhone || null,
+        order: {
+          ...order,
+          items: orderItems,
+        },
+        catalogUrl: `${req.protocol}://${req.get('host')}/c/${tenantSlug}`,
+      });
     } catch (error) {
       console.error("Order error:", error);
       res.status(500).json({ message: "Ошибка создания заказа" });
