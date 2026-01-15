@@ -935,13 +935,27 @@ export async function registerRoutes(
       });
 
       const activeProducts = products.filter(p => p.isActive);
-      const productsWithPrices = activeProducts.map(product => {
+      
+      // Get product images for products without mainImageUrl
+      const productsWithPrices = await Promise.all(activeProducts.map(async (product) => {
         const priceData = computeProductPrice(product, discounts as any, promotions as any);
+        
+        // If no mainImageUrl, try to get from product_images
+        let displayImageUrl = product.mainImageUrl;
+        if (!displayImageUrl) {
+          const productImages = await storage.getProductImages(product.id, tenant.id);
+          const mainImage = productImages.find(img => img.isMain) || productImages[0];
+          if (mainImage) {
+            displayImageUrl = mainImage.url;
+          }
+        }
+        
         return {
           ...product,
           ...priceData,
+          mainImageUrl: displayImageUrl,
         };
-      });
+      }));
 
       res.json({
         tenant: {
@@ -1056,10 +1070,10 @@ export async function registerRoutes(
       const category = categories.find(c => c.id === product.categoryId);
       
       const images = await storage.getProductImages(product.id, tenant.id);
-      const mainImage = images.find(img => img.isMain);
-      const galleryUrls = images
-        .filter(img => !img.isMain)
-        .sort((a, b) => a.sortOrder - b.sortOrder)
+      const sortedImages = images.sort((a, b) => a.sortOrder - b.sortOrder);
+      const mainImage = sortedImages.find(img => img.isMain) || sortedImages[0];
+      const galleryUrls = sortedImages
+        .filter(img => img.id !== mainImage?.id)
         .map(img => img.url);
       
       const mainImageUrl = mainImage?.url || product.mainImageUrl;
