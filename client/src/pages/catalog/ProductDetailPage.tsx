@@ -247,11 +247,12 @@ export default function ProductDetailPage() {
                   <button
                     key={index}
                     onClick={() => setCurrentImageIndex(index)}
-                    className={`relative flex-shrink-0 w-20 h-20 rounded-lg overflow-hidden border-2 transition-colors ${
+                    className={`relative flex-shrink-0 w-20 h-20 rounded-lg overflow-hidden border-2 ${
                       index === currentImageIndex
                         ? "border-primary"
-                        : "border-transparent hover:border-muted-foreground/50"
+                        : "border-border"
                     }`}
+                    data-testid={`button-thumbnail-${index}`}
                   >
                     <img
                       src={img}
@@ -334,32 +335,52 @@ export default function ProductDetailPage() {
               </span>
             </div>
 
+            {(product as any).gender && (
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Для кого:</span>
+                <Badge variant="secondary">
+                  {{
+                    male: "Мужской",
+                    female: "Женский",
+                    kids: "Детский",
+                  }[(product as any).gender as string] || (product as any).gender}
+                </Badge>
+              </div>
+            )}
+
             {((product as any).sizes?.length > 0) && (
-              <div className="space-y-2">
-                <span className="text-sm font-medium">Размеры:</span>
+              <div className="space-y-3">
+                <span className="text-sm font-medium">Доступные размеры:</span>
                 <div className="flex flex-wrap gap-2">
-                  {((product as any).sizes as string[]).map((size) => (
-                    <Badge
-                      key={size}
-                      variant="outline"
-                      className="px-3 py-1"
-                      data-testid={`size-${size}`}
-                    >
-                      {size}
-                    </Badge>
-                  ))}
+                  {((product as any).sizes as {size: string; qty: number}[]).map((sizeItem) => {
+                    const isAvailable = sizeItem.qty > 0 || product.alwaysInStock;
+                    return (
+                      <Badge
+                        key={sizeItem.size}
+                        variant={isAvailable ? "outline" : "secondary"}
+                        className={isAvailable ? "" : "opacity-50"}
+                        data-testid={`size-${sizeItem.size}`}
+                      >
+                        <span className="font-medium">{sizeItem.size}</span>
+                        {!product.alwaysInStock && (
+                          <span className="ml-1 text-xs opacity-70">({sizeItem.qty})</span>
+                        )}
+                      </Badge>
+                    );
+                  })}
                 </div>
               </div>
             )}
 
             {((product as any).colors?.length > 0) && (
-              <div className="space-y-2">
-                <span className="text-sm font-medium">Цвета:</span>
+              <div className="space-y-3">
+                <span className="text-sm font-medium">Доступные цвета:</span>
                 <div className="flex flex-wrap gap-2">
                   {((product as any).colors as {name: string; hex: string}[]).map((color) => (
-                    <div
+                    <Badge
                       key={color.hex}
-                      className="flex items-center gap-2 px-3 py-1 border rounded-full text-sm"
+                      variant="outline"
+                      className="gap-2"
                       data-testid={`color-${color.name}`}
                     >
                       <span
@@ -367,7 +388,7 @@ export default function ProductDetailPage() {
                         style={{ backgroundColor: color.hex }}
                       />
                       {color.name}
-                    </div>
+                    </Badge>
                   ))}
                 </div>
               </div>

@@ -97,6 +97,13 @@ Preferred communication style: Simple, everyday language.
 - Added product size (sizes JSONB) and color (colors JSONB) fields to products table
 - Enhanced ProductImagesSection: image preview before upload, automatic compression to 1920px max, file size display
 - Sizes and colors displayed in public catalog ProductDetailPage
+- Added gender field (male/female/kids) to products with optional selection
+- Sizes now include quantity per size (size + qty structure)
+- Added children's clothing sizes (56-164) and children's shoe sizes (16-34)
+- Catalog shows sizes with availability based on qty
+- Added catalog filtering by size, color, and gender in CatalogHome
+- Filter UI with badges for gender, dropdown for sizes, badges for colors
+- ProductDetailPage displays gender badge and sizes with availability indicator
 
 ## API Endpoints
 

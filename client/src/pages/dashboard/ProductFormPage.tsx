@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation, useRoute } from "wouter";
 import { motion } from "framer-motion";
-import { ArrowLeft, Save, Package, Wand2, Plus, X, Palette } from "lucide-react";
+import { ArrowLeft, Save, Package, Wand2, Plus, X, Palette, Users } from "lucide-react";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,6 +35,15 @@ import type { Product, Category } from "@shared/schema";
 
 const CLOTHING_SIZES = ["XXS", "XS", "S", "M", "L", "XL", "XXL", "3XL", "4XL", "5XL"];
 const SHOE_SIZES = ["35", "36", "37", "38", "39", "40", "41", "42", "43", "44", "45", "46", "47", "48"];
+const KIDS_CLOTHING_SIZES = ["56", "62", "68", "74", "80", "86", "92", "98", "104", "110", "116", "122", "128", "134", "140", "146", "152", "158", "164"];
+const KIDS_SHOE_SIZES = ["16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32", "33", "34"];
+
+const GENDER_OPTIONS = [
+  { value: "male", label: "Мужской" },
+  { value: "female", label: "Женский" },
+  { value: "kids", label: "Детский" },
+];
+
 const PRESET_COLORS = [
   { name: "Белый", hex: "#FFFFFF" },
   { name: "Чёрный", hex: "#000000" },
@@ -64,11 +73,17 @@ const productFormSchema = z.object({
   alwaysInStock: z.boolean(),
   isActive: z.boolean(),
   mainImageUrl: z.string().optional(),
-  sizes: z.array(z.string()).optional(),
+  gender: z.string().optional(),
+  sizes: z.array(z.object({ size: z.string(), qty: z.number() })).optional(),
   colors: z.array(z.object({ name: z.string(), hex: z.string() })).optional(),
 });
 
 type ProductFormData = z.infer<typeof productFormSchema>;
+
+interface SizeWithQty {
+  size: string;
+  qty: number;
+}
 
 function generateSKU(): string {
   const timestamp = Date.now().toString(36).toUpperCase();
@@ -83,11 +98,12 @@ export default function ProductFormPage() {
   const productId = isEdit ? params?.id : null;
   const { toast } = useToast();
 
-  const [selectedSizes, setSelectedSizes] = useState<string[]>([]);
+  const [selectedSizes, setSelectedSizes] = useState<SizeWithQty[]>([]);
   const [selectedColors, setSelectedColors] = useState<{name: string; hex: string}[]>([]);
+  const [selectedGender, setSelectedGender] = useState<string>("");
   const [customColorName, setCustomColorName] = useState("");
   const [customColorHex, setCustomColorHex] = useState("#000000");
-  const [sizeType, setSizeType] = useState<"clothing" | "shoes">("clothing");
+  const [sizeType, setSizeType] = useState<"clothing" | "shoes" | "kids_clothing" | "kids_shoes">("clothing");
 
   const { data: product, isLoading: productLoading } = useQuery<Product>({
     queryKey: ["/api/products", productId],
@@ -111,6 +127,7 @@ export default function ProductFormPage() {
       alwaysInStock: false,
       isActive: true,
       mainImageUrl: "",
+      gender: "",
       sizes: [],
       colors: [],
     },
@@ -120,9 +137,11 @@ export default function ProductFormPage() {
     if (product) {
       const productSizes = (product as any).sizes || [];
       const productColors = (product as any).colors || [];
+      const productGender = (product as any).gender || "";
       
       setSelectedSizes(productSizes);
       setSelectedColors(productColors);
+      setSelectedGender(productGender);
       
       form.reset({
         sku: product.sku,
@@ -135,6 +154,7 @@ export default function ProductFormPage() {
         alwaysInStock: product.alwaysInStock,
         isActive: product.isActive,
         mainImageUrl: product.mainImageUrl || "",
+        gender: productGender,
         sizes: productSizes,
         colors: productColors,
       });
@@ -145,6 +165,7 @@ export default function ProductFormPage() {
     mutationFn: async (data: ProductFormData) => {
       const payload = {
         ...data,
+        gender: selectedGender || null,
         sizes: selectedSizes,
         colors: selectedColors,
       };
@@ -179,8 +200,18 @@ export default function ProductFormPage() {
   };
 
   const toggleSize = (size: string) => {
+    setSelectedSizes(prev => {
+      const exists = prev.find(s => s.size === size);
+      if (exists) {
+        return prev.filter(s => s.size !== size);
+      }
+      return [...prev, { size, qty: 0 }];
+    });
+  };
+
+  const updateSizeQty = (size: string, qty: number) => {
     setSelectedSizes(prev => 
-      prev.includes(size) ? prev.filter(s => s !== size) : [...prev, size]
+      prev.map(s => s.size === size ? { ...s, qty: Math.max(0, qty) } : s)
     );
   };
 
@@ -213,7 +244,17 @@ export default function ProductFormPage() {
     return <PageLoader />;
   }
 
-  const sizesArray = sizeType === "clothing" ? CLOTHING_SIZES : SHOE_SIZES;
+  const getSizesArray = () => {
+    switch (sizeType) {
+      case "clothing": return CLOTHING_SIZES;
+      case "shoes": return SHOE_SIZES;
+      case "kids_clothing": return KIDS_CLOTHING_SIZES;
+      case "kids_shoes": return KIDS_SHOE_SIZES;
+      default: return CLOTHING_SIZES;
+    }
+  };
+
+  const sizesArray = getSizesArray();
 
   return (
     <DashboardLayout>
@@ -355,10 +396,39 @@ export default function ProductFormPage() {
 
           <Card>
             <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Users className="h-5 w-5" />
+                Для кого
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-wrap gap-2">
+                {GENDER_OPTIONS.map((option) => (
+                  <Badge
+                    key={option.value}
+                    variant={selectedGender === option.value ? "default" : "outline"}
+                    className="cursor-pointer"
+                    onClick={() => setSelectedGender(prev => prev === option.value ? "" : option.value)}
+                    data-testid={`badge-gender-${option.value}`}
+                  >
+                    {option.label}
+                  </Badge>
+                ))}
+              </div>
+              {selectedGender && (
+                <p className="text-xs text-muted-foreground mt-2">
+                  Выбрано: {GENDER_OPTIONS.find(g => g.value === selectedGender)?.label}
+                </p>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
               <CardTitle className="text-lg">Размеры</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex gap-2 mb-3">
+              <div className="flex flex-wrap gap-2 mb-3">
                 <Button
                   type="button"
                   variant={sizeType === "clothing" ? "default" : "outline"}
@@ -377,39 +447,72 @@ export default function ProductFormPage() {
                 >
                   Обувь
                 </Button>
+                <Button
+                  type="button"
+                  variant={sizeType === "kids_clothing" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setSizeType("kids_clothing")}
+                  data-testid="button-size-kids-clothing"
+                >
+                  Детская одежда
+                </Button>
+                <Button
+                  type="button"
+                  variant={sizeType === "kids_shoes" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setSizeType("kids_shoes")}
+                  data-testid="button-size-kids-shoes"
+                >
+                  Детская обувь
+                </Button>
               </div>
               
               <div className="flex flex-wrap gap-2">
-                {sizesArray.map((size) => (
-                  <Badge
-                    key={size}
-                    variant={selectedSizes.includes(size) ? "default" : "outline"}
-                    className="cursor-pointer hover-elevate px-3 py-1"
-                    onClick={() => toggleSize(size)}
-                    data-testid={`badge-size-${size}`}
-                  >
-                    {size}
-                  </Badge>
-                ))}
+                {sizesArray.map((size) => {
+                  const selected = selectedSizes.find(s => s.size === size);
+                  return (
+                    <Badge
+                      key={size}
+                      variant={selected ? "default" : "outline"}
+                      className="cursor-pointer"
+                      onClick={() => toggleSize(size)}
+                      data-testid={`badge-size-${size}`}
+                    >
+                      {size}
+                    </Badge>
+                  );
+                })}
               </div>
               
               {selectedSizes.length > 0 && (
-                <div className="pt-2">
-                  <Label className="text-xs text-muted-foreground">Выбранные размеры:</Label>
-                  <div className="flex flex-wrap gap-1 mt-1">
-                    {selectedSizes.map((size) => (
-                      <Badge key={size} variant="secondary" className="text-xs">
-                        {size}
+                <div className="pt-4 border-t">
+                  <Label className="text-sm font-medium mb-3 block">Количество по размерам:</Label>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                    {selectedSizes.map((sizeItem) => (
+                      <div key={sizeItem.size} className="flex items-center gap-2 p-2 border rounded-lg">
+                        <span className="font-medium text-sm min-w-[40px]">{sizeItem.size}</span>
+                        <Input
+                          type="number"
+                          min="0"
+                          value={sizeItem.qty}
+                          onChange={(e) => updateSizeQty(sizeItem.size, parseInt(e.target.value) || 0)}
+                          className="h-8 w-20 text-center"
+                          data-testid={`input-size-qty-${sizeItem.size}`}
+                        />
+                        <span className="text-xs text-muted-foreground">шт</span>
                         <button
                           type="button"
-                          onClick={() => toggleSize(size)}
-                          className="ml-1 hover:text-destructive"
+                          onClick={() => toggleSize(sizeItem.size)}
+                          className="text-muted-foreground hover:text-destructive"
                         >
-                          <X className="h-3 w-3" />
+                          <X className="h-4 w-4" />
                         </button>
-                      </Badge>
+                      </div>
                     ))}
                   </div>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Общее количество: {selectedSizes.reduce((sum, s) => sum + s.qty, 0)} шт
+                  </p>
                 </div>
               )}
             </CardContent>
@@ -528,7 +631,7 @@ export default function ProductFormPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="stockQty">Количество на складе</Label>
+                <Label htmlFor="stockQty">Общее количество на складе</Label>
                 <Input
                   id="stockQty"
                   type="number"
@@ -536,6 +639,9 @@ export default function ProductFormPage() {
                   {...form.register("stockQty")}
                   data-testid="input-stock"
                 />
+                <p className="text-xs text-muted-foreground">
+                  Это поле используется если размеры не указаны
+                </p>
               </div>
 
               <div className="flex items-center justify-between py-2">

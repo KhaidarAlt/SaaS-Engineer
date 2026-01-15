@@ -70,16 +70,15 @@ function ProductCard({ product, tenantSlug }: { product: ProductWithPrice; tenan
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={{ duration: 0.3 }}
-      whileHover={{ y: -4 }}
     >
-      <Card className="group overflow-hidden h-full">
+      <Card className="overflow-hidden h-full hover-elevate">
         <Link href={`/c/${tenantSlug}/product/${product.id}`}>
           <div className="aspect-square relative overflow-hidden bg-muted cursor-pointer">
             {product.mainImageUrl ? (
               <img
                 src={product.mainImageUrl}
                 alt={product.name}
-                className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                className="w-full h-full object-cover"
               />
             ) : (
               <div className="w-full h-full flex items-center justify-center">
@@ -109,7 +108,7 @@ function ProductCard({ product, tenantSlug }: { product: ProductWithPrice; tenan
         </Link>
         <CardContent className="p-4">
           <Link href={`/c/${tenantSlug}/product/${product.id}`}>
-            <h3 className="font-medium line-clamp-2 mb-2 cursor-pointer hover:text-primary transition-colors">
+            <h3 className="font-medium line-clamp-2 mb-2 cursor-pointer text-foreground">
               {product.name}
             </h3>
           </Link>
@@ -149,6 +148,9 @@ export default function CatalogHome() {
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [stockFilter, setStockFilter] = useState<string>("all");
+  const [sizeFilter, setSizeFilter] = useState<string>("all");
+  const [colorFilter, setColorFilter] = useState<string>("all");
+  const [genderFilter, setGenderFilter] = useState<string>("all");
   const { items, totalItems } = useCart();
 
   const { data, isLoading, error } = useQuery<CatalogData>({
@@ -158,6 +160,28 @@ export default function CatalogHome() {
 
   const getSubcategoryIds = (parentId: string): string[] => {
     return data?.categories?.filter(c => c.parentId === parentId).map(c => c.id) || [];
+  };
+
+  const availableSizes = [...new Set(
+    data?.products?.flatMap(p => 
+      ((p as any).sizes || []).map((s: {size: string; qty: number}) => s.size)
+    ) || []
+  )].sort();
+
+  const availableColors = [...new Map(
+    data?.products?.flatMap(p => 
+      ((p as any).colors || []).map((c: {name: string; hex: string}) => [c.hex, c])
+    ) || []
+  ).values()] as {name: string; hex: string}[];
+
+  const availableGenders = [...new Set(
+    data?.products?.map(p => (p as any).gender).filter(Boolean) || []
+  )];
+
+  const genderLabels: Record<string, string> = {
+    male: "Мужской",
+    female: "Женский",
+    kids: "Детский",
   };
 
   const filteredProducts = data?.products?.filter((product) => {
@@ -176,7 +200,19 @@ export default function CatalogHome() {
       stockFilter === "all" ||
       (stockFilter === "in_stock" && isInStock) ||
       (stockFilter === "out_of_stock" && !isInStock);
-    return product.isActive && matchesSearch && matchesCategory && matchesStock;
+    
+    const productSizes = ((product as any).sizes || []) as {size: string; qty: number}[];
+    const matchesSize = sizeFilter === "all" || 
+      productSizes.some(s => s.size === sizeFilter && (s.qty > 0 || product.alwaysInStock));
+    
+    const productColors = ((product as any).colors || []) as {name: string; hex: string}[];
+    const matchesColor = colorFilter === "all" || 
+      productColors.some(c => c.hex === colorFilter);
+    
+    const productGender = (product as any).gender;
+    const matchesGender = genderFilter === "all" || productGender === genderFilter;
+
+    return product.isActive && matchesSearch && matchesCategory && matchesStock && matchesSize && matchesColor && matchesGender;
   });
 
   if (error) {
@@ -288,6 +324,92 @@ export default function CatalogHome() {
             </SelectContent>
           </Select>
         </div>
+
+        {(availableSizes.length > 0 || availableColors.length > 0 || availableGenders.length > 0) && (
+          <div className="flex flex-wrap items-center gap-3 mb-6 p-3 bg-muted/50 rounded-lg">
+            <Filter className="h-4 w-4 text-muted-foreground" />
+            
+            {availableGenders.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                <Badge
+                  variant={genderFilter === "all" ? "default" : "outline"}
+                  className="cursor-pointer"
+                  onClick={() => setGenderFilter("all")}
+                >
+                  Все
+                </Badge>
+                {availableGenders.map((gender) => (
+                  <Badge
+                    key={gender}
+                    variant={genderFilter === gender ? "default" : "outline"}
+                    className="cursor-pointer"
+                    onClick={() => setGenderFilter(gender)}
+                    data-testid={`filter-gender-${gender}`}
+                  >
+                    {genderLabels[gender] || gender}
+                  </Badge>
+                ))}
+              </div>
+            )}
+
+            {availableSizes.length > 0 && (
+              <Select value={sizeFilter} onValueChange={setSizeFilter}>
+                <SelectTrigger className="w-auto min-w-[100px]" data-testid="select-size">
+                  <SelectValue placeholder="Размер" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Все размеры</SelectItem>
+                  {availableSizes.map((size) => (
+                    <SelectItem key={size} value={size}>{size}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+
+            {availableColors.length > 0 && (
+              <div className="flex flex-wrap gap-2 items-center">
+                <Badge
+                  variant={colorFilter === "all" ? "default" : "outline"}
+                  className="cursor-pointer"
+                  onClick={() => setColorFilter("all")}
+                  data-testid="filter-color-all"
+                >
+                  Все цвета
+                </Badge>
+                {availableColors.map((color) => (
+                  <Badge
+                    key={color.hex}
+                    variant={colorFilter === color.hex ? "default" : "outline"}
+                    className="cursor-pointer gap-1.5"
+                    onClick={() => setColorFilter(color.hex)}
+                    data-testid={`filter-color-${color.name}`}
+                  >
+                    <span
+                      className="w-3 h-3 rounded-full border border-border"
+                      style={{ backgroundColor: color.hex }}
+                    />
+                    {color.name}
+                  </Badge>
+                ))}
+              </div>
+            )}
+
+            {(sizeFilter !== "all" || colorFilter !== "all" || genderFilter !== "all") && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setSizeFilter("all");
+                  setColorFilter("all");
+                  setGenderFilter("all");
+                }}
+                data-testid="button-clear-filters"
+              >
+                Сбросить
+              </Button>
+            )}
+          </div>
+        )}
 
         {data?.categories && data.categories.length > 0 && (
           <div className="flex flex-wrap gap-2 mb-6">
