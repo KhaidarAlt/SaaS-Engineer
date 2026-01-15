@@ -22,6 +22,7 @@ import DiscountsPage from "@/pages/dashboard/DiscountsPage";
 import AnalyticsPage from "@/pages/dashboard/AnalyticsPage";
 import BillingPage from "@/pages/dashboard/BillingPage";
 import SettingsPage from "@/pages/dashboard/SettingsPage";
+import ImportPage from "@/pages/dashboard/ImportPage";
 import AdminOverview from "@/pages/admin/AdminOverview";
 import TenantsPage from "@/pages/admin/TenantsPage";
 import PlansPage from "@/pages/admin/PlansPage";
@@ -125,6 +126,9 @@ function Router() {
       </Route>
       <Route path="/dashboard/settings">
         <ProtectedRoute component={SettingsPage} />
+      </Route>
+      <Route path="/dashboard/import">
+        <ProtectedRoute component={ImportPage} />
       </Route>
 
       <Route path="/admin">

@@ -89,6 +89,10 @@ Preferred communication style: Simple, everyday language.
 - Added product variants management (ProductVariantsSection component)
 - Variant options support: option1/option2 name+value pairs (e.g., Size: M, Color: Blue)
 - Variant-specific SKU, price override, and stock tracking per variant
+- Built Smart Import page: CSV/XLSX parsing with auto-column mapping (RU/EN aliases), preview first 20 rows, validation with errors/warnings
+- Added import modes: upsert by SKU (selective field updates), create_only, replace catalog
+- Implemented ZIP photo import: JSZip parsing, SKU-based matching, unmatched image detection
+- Created API endpoint /api/import/product for upsert/create operations with field selection
 
 ## API Endpoints
 
@@ -115,6 +119,7 @@ Preferred communication style: Simple, everyday language.
 - `PATCH /api/orders/:id` - Update order status
 - `GET /api/analytics` - Get analytics data
 - `GET /api/billing` - Get subscription and usage info
+- `POST /api/import/product` - Smart import product (upsert/create mode)
 
 ### Public Catalog
 - `GET /api/catalog/:slug` - Get public catalog data

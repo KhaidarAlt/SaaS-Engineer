@@ -3,7 +3,7 @@ import { db } from "./db";
 import {
   users, tenants, subscriptions, plans, products, categories,
   discounts, promotions, orders, orderItems, analyticsEvents,
-  subscriptionExtensions, knowledgeBase, auditLogs, carts, productVariants,
+  subscriptionExtensions, knowledgeBase, auditLogs, carts, productVariants, productImages,
   type User, type InsertUser, type Tenant, type InsertTenant,
   type Subscription, type InsertSubscription, type Plan, type InsertPlan,
   type Product, type InsertProduct, type Category, type InsertCategory,
@@ -12,6 +12,7 @@ import {
   type AnalyticsEvent, type InsertAnalyticsEvent,
   type SubscriptionExtension, type InsertSubscriptionExtension,
   type ProductVariant, type InsertProductVariant,
+  type ProductImage, type InsertProductImage,
 } from "@shared/schema";
 import bcrypt from "bcryptjs";
 
@@ -46,6 +47,12 @@ export interface IStorage {
   createProductVariant(variant: InsertProductVariant): Promise<ProductVariant>;
   updateProductVariant(id: string, tenantId: string, data: Partial<InsertProductVariant>): Promise<ProductVariant | undefined>;
   deleteProductVariant(id: string, tenantId: string): Promise<boolean>;
+  
+  getProductImages(productId: string, tenantId: string): Promise<ProductImage[]>;
+  createProductImage(image: InsertProductImage): Promise<ProductImage>;
+  updateProductImage(id: string, tenantId: string, data: Partial<InsertProductImage>): Promise<ProductImage | undefined>;
+  deleteProductImage(id: string, tenantId: string): Promise<boolean>;
+  setMainImage(productId: string, imageId: string, tenantId: string): Promise<void>;
   
   getCategories(tenantId: string): Promise<Category[]>;
   getCategory(id: string, tenantId: string): Promise<Category | undefined>;
@@ -257,6 +264,41 @@ export class DatabaseStorage implements IStorage {
       and(eq(productVariants.id, id), eq(productVariants.tenantId, tenantId))
     );
     return (result.rowCount || 0) > 0;
+  }
+
+  async getProductImages(productId: string, tenantId: string): Promise<ProductImage[]> {
+    return db.select().from(productImages)
+      .where(and(eq(productImages.productId, productId), eq(productImages.tenantId, tenantId)))
+      .orderBy(productImages.sortOrder);
+  }
+
+  async createProductImage(image: InsertProductImage): Promise<ProductImage> {
+    const [created] = await db.insert(productImages).values(image).returning();
+    return created;
+  }
+
+  async updateProductImage(id: string, tenantId: string, data: Partial<InsertProductImage>): Promise<ProductImage | undefined> {
+    const [updated] = await db.update(productImages)
+      .set(data)
+      .where(and(eq(productImages.id, id), eq(productImages.tenantId, tenantId)))
+      .returning();
+    return updated;
+  }
+
+  async deleteProductImage(id: string, tenantId: string): Promise<boolean> {
+    const result = await db.delete(productImages).where(
+      and(eq(productImages.id, id), eq(productImages.tenantId, tenantId))
+    );
+    return (result.rowCount || 0) > 0;
+  }
+
+  async setMainImage(productId: string, imageId: string, tenantId: string): Promise<void> {
+    await db.update(productImages)
+      .set({ isMain: false })
+      .where(and(eq(productImages.productId, productId), eq(productImages.tenantId, tenantId)));
+    await db.update(productImages)
+      .set({ isMain: true })
+      .where(and(eq(productImages.id, imageId), eq(productImages.tenantId, tenantId)));
   }
 
   async getCategories(tenantId: string): Promise<Category[]> {

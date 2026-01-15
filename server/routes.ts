@@ -5,9 +5,43 @@ import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
 import bcrypt from "bcryptjs";
 import MemoryStore from "memorystore";
+import multer from "multer";
+import path from "path";
+import fs from "fs";
 import { storage } from "./storage";
 import { loginSchema, registerSchema, checkoutSchema } from "@shared/schema";
 import type { User, Tenant, Subscription, Plan } from "@shared/schema";
+
+const uploadsDir = path.join(process.cwd(), "uploads");
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+const uploadStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    cb(null, uploadsDir);
+  },
+  filename: (_req, file, cb) => {
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    const ext = path.extname(file.originalname);
+    cb(null, `${uniqueSuffix}${ext}`);
+  },
+});
+
+const upload = multer({
+  storage: uploadStorage,
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowedTypes = /jpeg|jpg|png|gif|webp/;
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = allowedTypes.test(file.mimetype);
+    if (extname && mimetype) {
+      cb(null, true);
+    } else {
+      cb(new Error("Only image files are allowed"));
+    }
+  },
+});
 
 const SessionStore = MemoryStore(session);
 
@@ -584,6 +618,125 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/products/:productId/images", requireAuth, async (req, res) => {
+    try {
+      const images = await storage.getProductImages(req.params.productId, req.user!.tenantId!);
+      res.json(images);
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка получения изображений" });
+    }
+  });
+
+  app.post("/api/products/:productId/images", requireAuth, upload.array("images", 10), async (req, res) => {
+    try {
+      const files = req.files as Express.Multer.File[];
+      if (!files || files.length === 0) {
+        return res.status(400).json({ message: "Файлы не загружены" });
+      }
+
+      const existingImages = await storage.getProductImages(req.params.productId, req.user!.tenantId!);
+      const hasMainImage = existingImages.some(img => img.isMain);
+
+      const createdImages = [];
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const image = await storage.createProductImage({
+          productId: req.params.productId,
+          tenantId: req.user!.tenantId!,
+          url: `/uploads/${file.filename}`,
+          isMain: !hasMainImage && i === 0,
+          sortOrder: existingImages.length + i,
+        });
+        createdImages.push(image);
+      }
+
+      res.status(201).json(createdImages);
+    } catch (error) {
+      console.error("Error uploading images:", error);
+      res.status(500).json({ message: "Ошибка загрузки изображений" });
+    }
+  });
+
+  app.post("/api/products/:productId/images/:imageId/main", requireAuth, async (req, res) => {
+    try {
+      await storage.setMainImage(req.params.productId, req.params.imageId, req.user!.tenantId!);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка установки главного изображения" });
+    }
+  });
+
+  app.delete("/api/products/:productId/images/:imageId", requireAuth, async (req, res) => {
+    try {
+      const images = await storage.getProductImages(req.params.productId, req.user!.tenantId!);
+      const imageToDelete = images.find(img => img.id === req.params.imageId);
+      
+      if (imageToDelete) {
+        const filePath = path.join(uploadsDir, path.basename(imageToDelete.url));
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+      }
+
+      await storage.deleteProductImage(req.params.imageId, req.user!.tenantId!);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка удаления изображения" });
+    }
+  });
+
+  app.post("/api/upload", requireAuth, upload.single("image"), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: "Файл не загружен" });
+      }
+      res.json({ url: `/uploads/${req.file.filename}` });
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка загрузки файла" });
+    }
+  });
+
+  app.post("/api/import/product", requireAuth, async (req, res) => {
+    try {
+      const { mode, fieldsToUpdate, ...productData } = req.body;
+      const tenantId = req.user!.tenantId!;
+
+      const existingProducts = await storage.getProducts(tenantId);
+      const existingProduct = existingProducts.find(p => p.sku === productData.sku);
+
+      if (mode === "upsert" && existingProduct) {
+        const updateData: any = {};
+        if (fieldsToUpdate?.price && productData.price) {
+          updateData.price = productData.price;
+        }
+        if (fieldsToUpdate?.stockQty !== undefined && productData.stockQty !== undefined) {
+          updateData.stockQty = productData.stockQty;
+        }
+        if (fieldsToUpdate?.description && productData.description) {
+          updateData.description = productData.description;
+        }
+        if (fieldsToUpdate?.category && productData.categoryId) {
+          updateData.categoryId = productData.categoryId;
+        }
+
+        if (Object.keys(updateData).length > 0) {
+          await storage.updateProduct(existingProduct.id, tenantId, updateData);
+        }
+        return res.json({ created: false, updated: true, id: existingProduct.id });
+      }
+
+      const product = await storage.createProduct({
+        ...productData,
+        tenantId,
+      });
+
+      res.json({ created: true, updated: false, id: product.id });
+    } catch (error) {
+      console.error("Import error:", error);
+      res.status(500).json({ message: "Ошибка импорта товара" });
+    }
+  });
+
   app.get("/api/categories", requireAuth, async (req, res) => {
     try {
       const categories = await storage.getCategories(req.user!.tenantId!);
@@ -901,6 +1054,16 @@ export async function registerRoutes(
       }
 
       const category = categories.find(c => c.id === product.categoryId);
+      
+      const images = await storage.getProductImages(product.id, tenant.id);
+      const mainImage = images.find(img => img.isMain);
+      const galleryUrls = images
+        .filter(img => !img.isMain)
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+        .map(img => img.url);
+      
+      const mainImageUrl = mainImage?.url || product.mainImageUrl;
+      const allGalleryUrls = [...galleryUrls, ...(product.galleryUrls || [])];
 
       await storage.logEvent({
         tenantId: tenant.id,
@@ -912,6 +1075,8 @@ export async function registerRoutes(
       res.json({
         product: {
           ...product,
+          mainImageUrl,
+          galleryUrls: allGalleryUrls,
           computedPrice: computedPrice.toFixed(2),
           originalPrice: product.price,
           discountPercent,

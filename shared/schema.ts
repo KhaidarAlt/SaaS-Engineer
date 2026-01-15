@@ -165,6 +165,32 @@ export const insertProductSchema = createInsertSchema(products).omit({ id: true,
 export type InsertProduct = z.infer<typeof insertProductSchema>;
 export type Product = typeof products.$inferSelect;
 
+// ============ PRODUCT IMAGES ============
+export const productImages = pgTable("product_images", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  productId: varchar("product_id").notNull().references(() => products.id, { onDelete: "cascade" }),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  url: text("url").notNull(),
+  isMain: boolean("is_main").notNull().default(false),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const productImagesRelations = relations(productImages, ({ one }) => ({
+  product: one(products, {
+    fields: [productImages.productId],
+    references: [products.id],
+  }),
+  tenant: one(tenants, {
+    fields: [productImages.tenantId],
+    references: [tenants.id],
+  }),
+}));
+
+export const insertProductImageSchema = createInsertSchema(productImages).omit({ id: true, createdAt: true });
+export type InsertProductImage = z.infer<typeof insertProductImageSchema>;
+export type ProductImage = typeof productImages.$inferSelect;
+
 // ============ PRODUCT VARIANTS ============
 export const productVariants = pgTable("product_variants", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
