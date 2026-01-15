@@ -49,6 +49,8 @@ export default function ProductDetailPage() {
   const [quantity, setQuantity] = useState(1);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [addedToCart, setAddedToCart] = useState(false);
+  const [selectedSize, setSelectedSize] = useState<string | null>(null);
+  const [selectedColor, setSelectedColor] = useState<string | null>(null);
   const { addItem, totalItems } = useCart();
   const { toast } = useToast();
 
@@ -350,18 +352,33 @@ export default function ProductDetailPage() {
 
             {((product as any).sizes?.length > 0) && (
               <div className="space-y-3">
-                <span className="text-sm font-medium">Доступные размеры:</span>
+                <span className="text-sm font-medium">Выберите размер:</span>
                 <div className="flex flex-wrap gap-2">
                   {((product as any).sizes as Array<string | {size: string; qty: number}>).map((sizeItem, idx) => {
-                    // Handle both old string[] and new {size, qty}[] format
                     const isObject = typeof sizeItem === 'object' && sizeItem !== null;
                     const sizeLabel = isObject ? sizeItem.size : sizeItem;
-                    const isAvailable = isObject ? (sizeItem.qty > 0 || product.alwaysInStock) : true;
+                    const sizeColorStock = (product as any).sizeColorStock as {size: string; colorHex: string; qty: number}[] | undefined;
+                    const colors = (product as any).colors as {name: string; hex: string}[] | undefined;
+                    
+                    let isAvailable = true;
+                    if (sizeColorStock && sizeColorStock.length > 0 && colors && colors.length > 0) {
+                      if (selectedColor) {
+                        const stockItem = sizeColorStock.find(s => s.size === sizeLabel && s.colorHex === selectedColor);
+                        isAvailable = (stockItem?.qty ?? 0) > 0 || product.alwaysInStock;
+                      } else {
+                        isAvailable = sizeColorStock.some(s => s.size === sizeLabel && s.qty > 0) || product.alwaysInStock;
+                      }
+                    } else if (isObject) {
+                      isAvailable = sizeItem.qty > 0 || product.alwaysInStock;
+                    }
+                    
+                    const isSelected = selectedSize === sizeLabel;
                     return (
                       <Badge
                         key={isObject ? sizeItem.size : `${sizeItem}-${idx}`}
-                        variant={isAvailable ? "outline" : "secondary"}
-                        className={isAvailable ? "" : "opacity-50"}
+                        variant={isSelected ? "default" : isAvailable ? "outline" : "secondary"}
+                        className={`cursor-pointer ${!isAvailable ? "opacity-50" : ""}`}
+                        onClick={() => isAvailable && setSelectedSize(isSelected ? null : sizeLabel)}
                         data-testid={`size-${sizeLabel}`}
                       >
                         {sizeLabel}
@@ -374,22 +391,39 @@ export default function ProductDetailPage() {
 
             {((product as any).colors?.length > 0) && (
               <div className="space-y-3">
-                <span className="text-sm font-medium">Доступные цвета:</span>
+                <span className="text-sm font-medium">Выберите цвет:</span>
                 <div className="flex flex-wrap gap-2">
-                  {((product as any).colors as {name: string; hex: string}[]).map((color) => (
-                    <Badge
-                      key={color.hex}
-                      variant="outline"
-                      className="gap-2"
-                      data-testid={`color-${color.name}`}
-                    >
-                      <span
-                        className="w-4 h-4 rounded-full border border-border"
-                        style={{ backgroundColor: color.hex }}
-                      />
-                      {color.name}
-                    </Badge>
-                  ))}
+                  {((product as any).colors as {name: string; hex: string}[]).map((color) => {
+                    const sizeColorStock = (product as any).sizeColorStock as {size: string; colorHex: string; qty: number}[] | undefined;
+                    const sizes = (product as any).sizes as Array<string | {size: string; qty: number}> | undefined;
+                    
+                    let isAvailable = true;
+                    if (sizeColorStock && sizeColorStock.length > 0 && sizes && sizes.length > 0) {
+                      if (selectedSize) {
+                        const stockItem = sizeColorStock.find(s => s.size === selectedSize && s.colorHex === color.hex);
+                        isAvailable = (stockItem?.qty ?? 0) > 0 || product.alwaysInStock;
+                      } else {
+                        isAvailable = sizeColorStock.some(s => s.colorHex === color.hex && s.qty > 0) || product.alwaysInStock;
+                      }
+                    }
+                    
+                    const isSelected = selectedColor === color.hex;
+                    return (
+                      <Badge
+                        key={color.hex}
+                        variant={isSelected ? "default" : isAvailable ? "outline" : "secondary"}
+                        className={`gap-2 cursor-pointer ${!isAvailable ? "opacity-50" : ""}`}
+                        onClick={() => isAvailable && setSelectedColor(isSelected ? null : color.hex)}
+                        data-testid={`color-${color.name}`}
+                      >
+                        <span
+                          className="w-4 h-4 rounded-full border border-border"
+                          style={{ backgroundColor: color.hex }}
+                        />
+                        {color.name}
+                      </Badge>
+                    );
+                  })}
                 </div>
               </div>
             )}

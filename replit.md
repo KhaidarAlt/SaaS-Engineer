@@ -104,6 +104,11 @@ Preferred communication style: Simple, everyday language.
 - Added catalog filtering by size, color, and gender in CatalogHome
 - Filter UI with badges for gender, dropdown for sizes, badges for colors
 - ProductDetailPage displays gender badge and sizes with availability indicator
+- Added sizeColorStock field to products table for tracking inventory by size+color combinations
+- ProductFormPage shows size x color matrix for quantity input when both sizes and colors are selected
+- ProductDetailPage has interactive size/color selection with disabled state for unavailable combinations
+- CatalogHome filters updated to work with sizeColorStock for accurate availability filtering
+- Dashboard products list now shows uploaded images from product_images table
 
 ## API Endpoints
 

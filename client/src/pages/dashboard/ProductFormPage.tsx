@@ -85,6 +85,12 @@ interface SizeWithQty {
   qty: number;
 }
 
+interface SizeColorStock {
+  size: string;
+  colorHex: string;
+  qty: number;
+}
+
 function generateSKU(): string {
   const timestamp = Date.now().toString(36).toUpperCase();
   const random = Math.random().toString(36).substring(2, 6).toUpperCase();
@@ -100,6 +106,7 @@ export default function ProductFormPage() {
 
   const [selectedSizes, setSelectedSizes] = useState<SizeWithQty[]>([]);
   const [selectedColors, setSelectedColors] = useState<{name: string; hex: string}[]>([]);
+  const [sizeColorStock, setSizeColorStock] = useState<SizeColorStock[]>([]);
   const [selectedGender, setSelectedGender] = useState<string>("");
   const [customColorName, setCustomColorName] = useState("");
   const [customColorHex, setCustomColorHex] = useState("#000000");
@@ -138,10 +145,12 @@ export default function ProductFormPage() {
       const productSizes = (product as any).sizes || [];
       const productColors = (product as any).colors || [];
       const productGender = (product as any).gender || "";
+      const productSizeColorStock = (product as any).sizeColorStock || [];
       
       setSelectedSizes(productSizes);
       setSelectedColors(productColors);
       setSelectedGender(productGender);
+      setSizeColorStock(productSizeColorStock);
       
       form.reset({
         sku: product.sku,
@@ -168,6 +177,7 @@ export default function ProductFormPage() {
         gender: selectedGender || null,
         sizes: selectedSizes,
         colors: selectedColors,
+        sizeColorStock: sizeColorStock,
       };
       if (isEdit && productId) {
         return apiRequest("PUT", `/api/products/${productId}`, payload);
@@ -203,6 +213,7 @@ export default function ProductFormPage() {
     setSelectedSizes(prev => {
       const exists = prev.find(s => s.size === size);
       if (exists) {
+        setSizeColorStock(stock => stock.filter(s => s.size !== size));
         return prev.filter(s => s.size !== size);
       }
       return [...prev, { size, qty: 0 }];
@@ -238,6 +249,22 @@ export default function ProductFormPage() {
 
   const removeColor = (hex: string) => {
     setSelectedColors(prev => prev.filter(c => c.hex !== hex));
+    setSizeColorStock(prev => prev.filter(s => s.colorHex !== hex));
+  };
+
+  const getSizeColorQty = (size: string, colorHex: string): number => {
+    const item = sizeColorStock.find(s => s.size === size && s.colorHex === colorHex);
+    return item?.qty ?? 0;
+  };
+
+  const updateSizeColorQty = (size: string, colorHex: string, qty: number) => {
+    setSizeColorStock(prev => {
+      const exists = prev.find(s => s.size === size && s.colorHex === colorHex);
+      if (exists) {
+        return prev.map(s => s.size === size && s.colorHex === colorHex ? { ...s, qty: Math.max(0, qty) } : s);
+      }
+      return [...prev, { size, colorHex, qty: Math.max(0, qty) }];
+    });
   };
 
   if (productLoading && isEdit) {
@@ -484,7 +511,7 @@ export default function ProductFormPage() {
                 })}
               </div>
               
-              {selectedSizes.length > 0 && (
+              {selectedSizes.length > 0 && selectedColors.length === 0 && (
                 <div className="pt-4 border-t">
                   <Label className="text-sm font-medium mb-3 block">Количество по размерам:</Label>
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
@@ -503,7 +530,7 @@ export default function ProductFormPage() {
                         <button
                           type="button"
                           onClick={() => toggleSize(sizeItem.size)}
-                          className="text-muted-foreground hover:text-destructive"
+                          className="text-muted-foreground"
                         >
                           <X className="h-4 w-4" />
                         </button>
@@ -512,6 +539,71 @@ export default function ProductFormPage() {
                   </div>
                   <p className="text-xs text-muted-foreground mt-2">
                     Общее количество: {selectedSizes.reduce((sum, s) => sum + s.qty, 0)} шт
+                  </p>
+                </div>
+              )}
+              
+              {selectedSizes.length > 0 && selectedColors.length > 0 && (
+                <div className="pt-4 border-t">
+                  <Label className="text-sm font-medium mb-3 block">Количество по размерам и цветам:</Label>
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse text-sm">
+                      <thead>
+                        <tr>
+                          <th className="border p-2 bg-muted text-left">Размер</th>
+                          {selectedColors.map(color => (
+                            <th key={color.hex} className="border p-2 bg-muted">
+                              <div className="flex items-center justify-center gap-1">
+                                <span
+                                  className="w-4 h-4 rounded-full border border-border"
+                                  style={{ backgroundColor: color.hex }}
+                                />
+                                <span className="text-xs">{color.name}</span>
+                              </div>
+                            </th>
+                          ))}
+                          <th className="border p-2 bg-muted text-center text-xs">Итого</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {selectedSizes.map(sizeItem => (
+                          <tr key={sizeItem.size}>
+                            <td className="border p-2 font-medium">{sizeItem.size}</td>
+                            {selectedColors.map(color => (
+                              <td key={color.hex} className="border p-1">
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  value={getSizeColorQty(sizeItem.size, color.hex)}
+                                  onChange={(e) => updateSizeColorQty(sizeItem.size, color.hex, parseInt(e.target.value) || 0)}
+                                  className="h-8 w-16 text-center mx-auto"
+                                  data-testid={`input-stock-${sizeItem.size}-${color.name}`}
+                                />
+                              </td>
+                            ))}
+                            <td className="border p-2 text-center text-muted-foreground text-xs">
+                              {selectedColors.reduce((sum, c) => sum + getSizeColorQty(sizeItem.size, c.hex), 0)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr>
+                          <td className="border p-2 font-medium bg-muted">Итого</td>
+                          {selectedColors.map(color => (
+                            <td key={color.hex} className="border p-2 text-center bg-muted text-xs">
+                              {selectedSizes.reduce((sum, s) => sum + getSizeColorQty(s.size, color.hex), 0)}
+                            </td>
+                          ))}
+                          <td className="border p-2 text-center font-medium bg-muted">
+                            {sizeColorStock.reduce((sum, s) => sum + s.qty, 0)}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Общее количество: {sizeColorStock.reduce((sum, s) => sum + s.qty, 0)} шт
                   </p>
                 </div>
               )}

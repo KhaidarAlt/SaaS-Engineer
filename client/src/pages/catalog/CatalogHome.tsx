@@ -208,16 +208,37 @@ export default function CatalogHome() {
       (stockFilter === "out_of_stock" && !isInStock);
     
     const productSizes = ((product as any).sizes || []) as Array<string | {size: string; qty: number}>;
-    const matchesSize = sizeFilter === "all" || 
-      productSizes.some(s => {
-        const sizeLabel = typeof s === 'object' ? s.size : s;
-        const isAvailable = typeof s === 'object' ? (s.qty > 0 || product.alwaysInStock) : true;
-        return sizeLabel === sizeFilter && isAvailable;
-      });
-    
     const productColors = ((product as any).colors || []) as {name: string; hex: string}[];
-    const matchesColor = colorFilter === "all" || 
-      productColors.some(c => c.hex === colorFilter);
+    const sizeColorStock = ((product as any).sizeColorStock || []) as {size: string; colorHex: string; qty: number}[];
+    
+    let matchesSize = sizeFilter === "all";
+    let matchesColor = colorFilter === "all";
+    
+    if (!matchesSize || !matchesColor) {
+      if (sizeColorStock.length > 0 && productColors.length > 0) {
+        if (!matchesSize && !matchesColor) {
+          const stockItem = sizeColorStock.find(s => s.size === sizeFilter && s.colorHex === colorFilter);
+          const isAvailable = (stockItem?.qty ?? 0) > 0 || product.alwaysInStock;
+          matchesSize = isAvailable;
+          matchesColor = isAvailable;
+        } else if (!matchesSize) {
+          matchesSize = sizeColorStock.some(s => s.size === sizeFilter && s.qty > 0) || product.alwaysInStock;
+        } else if (!matchesColor) {
+          matchesColor = sizeColorStock.some(s => s.colorHex === colorFilter && s.qty > 0) || product.alwaysInStock;
+        }
+      } else {
+        if (!matchesSize) {
+          matchesSize = productSizes.some(s => {
+            const sizeLabel = typeof s === 'object' ? s.size : s;
+            const isAvailable = typeof s === 'object' ? (s.qty > 0 || product.alwaysInStock) : true;
+            return sizeLabel === sizeFilter && isAvailable;
+          });
+        }
+        if (!matchesColor) {
+          matchesColor = productColors.some(c => c.hex === colorFilter);
+        }
+      }
+    }
     
     const productGender = (product as any).gender;
     const matchesGender = genderFilter === "all" || productGender === genderFilter;
