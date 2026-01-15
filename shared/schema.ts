@@ -149,6 +149,7 @@ export const products = pgTable("products", {
   gender: text("gender"),
   sizes: jsonb("sizes").$type<{size: string; qty: number}[]>(),
   colors: jsonb("colors").$type<{name: string; hex: string}[]>(),
+  sizeColorStock: jsonb("size_color_stock").$type<{size: string; colorHex: string; qty: number}[]>(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
