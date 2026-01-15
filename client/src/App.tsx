@@ -26,6 +26,7 @@ import AdminOverview from "@/pages/admin/AdminOverview";
 import TenantsPage from "@/pages/admin/TenantsPage";
 import PlansPage from "@/pages/admin/PlansPage";
 import CatalogHome from "@/pages/catalog/CatalogHome";
+import ProductDetailPage from "@/pages/catalog/ProductDetailPage";
 import CartPage from "@/pages/catalog/CartPage";
 import CheckoutPage from "@/pages/catalog/CheckoutPage";
 
@@ -145,7 +146,7 @@ function Router() {
       <Route path="/c/:slug" component={CatalogHome} />
       <Route path="/c/:slug/cart" component={CartPage} />
       <Route path="/c/:slug/checkout" component={CheckoutPage} />
-      <Route path="/c/:slug/product/:id" component={CatalogHome} />
+      <Route path="/c/:slug/product/:id" component={ProductDetailPage} />
 
       <Route component={NotFound} />
     </Switch>

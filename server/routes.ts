@@ -641,6 +641,129 @@ export async function registerRoutes(
     }
   });
 
+  // Get single product for public catalog with computed price
+  app.get("/api/catalog/:slug/product/:productId", async (req, res) => {
+    try {
+      const tenant = await storage.getTenantBySlug(req.params.slug);
+      if (!tenant || tenant.status !== "active") {
+        return res.status(404).json({ message: "Каталог не найден" });
+      }
+
+      const product = await storage.getProduct(req.params.productId, tenant.id);
+      if (!product || !product.isActive) {
+        return res.status(404).json({ message: "Товар не найден" });
+      }
+
+      const categories = await storage.getCategories(tenant.id);
+      const discounts = await storage.getDiscounts(tenant.id);
+      const promotions = await storage.getPromotions(tenant.id);
+
+      // Compute discounted price with priority: promotion > product discount > category discount
+      const now = new Date();
+      let computedPrice = parseFloat(product.price);
+      let discountPercent: number | null = null;
+      let discountType: string | null = null;
+      let appliedPromotion: typeof promotions[0] | null = null;
+      let appliedDiscount: typeof discounts[0] | null = null;
+
+      // Check promotions first (highest priority)
+      const activePromotions = promotions.filter(p => {
+        if (!p.isActive) return false;
+        if (p.startsAt && new Date(p.startsAt) > now) return false;
+        if (p.endsAt && new Date(p.endsAt) < now) return false;
+        const productMatches = p.productIds && (p.productIds as string[]).includes(product.id);
+        const categoryMatches = p.categoryIds && product.categoryId && (p.categoryIds as string[]).includes(product.categoryId);
+        return productMatches || categoryMatches;
+      }).sort((a, b) => b.priority - a.priority);
+
+      if (activePromotions.length > 0) {
+        const promo = activePromotions[0];
+        appliedPromotion = promo;
+        if (promo.discountType === "percent" && promo.discountValue) {
+          discountPercent = parseFloat(promo.discountValue);
+          computedPrice = computedPrice * (1 - discountPercent / 100);
+          discountType = "promotion";
+        } else if (promo.discountType === "amount" && promo.discountValue) {
+          computedPrice = Math.max(0, computedPrice - parseFloat(promo.discountValue));
+          discountType = "promotion";
+        }
+      } else {
+        // Check product-level discounts
+        const productDiscounts = discounts.filter(d => {
+          if (!d.isActive) return false;
+          if (d.startsAt && new Date(d.startsAt) > now) return false;
+          if (d.endsAt && new Date(d.endsAt) < now) return false;
+          return d.scope === "product" && d.scopeId === product.id;
+        }).sort((a, b) => b.priority - a.priority);
+
+        if (productDiscounts.length > 0) {
+          const disc = productDiscounts[0];
+          appliedDiscount = disc;
+          if (disc.type === "percent") {
+            discountPercent = parseFloat(disc.value);
+            computedPrice = computedPrice * (1 - discountPercent / 100);
+            discountType = "product";
+          } else if (disc.type === "amount") {
+            computedPrice = Math.max(0, computedPrice - parseFloat(disc.value));
+            discountType = "product";
+          }
+        } else if (product.categoryId) {
+          // Check category-level discounts
+          const categoryDiscounts = discounts.filter(d => {
+            if (!d.isActive) return false;
+            if (d.startsAt && new Date(d.startsAt) > now) return false;
+            if (d.endsAt && new Date(d.endsAt) < now) return false;
+            return d.scope === "category" && d.scopeId === product.categoryId;
+          }).sort((a, b) => b.priority - a.priority);
+
+          if (categoryDiscounts.length > 0) {
+            const disc = categoryDiscounts[0];
+            appliedDiscount = disc;
+            if (disc.type === "percent") {
+              discountPercent = parseFloat(disc.value);
+              computedPrice = computedPrice * (1 - discountPercent / 100);
+              discountType = "category";
+            } else if (disc.type === "amount") {
+              computedPrice = Math.max(0, computedPrice - parseFloat(disc.value));
+              discountType = "category";
+            }
+          }
+        }
+      }
+
+      const category = categories.find(c => c.id === product.categoryId);
+
+      await storage.logEvent({
+        tenantId: tenant.id,
+        eventType: "product_view",
+        sessionId: req.sessionID,
+        productId: product.id,
+      });
+
+      res.json({
+        product: {
+          ...product,
+          computedPrice: computedPrice.toFixed(2),
+          originalPrice: product.price,
+          discountPercent,
+          discountType,
+          hasDiscount: discountType !== null,
+        },
+        category,
+        promotion: appliedPromotion,
+        tenant: {
+          id: tenant.id,
+          name: tenant.name,
+          slug: tenant.slug,
+          contactPhone: tenant.contactPhone,
+        },
+      });
+    } catch (error) {
+      console.error("Error fetching product:", error);
+      res.status(500).json({ message: "Ошибка загрузки товара" });
+    }
+  });
+
   app.post("/api/orders", async (req, res) => {
     try {
       const parsed = checkoutSchema.safeParse(req.body);
