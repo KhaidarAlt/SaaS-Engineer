@@ -3,7 +3,7 @@ import { db } from "./db";
 import {
   users, tenants, subscriptions, plans, products, categories,
   discounts, promotions, orders, orderItems, analyticsEvents,
-  subscriptionExtensions, knowledgeBase, auditLogs, carts,
+  subscriptionExtensions, knowledgeBase, auditLogs, carts, productVariants,
   type User, type InsertUser, type Tenant, type InsertTenant,
   type Subscription, type InsertSubscription, type Plan, type InsertPlan,
   type Product, type InsertProduct, type Category, type InsertCategory,
@@ -11,6 +11,7 @@ import {
   type Order, type InsertOrder, type OrderItem, type InsertOrderItem,
   type AnalyticsEvent, type InsertAnalyticsEvent,
   type SubscriptionExtension, type InsertSubscriptionExtension,
+  type ProductVariant, type InsertProductVariant,
 } from "@shared/schema";
 import bcrypt from "bcryptjs";
 
@@ -40,6 +41,11 @@ export interface IStorage {
   createProduct(product: InsertProduct): Promise<Product>;
   updateProduct(id: string, tenantId: string, data: Partial<InsertProduct>): Promise<Product | undefined>;
   deleteProduct(id: string, tenantId: string): Promise<boolean>;
+  
+  getProductVariants(productId: string, tenantId: string): Promise<ProductVariant[]>;
+  createProductVariant(variant: InsertProductVariant): Promise<ProductVariant>;
+  updateProductVariant(id: string, tenantId: string, data: Partial<InsertProductVariant>): Promise<ProductVariant | undefined>;
+  deleteProductVariant(id: string, tenantId: string): Promise<boolean>;
   
   getCategories(tenantId: string): Promise<Category[]>;
   getCategory(id: string, tenantId: string): Promise<Category | undefined>;
@@ -224,6 +230,32 @@ export class DatabaseStorage implements IStorage {
 
   async deleteProduct(id: string, tenantId: string): Promise<boolean> {
     const result = await db.delete(products).where(and(eq(products.id, id), eq(products.tenantId, tenantId)));
+    return (result.rowCount || 0) > 0;
+  }
+
+  async getProductVariants(productId: string, tenantId: string): Promise<ProductVariant[]> {
+    return db.select().from(productVariants).where(
+      and(eq(productVariants.productId, productId), eq(productVariants.tenantId, tenantId))
+    );
+  }
+
+  async createProductVariant(variant: InsertProductVariant): Promise<ProductVariant> {
+    const [created] = await db.insert(productVariants).values(variant).returning();
+    return created;
+  }
+
+  async updateProductVariant(id: string, tenantId: string, data: Partial<InsertProductVariant>): Promise<ProductVariant | undefined> {
+    const [updated] = await db.update(productVariants)
+      .set(data)
+      .where(and(eq(productVariants.id, id), eq(productVariants.tenantId, tenantId)))
+      .returning();
+    return updated;
+  }
+
+  async deleteProductVariant(id: string, tenantId: string): Promise<boolean> {
+    const result = await db.delete(productVariants).where(
+      and(eq(productVariants.id, id), eq(productVariants.tenantId, tenantId))
+    );
     return (result.rowCount || 0) > 0;
   }
 

@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/select";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { PageLoader } from "@/components/LoadingSpinner";
+import { ProductVariantsSection } from "@/components/ProductVariantsSection";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Product, Category } from "@shared/schema";
@@ -332,6 +333,10 @@ export default function ProductFormPage() {
             </Button>
           </div>
         </form>
+
+        {isEdit && productId && (
+          <ProductVariantsSection productId={productId} />
+        )}
       </div>
     </DashboardLayout>
   );

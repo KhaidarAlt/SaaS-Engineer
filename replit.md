@@ -86,6 +86,9 @@ Preferred communication style: Simple, everyday language.
 - Implemented WhatsApp checkout flow: order saved to DB first, then customer can send order details to store owner via WhatsApp
 - Created WhatsAppSendButton component with copy fallback for blocked popups
 - Helper functions for KZ phone normalization and order text formatting
+- Added product variants management (ProductVariantsSection component)
+- Variant options support: option1/option2 name+value pairs (e.g., Size: M, Color: Blue)
+- Variant-specific SKU, price override, and stock tracking per variant
 
 ## API Endpoints
 
@@ -100,6 +103,10 @@ Preferred communication style: Simple, everyday language.
 - `POST /api/products` - Create product (plan limits enforced)
 - `PUT /api/products/:id` - Update product
 - `DELETE /api/products/:id` - Delete product
+- `GET /api/products/:productId/variants` - List product variants
+- `POST /api/products/:productId/variants` - Create variant
+- `PUT /api/products/:productId/variants/:variantId` - Update variant
+- `DELETE /api/products/:productId/variants/:variantId` - Delete variant
 - `GET /api/categories` - List categories
 - `POST /api/categories` - Create category (plan limits enforced)
 - `GET /api/discounts` - List discounts

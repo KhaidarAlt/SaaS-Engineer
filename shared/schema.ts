@@ -165,6 +165,37 @@ export const insertProductSchema = createInsertSchema(products).omit({ id: true,
 export type InsertProduct = z.infer<typeof insertProductSchema>;
 export type Product = typeof products.$inferSelect;
 
+// ============ PRODUCT VARIANTS ============
+export const productVariants = pgTable("product_variants", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  productId: varchar("product_id").notNull().references(() => products.id, { onDelete: "cascade" }),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  sku: text("sku"),
+  option1Name: text("option1_name"),
+  option1Value: text("option1_value"),
+  option2Name: text("option2_name"),
+  option2Value: text("option2_value"),
+  price: decimal("price", { precision: 12, scale: 2 }),
+  stockQty: integer("stock_qty").notNull().default(0),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const productVariantsRelations = relations(productVariants, ({ one }) => ({
+  product: one(products, {
+    fields: [productVariants.productId],
+    references: [products.id],
+  }),
+  tenant: one(tenants, {
+    fields: [productVariants.tenantId],
+    references: [tenants.id],
+  }),
+}));
+
+export const insertProductVariantSchema = createInsertSchema(productVariants).omit({ id: true, createdAt: true });
+export type InsertProductVariant = z.infer<typeof insertProductVariantSchema>;
+export type ProductVariant = typeof productVariants.$inferSelect;
+
 // ============ DISCOUNTS ============
 export const discounts = pgTable("discounts", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

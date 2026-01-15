@@ -520,6 +520,70 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/products/:productId/variants", requireAuth, async (req, res) => {
+    try {
+      const variants = await storage.getProductVariants(req.params.productId, req.user!.tenantId!);
+      res.json(variants);
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка получения вариантов" });
+    }
+  });
+
+  app.post("/api/products/:productId/variants", requireAuth, async (req, res) => {
+    try {
+      const variantData = {
+        productId: req.params.productId,
+        tenantId: req.user!.tenantId!,
+        sku: req.body.sku || null,
+        option1Name: req.body.option1Name || null,
+        option1Value: req.body.option1Value || null,
+        option2Name: req.body.option2Name || null,
+        option2Value: req.body.option2Value || null,
+        price: req.body.price || null,
+        stockQty: parseInt(req.body.stockQty) || 0,
+      };
+      const variant = await storage.createProductVariant(variantData);
+      res.status(201).json(variant);
+    } catch (error) {
+      console.error("Error creating variant:", error);
+      res.status(500).json({ message: "Ошибка создания варианта" });
+    }
+  });
+
+  app.put("/api/products/:productId/variants/:variantId", requireAuth, async (req, res) => {
+    try {
+      const updateData = {
+        sku: req.body.sku || null,
+        option1Name: req.body.option1Name || null,
+        option1Value: req.body.option1Value || null,
+        option2Name: req.body.option2Name || null,
+        option2Value: req.body.option2Value || null,
+        price: req.body.price || null,
+        stockQty: parseInt(req.body.stockQty) || 0,
+      };
+      const variant = await storage.updateProductVariant(
+        req.params.variantId,
+        req.user!.tenantId!,
+        updateData
+      );
+      if (!variant) {
+        return res.status(404).json({ message: "Вариант не найден" });
+      }
+      res.json(variant);
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка обновления варианта" });
+    }
+  });
+
+  app.delete("/api/products/:productId/variants/:variantId", requireAuth, async (req, res) => {
+    try {
+      await storage.deleteProductVariant(req.params.variantId, req.user!.tenantId!);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка удаления варианта" });
+    }
+  });
+
   app.get("/api/categories", requireAuth, async (req, res) => {
     try {
       const categories = await storage.getCategories(req.user!.tenantId!);
