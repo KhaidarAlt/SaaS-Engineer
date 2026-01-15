@@ -156,10 +156,21 @@ export default function CatalogHome() {
     enabled: !!slug,
   });
 
+  const getSubcategoryIds = (parentId: string): string[] => {
+    return data?.categories?.filter(c => c.parentId === parentId).map(c => c.id) || [];
+  };
+
   const filteredProducts = data?.products?.filter((product) => {
     const matchesSearch = product.name.toLowerCase().includes(search.toLowerCase());
-    const matchesCategory =
-      categoryFilter === "all" || product.categoryId === categoryFilter;
+    let matchesCategory = categoryFilter === "all";
+    if (!matchesCategory && product.categoryId) {
+      if (product.categoryId === categoryFilter) {
+        matchesCategory = true;
+      } else {
+        const subcatIds = getSubcategoryIds(categoryFilter);
+        matchesCategory = subcatIds.includes(product.categoryId);
+      }
+    }
     const isInStock = product.alwaysInStock || product.stockQty > 0;
     const matchesStock =
       stockFilter === "all" ||
@@ -253,10 +264,17 @@ export default function CatalogHome() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Все категории</SelectItem>
-              {data?.categories?.map((cat) => (
-                <SelectItem key={cat.id} value={cat.id}>
-                  {cat.name}
-                </SelectItem>
+              {data?.categories?.filter(c => !c.parentId).map((parentCat) => (
+                <div key={parentCat.id}>
+                  <SelectItem value={parentCat.id}>
+                    {parentCat.name}
+                  </SelectItem>
+                  {data.categories?.filter(sub => sub.parentId === parentCat.id).map((subCat) => (
+                    <SelectItem key={subCat.id} value={subCat.id} className="pl-6">
+                      ↳ {subCat.name}
+                    </SelectItem>
+                  ))}
+                </div>
               ))}
             </SelectContent>
           </Select>
@@ -280,16 +298,30 @@ export default function CatalogHome() {
             >
               Все
             </Badge>
-            {data.categories.map((cat) => (
-              <Badge
-                key={cat.id}
-                variant={categoryFilter === cat.id ? "default" : "outline"}
-                className="cursor-pointer"
-                onClick={() => setCategoryFilter(cat.id)}
-              >
-                {cat.name}
-              </Badge>
-            ))}
+            {data.categories.filter(c => !c.parentId).map((parentCat) => {
+              const subcats = data.categories?.filter(sub => sub.parentId === parentCat.id) || [];
+              return (
+                <div key={parentCat.id} className="flex flex-wrap gap-1 items-center">
+                  <Badge
+                    variant={categoryFilter === parentCat.id ? "default" : "outline"}
+                    className="cursor-pointer"
+                    onClick={() => setCategoryFilter(parentCat.id)}
+                  >
+                    {parentCat.name}
+                  </Badge>
+                  {subcats.length > 0 && subcats.map((subCat) => (
+                    <Badge
+                      key={subCat.id}
+                      variant={categoryFilter === subCat.id ? "default" : "secondary"}
+                      className="cursor-pointer text-xs"
+                      onClick={() => setCategoryFilter(subCat.id)}
+                    >
+                      {subCat.name}
+                    </Badge>
+                  ))}
+                </div>
+              );
+            })}
           </div>
         )}
 

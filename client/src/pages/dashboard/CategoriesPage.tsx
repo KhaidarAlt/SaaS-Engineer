@@ -3,7 +3,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { Plus, Pencil, Trash2, Tag, MoreHorizontal } from "lucide-react";
+import { Plus, Pencil, Trash2, Tag, MoreHorizontal, ChevronRight } from "lucide-react";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,6 +22,14 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { CardSkeleton } from "@/components/LoadingSpinner";
 import { useToast } from "@/hooks/use-toast";
@@ -32,6 +40,7 @@ const categoryFormSchema = z.object({
   name: z.string().min(1, "Название обязательно"),
   description: z.string().optional(),
   imageUrl: z.string().optional(),
+  parentId: z.string().optional(),
 });
 
 type CategoryFormData = z.infer<typeof categoryFormSchema>;
@@ -51,8 +60,15 @@ export default function CategoriesPage() {
       name: "",
       description: "",
       imageUrl: "",
+      parentId: "",
     },
   });
+
+  const rootCategories = categories?.filter(c => !c.parentId) || [];
+  const getSubcategories = (parentId: string) => 
+    categories?.filter(c => c.parentId === parentId) || [];
+  const getParentName = (parentId: string | null) => 
+    categories?.find(c => c.id === parentId)?.name || null;
 
   const createMutation = useMutation({
     mutationFn: async (data: CategoryFormData) => {
@@ -104,6 +120,7 @@ export default function CategoriesPage() {
       name: category.name,
       description: category.description || "",
       imageUrl: category.imageUrl || "",
+      parentId: category.parentId || "",
     });
     setDialogOpen(true);
   };
@@ -114,9 +131,15 @@ export default function CategoriesPage() {
       name: "",
       description: "",
       imageUrl: "",
+      parentId: "",
     });
     setDialogOpen(true);
   };
+
+  const availableParents = categories?.filter(c => {
+    if (!editingCategory) return !c.parentId;
+    return !c.parentId && c.id !== editingCategory.id;
+  }) || [];
 
   const onSubmit = (data: CategoryFormData) => {
     if (editingCategory) {
@@ -182,6 +205,28 @@ export default function CategoriesPage() {
                     data-testid="input-category-image"
                   />
                 </div>
+                <div className="space-y-2">
+                  <Label>Родительская категория</Label>
+                  <Select
+                    value={form.watch("parentId") || "none"}
+                    onValueChange={(value) => form.setValue("parentId", value === "none" ? "" : value)}
+                  >
+                    <SelectTrigger data-testid="select-parent-category">
+                      <SelectValue placeholder="Нет (корневая категория)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Нет (корневая категория)</SelectItem>
+                      {availableParents.map((parent) => (
+                        <SelectItem key={parent.id} value={parent.id}>
+                          {parent.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Выберите родительскую категорию для создания подкатегории
+                  </p>
+                </div>
                 <div className="flex justify-end gap-3 pt-4">
                   <Button
                     type="button"
@@ -210,64 +255,128 @@ export default function CategoriesPage() {
             ))}
           </div>
         ) : categories && categories.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {categories.map((category, index) => (
-              <motion.div
-                key={category.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.05 }}
-              >
-                <Card className="hover-elevate">
-                  <CardHeader className="flex flex-row items-start justify-between gap-2">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                        {category.imageUrl ? (
-                          <img
-                            src={category.imageUrl}
-                            alt={category.name}
-                            className="w-full h-full object-cover rounded-lg"
-                          />
-                        ) : (
-                          <Tag className="h-5 w-5 text-primary" />
-                        )}
+          <div className="space-y-6">
+            {rootCategories.map((parentCategory, parentIndex) => (
+              <div key={parentCategory.id} className="space-y-3">
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: parentIndex * 0.05 }}
+                >
+                  <Card className="hover-elevate">
+                    <CardHeader className="flex flex-row items-start justify-between gap-2">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                          {parentCategory.imageUrl ? (
+                            <img
+                              src={parentCategory.imageUrl}
+                              alt={parentCategory.name}
+                              className="w-full h-full object-cover rounded-lg"
+                            />
+                          ) : (
+                            <Tag className="h-5 w-5 text-primary" />
+                          )}
+                        </div>
+                        <div>
+                          <CardTitle className="text-base">{parentCategory.name}</CardTitle>
+                          {parentCategory.description && (
+                            <p className="text-sm text-muted-foreground line-clamp-1">
+                              {parentCategory.description}
+                            </p>
+                          )}
+                        </div>
                       </div>
-                      <div>
-                        <CardTitle className="text-base">{category.name}</CardTitle>
-                        {category.description && (
-                          <p className="text-sm text-muted-foreground line-clamp-1">
-                            {category.description}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          data-testid={`menu-category-${category.id}`}
-                        >
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => openEditDialog(category)}>
-                          <Pencil className="h-4 w-4 mr-2" />
-                          Редактировать
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          className="text-destructive"
-                          onClick={() => deleteMutation.mutate(category.id)}
-                        >
-                          <Trash2 className="h-4 w-4 mr-2" />
-                          Удалить
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </CardHeader>
-                </Card>
-              </motion.div>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            data-testid={`menu-category-${parentCategory.id}`}
+                          >
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => openEditDialog(parentCategory)}>
+                            <Pencil className="h-4 w-4 mr-2" />
+                            Редактировать
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            className="text-destructive"
+                            onClick={() => deleteMutation.mutate(parentCategory.id)}
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Удалить
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </CardHeader>
+                  </Card>
+                </motion.div>
+                {getSubcategories(parentCategory.id).length > 0 && (
+                  <div className="ml-6 pl-4 border-l-2 border-muted space-y-2">
+                    {getSubcategories(parentCategory.id).map((subCategory, subIndex) => (
+                      <motion.div
+                        key={subCategory.id}
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: (parentIndex * 0.05) + (subIndex * 0.03) }}
+                      >
+                        <Card className="hover-elevate">
+                          <CardHeader className="flex flex-row items-start justify-between gap-2 py-3">
+                            <div className="flex items-center gap-3">
+                              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                              <div className="w-8 h-8 rounded-lg bg-secondary/50 flex items-center justify-center">
+                                {subCategory.imageUrl ? (
+                                  <img
+                                    src={subCategory.imageUrl}
+                                    alt={subCategory.name}
+                                    className="w-full h-full object-cover rounded-lg"
+                                  />
+                                ) : (
+                                  <Tag className="h-4 w-4 text-muted-foreground" />
+                                )}
+                              </div>
+                              <div>
+                                <CardTitle className="text-sm">{subCategory.name}</CardTitle>
+                                {subCategory.description && (
+                                  <p className="text-xs text-muted-foreground line-clamp-1">
+                                    {subCategory.description}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  data-testid={`menu-category-${subCategory.id}`}
+                                >
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => openEditDialog(subCategory)}>
+                                  <Pencil className="h-4 w-4 mr-2" />
+                                  Редактировать
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  className="text-destructive"
+                                  onClick={() => deleteMutation.mutate(subCategory.id)}
+                                >
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  Удалить
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </CardHeader>
+                        </Card>
+                      </motion.div>
+                    ))}
+                  </div>
+                )}
+              </div>
             ))}
           </div>
         ) : (
