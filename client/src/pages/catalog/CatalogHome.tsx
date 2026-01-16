@@ -15,7 +15,7 @@ import {
   MapPin,
   Clock,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -166,6 +166,41 @@ export default function CatalogHome() {
     queryKey: ["/api/catalog", slug],
     enabled: !!slug,
   });
+
+  // Set OG meta tags for messenger sharing
+  useEffect(() => {
+    if (!data?.tenant) return;
+    
+    const tenant = data.tenant as any;
+    
+    // Update title
+    document.title = tenant.ogTitle || tenant.name || "Каталог";
+    
+    // Helper to set/update meta tag
+    const setMetaTag = (property: string, content: string) => {
+      let meta = document.querySelector(`meta[property="${property}"]`) as HTMLMetaElement;
+      if (!meta) {
+        meta = document.createElement("meta");
+        meta.setAttribute("property", property);
+        document.head.appendChild(meta);
+      }
+      meta.content = content;
+    };
+    
+    // Set OG meta tags
+    setMetaTag("og:title", tenant.ogTitle || tenant.name || "Каталог");
+    setMetaTag("og:description", tenant.ogDescription || tenant.description || "Онлайн-каталог товаров");
+    if (tenant.ogImageUrl) {
+      setMetaTag("og:image", tenant.ogImageUrl);
+    }
+    setMetaTag("og:type", "website");
+    setMetaTag("og:url", window.location.href);
+    
+    return () => {
+      // Cleanup on unmount
+      document.title = "SmartCatalog";
+    };
+  }, [data?.tenant]);
 
   const getSubcategoryIds = (parentId: string): string[] => {
     return data?.categories?.filter(c => c.parentId === parentId).map(c => c.id) || [];
@@ -325,6 +360,44 @@ export default function CatalogHome() {
               </Link>
             </div>
           </div>
+          {/* Mobile contact info */}
+          {(data?.tenant?.contactPhone || data?.tenant?.address || (data?.tenant as any)?.workingHours) && (
+            <div className="flex md:hidden flex-wrap items-center justify-center gap-3 pb-3 text-xs text-muted-foreground">
+              {data?.tenant?.contactPhone && (
+                <a 
+                  href={`tel:${data.tenant.contactPhone}`}
+                  className="flex items-center gap-1 hover:text-foreground"
+                >
+                  <Phone className="h-3 w-3" />
+                  {data.tenant.contactPhone}
+                </a>
+              )}
+              {(data?.tenant as any)?.workingHours && (
+                <span className="flex items-center gap-1">
+                  <Clock className="h-3 w-3" />
+                  {(data?.tenant as any).workingHours}
+                </span>
+              )}
+              {data?.tenant?.address && (
+                (data?.tenant as any)?.gisLink ? (
+                  <a 
+                    href={(data.tenant as any).gisLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 hover:text-foreground"
+                  >
+                    <MapPin className="h-3 w-3" />
+                    <span className="max-w-[150px] truncate">{data.tenant.address}</span>
+                  </a>
+                ) : (
+                  <span className="flex items-center gap-1">
+                    <MapPin className="h-3 w-3" />
+                    <span className="max-w-[150px] truncate">{data.tenant.address}</span>
+                  </span>
+                )
+              )}
+            </div>
+          )}
         </div>
       </header>
 
@@ -483,16 +556,21 @@ export default function CatalogHome() {
               return (
                 <DropdownMenu key={parentCat.id}>
                   <DropdownMenuTrigger asChild>
-                    <Badge
+                    <Button
                       variant={isParentOrChildSelected ? "default" : "outline"}
-                      className="cursor-pointer gap-1"
+                      size="sm"
+                      className="gap-1"
+                      data-testid={`dropdown-category-${parentCat.id}`}
                     >
                       {parentCat.name}
                       <ChevronDown className="h-3 w-3" />
-                    </Badge>
+                    </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start">
-                    <DropdownMenuItem onClick={() => setCategoryFilter(parentCat.id)}>
+                    <DropdownMenuItem 
+                      onClick={() => setCategoryFilter(parentCat.id)}
+                      data-testid={`menu-all-${parentCat.id}`}
+                    >
                       Все {parentCat.name}
                     </DropdownMenuItem>
                     {subcats.map((subCat) => (
@@ -500,6 +578,7 @@ export default function CatalogHome() {
                         key={subCat.id} 
                         onClick={() => setCategoryFilter(subCat.id)}
                         className={categoryFilter === subCat.id ? "bg-accent" : ""}
+                        data-testid={`menu-subcat-${subCat.id}`}
                       >
                         {subCat.name}
                       </DropdownMenuItem>

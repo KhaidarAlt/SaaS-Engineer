@@ -980,6 +980,11 @@ export async function registerRoutes(
           contactPhone: tenant.contactPhone,
           contactEmail: tenant.contactEmail,
           address: tenant.address,
+          gisLink: (tenant as any).gisLink,
+          workingHours: (tenant as any).workingHours,
+          ogTitle: (tenant as any).ogTitle,
+          ogDescription: (tenant as any).ogDescription,
+          ogImageUrl: (tenant as any).ogImageUrl,
         },
         products: productsWithPrices,
         categories: categories.filter(c => c.isActive),
@@ -1260,5 +1265,73 @@ export async function registerRoutes(
     }
   });
 
+  // Serve OG meta tags for catalog pages (for messenger/social media previews)
+  // Only intercept requests from bots/crawlers, let regular browsers go through Vite
+  app.get("/c/:slug", async (req, res, next) => {
+    const userAgent = req.get('user-agent') || '';
+    
+    // List of bot/crawler user agents that need OG meta tags
+    const botPatterns = [
+      'WhatsApp', 'TelegramBot', 'facebookexternalhit', 'Facebot',
+      'LinkedInBot', 'Twitterbot', 'Slackbot', 'Discordbot',
+      'vkShare', 'Googlebot', 'bingbot', 'yandex'
+    ];
+    
+    const isBot = botPatterns.some(bot => userAgent.toLowerCase().includes(bot.toLowerCase()));
+    
+    if (!isBot) {
+      return next(); // Let Vite handle regular browser requests
+    }
+    
+    try {
+      const tenant = await storage.getTenantBySlug(req.params.slug);
+      if (!tenant) {
+        return next(); // Let Vite handle 404
+      }
+      
+      const tenantData = tenant as any;
+      const ogTitle = tenantData.ogTitle || tenant.name || "Каталог";
+      const ogDescription = tenantData.ogDescription || tenant.description || "Онлайн-каталог товаров";
+      const ogImage = tenantData.ogImageUrl || tenant.logoUrl || "";
+      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      const fullUrl = `${baseUrl}/c/${tenant.slug}`;
+      
+      // Serve a minimal HTML page with OG meta tags for bots
+      const html = `<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>${escapeHtml(ogTitle)}</title>
+  <meta property="og:title" content="${escapeHtml(ogTitle)}" />
+  <meta property="og:description" content="${escapeHtml(ogDescription)}" />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="${fullUrl}" />
+  ${ogImage ? `<meta property="og:image" content="${ogImage.startsWith('http') ? ogImage : baseUrl + ogImage}" />` : ''}
+  <meta name="description" content="${escapeHtml(ogDescription)}" />
+</head>
+<body>
+  <h1>${escapeHtml(ogTitle)}</h1>
+  <p>${escapeHtml(ogDescription)}</p>
+</body>
+</html>`;
+      
+      res.setHeader('Content-Type', 'text/html');
+      res.send(html);
+    } catch (error) {
+      next(); // Let Vite handle errors
+    }
+  });
+
   return httpServer;
+}
+
+function escapeHtml(text: string): string {
+  const map: Record<string, string> = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#039;'
+  };
+  return text.replace(/[&<>"']/g, (m) => map[m]);
 }
