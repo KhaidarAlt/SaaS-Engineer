@@ -6,10 +6,14 @@ import {
   ShoppingCart,
   Filter,
   ChevronRight,
+  ChevronDown,
   Tag,
   Sparkles,
   Package,
   Percent,
+  Phone,
+  MapPin,
+  Clock,
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -23,6 +27,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { CardSkeleton } from "@/components/LoadingSpinner";
 import { useCart } from "@/contexts/CartContext";
@@ -150,7 +160,6 @@ export default function CatalogHome() {
   const [stockFilter, setStockFilter] = useState<string>("all");
   const [sizeFilter, setSizeFilter] = useState<string>("all");
   const [colorFilter, setColorFilter] = useState<string>("all");
-  const [genderFilter, setGenderFilter] = useState<string>("all");
   const { items, totalItems } = useCart();
 
   const { data, isLoading, error } = useQuery<CatalogData>({
@@ -180,15 +189,6 @@ export default function CatalogHome() {
   });
   const availableColors = Array.from(colorMap.values());
 
-  const availableGenders = Array.from(new Set(
-    data?.products?.map(p => (p as any).gender).filter(Boolean) || []
-  )) as string[];
-
-  const genderLabels: Record<string, string> = {
-    male: "Мужской",
-    female: "Женский",
-    kids: "Детский",
-  };
 
   const filteredProducts = data?.products?.filter((product) => {
     const matchesSearch = product.name.toLowerCase().includes(search.toLowerCase());
@@ -239,11 +239,8 @@ export default function CatalogHome() {
         }
       }
     }
-    
-    const productGender = (product as any).gender;
-    const matchesGender = genderFilter === "all" || productGender === genderFilter;
 
-    return product.isActive && matchesSearch && matchesCategory && matchesStock && matchesSize && matchesColor && matchesGender;
+    return product.isActive && matchesSearch && matchesCategory && matchesStock && matchesSize && matchesColor;
   });
 
   if (error) {
@@ -264,12 +261,56 @@ export default function CatalogHome() {
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-50 backdrop-blur-md bg-background/95 border-b border-border">
         <div className="max-w-7xl mx-auto px-4 md:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
+          <div className="flex items-center justify-between h-16 gap-4">
             <Link href={`/c/${slug}`}>
-              <h1 className="text-xl font-bold tracking-tight cursor-pointer">
-                {data?.tenant?.name || "Каталог"}
-              </h1>
+              <div className="flex items-center gap-3 cursor-pointer">
+                {data?.tenant?.logoUrl && (
+                  <img 
+                    src={data.tenant.logoUrl} 
+                    alt={data.tenant.name} 
+                    className="h-10 w-10 object-contain rounded-lg"
+                  />
+                )}
+                <h1 className="text-xl font-bold tracking-tight">
+                  {data?.tenant?.name || "Каталог"}
+                </h1>
+              </div>
             </Link>
+            <div className="hidden md:flex items-center gap-4 text-sm text-muted-foreground">
+              {(data?.tenant as any)?.workingHours && (
+                <span className="flex items-center gap-1">
+                  <Clock className="h-4 w-4" />
+                  {(data?.tenant as any).workingHours}
+                </span>
+              )}
+              {data?.tenant?.contactPhone && (
+                <a 
+                  href={`tel:${data.tenant.contactPhone}`}
+                  className="flex items-center gap-1 hover:text-foreground transition-colors"
+                >
+                  <Phone className="h-4 w-4" />
+                  {data.tenant.contactPhone}
+                </a>
+              )}
+              {data?.tenant?.address && (
+                (data?.tenant as any)?.gisLink ? (
+                  <a 
+                    href={(data.tenant as any).gisLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 hover:text-foreground transition-colors"
+                  >
+                    <MapPin className="h-4 w-4" />
+                    <span className="max-w-[200px] truncate">{data.tenant.address}</span>
+                  </a>
+                ) : (
+                  <span className="flex items-center gap-1">
+                    <MapPin className="h-4 w-4" />
+                    <span className="max-w-[200px] truncate">{data.tenant.address}</span>
+                  </span>
+                )
+              )}
+            </div>
             <div className="flex items-center gap-3">
               <ThemeToggle />
               <Link href={`/c/${slug}/cart`}>
@@ -356,32 +397,9 @@ export default function CatalogHome() {
           </Select>
         </div>
 
-        {(availableSizes.length > 0 || availableColors.length > 0 || availableGenders.length > 0) && (
+        {(availableSizes.length > 0 || availableColors.length > 0) && (
           <div className="flex flex-wrap items-center gap-3 mb-6 p-3 bg-muted/50 rounded-lg">
             <Filter className="h-4 w-4 text-muted-foreground" />
-            
-            {availableGenders.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                <Badge
-                  variant={genderFilter === "all" ? "default" : "outline"}
-                  className="cursor-pointer"
-                  onClick={() => setGenderFilter("all")}
-                >
-                  Все
-                </Badge>
-                {availableGenders.map((gender) => (
-                  <Badge
-                    key={gender}
-                    variant={genderFilter === gender ? "default" : "outline"}
-                    className="cursor-pointer"
-                    onClick={() => setGenderFilter(gender)}
-                    data-testid={`filter-gender-${gender}`}
-                  >
-                    {genderLabels[gender] || gender}
-                  </Badge>
-                ))}
-              </div>
-            )}
 
             {availableSizes.length > 0 && (
               <Select value={sizeFilter} onValueChange={setSizeFilter}>
@@ -398,41 +416,34 @@ export default function CatalogHome() {
             )}
 
             {availableColors.length > 0 && (
-              <div className="flex flex-wrap gap-2 items-center">
-                <Badge
-                  variant={colorFilter === "all" ? "default" : "outline"}
-                  className="cursor-pointer"
-                  onClick={() => setColorFilter("all")}
-                  data-testid="filter-color-all"
-                >
-                  Все цвета
-                </Badge>
-                {availableColors.map((color) => (
-                  <Badge
-                    key={color.hex}
-                    variant={colorFilter === color.hex ? "default" : "outline"}
-                    className="cursor-pointer gap-1.5"
-                    onClick={() => setColorFilter(color.hex)}
-                    data-testid={`filter-color-${color.name}`}
-                  >
-                    <span
-                      className="w-3 h-3 rounded-full border border-border"
-                      style={{ backgroundColor: color.hex }}
-                    />
-                    {color.name}
-                  </Badge>
-                ))}
-              </div>
+              <Select value={colorFilter} onValueChange={setColorFilter}>
+                <SelectTrigger className="w-auto min-w-[100px]" data-testid="select-color">
+                  <SelectValue placeholder="Цвет" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Все цвета</SelectItem>
+                  {availableColors.map((color) => (
+                    <SelectItem key={color.hex} value={color.hex}>
+                      <span className="flex items-center gap-2">
+                        <span
+                          className="w-3 h-3 rounded-full border border-border"
+                          style={{ backgroundColor: color.hex }}
+                        />
+                        {color.name}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             )}
 
-            {(sizeFilter !== "all" || colorFilter !== "all" || genderFilter !== "all") && (
+            {(sizeFilter !== "all" || colorFilter !== "all") && (
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => {
                   setSizeFilter("all");
                   setColorFilter("all");
-                  setGenderFilter("all");
                 }}
                 data-testid="button-clear-filters"
               >
@@ -453,26 +464,48 @@ export default function CatalogHome() {
             </Badge>
             {data.categories.filter(c => !c.parentId).map((parentCat) => {
               const subcats = data.categories?.filter(sub => sub.parentId === parentCat.id) || [];
-              return (
-                <div key={parentCat.id} className="flex flex-wrap gap-1 items-center">
+              const isParentOrChildSelected = categoryFilter === parentCat.id || 
+                subcats.some(sub => sub.id === categoryFilter);
+              
+              if (subcats.length === 0) {
+                return (
                   <Badge
+                    key={parentCat.id}
                     variant={categoryFilter === parentCat.id ? "default" : "outline"}
                     className="cursor-pointer"
                     onClick={() => setCategoryFilter(parentCat.id)}
                   >
                     {parentCat.name}
                   </Badge>
-                  {subcats.length > 0 && subcats.map((subCat) => (
+                );
+              }
+              
+              return (
+                <DropdownMenu key={parentCat.id}>
+                  <DropdownMenuTrigger asChild>
                     <Badge
-                      key={subCat.id}
-                      variant={categoryFilter === subCat.id ? "default" : "secondary"}
-                      className="cursor-pointer text-xs"
-                      onClick={() => setCategoryFilter(subCat.id)}
+                      variant={isParentOrChildSelected ? "default" : "outline"}
+                      className="cursor-pointer gap-1"
                     >
-                      {subCat.name}
+                      {parentCat.name}
+                      <ChevronDown className="h-3 w-3" />
                     </Badge>
-                  ))}
-                </div>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start">
+                    <DropdownMenuItem onClick={() => setCategoryFilter(parentCat.id)}>
+                      Все {parentCat.name}
+                    </DropdownMenuItem>
+                    {subcats.map((subCat) => (
+                      <DropdownMenuItem 
+                        key={subCat.id} 
+                        onClick={() => setCategoryFilter(subCat.id)}
+                        className={categoryFilter === subCat.id ? "bg-accent" : ""}
+                      >
+                        {subCat.name}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               );
             })}
           </div>
@@ -502,15 +535,53 @@ export default function CatalogHome() {
       </main>
 
       <footer className="border-t border-border py-8 mt-12">
-        <div className="max-w-7xl mx-auto px-4 md:px-6 lg:px-8 text-center">
-          <p className="text-sm text-muted-foreground">
-            {data?.tenant?.name} © {new Date().getFullYear()}
-          </p>
-          {data?.tenant?.contactPhone && (
-            <p className="text-sm text-muted-foreground mt-1">
-              Тел: {data.tenant.contactPhone}
-            </p>
-          )}
+        <div className="max-w-7xl mx-auto px-4 md:px-6 lg:px-8">
+          <div className="flex flex-col md:flex-row items-center md:items-start gap-6 md:gap-12">
+            <div className="text-center md:text-left flex-1">
+              {data?.tenant?.logoUrl && (
+                <img 
+                  src={data.tenant.logoUrl} 
+                  alt={data.tenant.name} 
+                  className="h-12 w-12 object-contain rounded-lg mx-auto md:mx-0 mb-3"
+                />
+              )}
+              <p className="font-semibold mb-2">{data?.tenant?.name}</p>
+              {data?.tenant?.description && (
+                <p className="text-sm text-muted-foreground max-w-md">
+                  {data.tenant.description}
+                </p>
+              )}
+            </div>
+            <div className="text-center md:text-right text-sm text-muted-foreground space-y-1">
+              {data?.tenant?.contactPhone && (
+                <p>
+                  <a href={`tel:${data.tenant.contactPhone}`} className="hover:text-foreground">
+                    {data.tenant.contactPhone}
+                  </a>
+                </p>
+              )}
+              {data?.tenant?.address && (
+                <p>
+                  {(data?.tenant as any)?.gisLink ? (
+                    <a 
+                      href={(data.tenant as any).gisLink} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="hover:text-foreground"
+                    >
+                      {data.tenant.address}
+                    </a>
+                  ) : (
+                    data.tenant.address
+                  )}
+                </p>
+              )}
+              {(data?.tenant as any)?.workingHours && (
+                <p>{(data?.tenant as any)?.workingHours}</p>
+              )}
+              <p className="pt-2">© {new Date().getFullYear()}</p>
+            </div>
+          </div>
         </div>
       </footer>
     </div>

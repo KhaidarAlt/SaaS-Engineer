@@ -1,14 +1,11 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { motion } from "framer-motion";
 import {
   Search,
   ShoppingCart,
   Eye,
-  Phone,
-  MapPin,
-  MessageCircle,
-  ExternalLink,
 } from "lucide-react";
 import { SiWhatsapp } from "react-icons/si";
 import { Button } from "@/components/ui/button";
@@ -23,12 +20,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
   Table,
   TableBody,
   TableCell,
@@ -40,7 +31,7 @@ import { DashboardLayout } from "@/components/DashboardLayout";
 import { TableRowSkeleton } from "@/components/LoadingSpinner";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import type { Order, OrderItem } from "@shared/schema";
+import type { Order } from "@shared/schema";
 
 const statusOptions = [
   { value: "new", label: "Новый", variant: "default" as const },
@@ -49,14 +40,10 @@ const statusOptions = [
   { value: "cancelled", label: "Отменён", variant: "destructive" as const },
 ];
 
-interface OrderWithItems extends Order {
-  items?: OrderItem[];
-}
-
 export default function OrdersPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [selectedOrder, setSelectedOrder] = useState<OrderWithItems | null>(null);
+  const [, navigate] = useLocation();
   const { toast } = useToast();
 
   const { data: orders, isLoading } = useQuery<Order[]>({
@@ -189,7 +176,13 @@ export default function OrdersPage() {
                       className="group"
                     >
                       <TableCell className="font-medium">
-                        #{order.orderNumber}
+                        <button
+                          onClick={() => navigate(`/dashboard/orders/${order.id}`)}
+                          className="hover:underline text-primary cursor-pointer"
+                          data-testid={`link-order-${order.id}`}
+                        >
+                          #{order.orderNumber}
+                        </button>
                       </TableCell>
                       <TableCell>
                         <div>
@@ -242,7 +235,7 @@ export default function OrdersPage() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => setSelectedOrder(order)}
+                          onClick={() => navigate(`/dashboard/orders/${order.id}`)}
                           data-testid={`view-order-${order.id}`}
                         >
                           <Eye className="h-4 w-4" />
@@ -268,82 +261,6 @@ export default function OrdersPage() {
           </div>
         </Card>
 
-        <Dialog open={!!selectedOrder} onOpenChange={() => setSelectedOrder(null)}>
-          <DialogContent className="max-w-lg">
-            <DialogHeader>
-              <DialogTitle>Заказ #{selectedOrder?.orderNumber}</DialogTitle>
-            </DialogHeader>
-            {selectedOrder && (
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <p className="text-sm text-muted-foreground">Клиент</p>
-                    <p className="font-medium">{selectedOrder.customerName}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-sm text-muted-foreground">Статус</p>
-                    <Badge variant={getStatusBadge(selectedOrder.status).variant}>
-                      {getStatusBadge(selectedOrder.status).label}
-                    </Badge>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2 text-sm">
-                    <Phone className="h-4 w-4 text-muted-foreground" />
-                    <span>{selectedOrder.customerPhone}</span>
-                  </div>
-                  {selectedOrder.deliveryAddress && (
-                    <div className="flex items-start gap-2 text-sm">
-                      <MapPin className="h-4 w-4 text-muted-foreground mt-0.5" />
-                      <span>{selectedOrder.deliveryAddress}</span>
-                    </div>
-                  )}
-                  {selectedOrder.comment && (
-                    <div className="flex items-start gap-2 text-sm">
-                      <MessageCircle className="h-4 w-4 text-muted-foreground mt-0.5" />
-                      <span>{selectedOrder.comment}</span>
-                    </div>
-                  )}
-                </div>
-
-                <div className="border-t pt-4">
-                  <div className="flex justify-between mb-2">
-                    <span className="text-muted-foreground">Сумма товаров</span>
-                    <span>{formatPrice(selectedOrder.subtotal)}</span>
-                  </div>
-                  {parseFloat(selectedOrder.discountTotal) > 0 && (
-                    <div className="flex justify-between mb-2 text-green-600">
-                      <span>Скидка</span>
-                      <span>-{formatPrice(selectedOrder.discountTotal)}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between font-semibold text-lg">
-                    <span>Итого</span>
-                    <span>{formatPrice(selectedOrder.total)}</span>
-                  </div>
-                </div>
-
-                <div className="flex justify-end gap-2 pt-4">
-                  <Button
-                    variant="outline"
-                    onClick={() => setSelectedOrder(null)}
-                  >
-                    Закрыть
-                  </Button>
-                  <Button
-                    className="gap-2 bg-green-600 hover:bg-green-700"
-                    onClick={() => window.open(createWhatsAppLink(selectedOrder), "_blank")}
-                    data-testid="button-whatsapp-dialog"
-                  >
-                    <SiWhatsapp className="h-4 w-4" />
-                    Написать клиенту
-                  </Button>
-                </div>
-              </div>
-            )}
-          </DialogContent>
-        </Dialog>
       </div>
     </DashboardLayout>
   );

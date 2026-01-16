@@ -39,6 +39,11 @@ export const tenants = pgTable("tenants", {
   contactPhone: text("contact_phone"),
   contactEmail: text("contact_email"),
   address: text("address"),
+  gisLink: text("gis_link"),
+  workingHours: text("working_hours"),
+  ogTitle: text("og_title"),
+  ogDescription: text("og_description"),
+  ogImageUrl: text("og_image_url"),
   status: text("status").notNull().default("active"), // active, suspended, banned
   wahaBaseUrl: text("waha_base_url"),
   wahaInstanceName: text("waha_instance_name"),

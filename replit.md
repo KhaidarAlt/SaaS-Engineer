@@ -109,6 +109,14 @@ Preferred communication style: Simple, everyday language.
 - ProductDetailPage has interactive size/color selection with disabled state for unavailable combinations
 - CatalogHome filters updated to work with sizeColorStock for accurate availability filtering
 - Dashboard products list now shows uploaded images from product_images table
+- Enhanced catalog header: logo, clickable phone, 2GIS-linked address, working hours (desktop)
+- Enhanced catalog footer: logo, description (500 char limit), contact info, copyright
+- Category filter refactored to use dropdown menus for subcategories instead of flat badges
+- Color filter changed from badges to Select dropdown for consistency
+- Removed gender filter from catalog UI
+- Added tenant schema fields: gisLink, workingHours, ogTitle, ogDescription, ogImageUrl
+- Settings page: logo/OG image upload, working hours, 2GIS link, custom slug editing
+- QR code generation with download and copy-to-clipboard functionality
 
 ## API Endpoints
 
