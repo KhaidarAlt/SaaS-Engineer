@@ -1265,6 +1265,382 @@ export async function registerRoutes(
     }
   });
 
+  // ============ PUBLIC EVENT TRACKING ============
+  const ALLOWED_EVENT_TYPES = [
+    'catalog_view', 'product_view', 'add_to_cart', 'remove_from_cart',
+    'cart_view', 'checkout_start', 'order_created', 'whatsapp_open_clicked',
+    'copy_order_text_clicked', 'promo_view', 'search'
+  ];
+  
+  const eventRateLimit = new Map<string, number>();
+  
+  app.post("/api/events/track", async (req, res) => {
+    try {
+      const { tenantSlug, eventType, sessionId, visitorId, pagePath, referrer,
+        utmSource, utmMedium, utmCampaign, utmContent, utmTerm,
+        objectType, objectId, productId, orderId, metadata } = req.body;
+      
+      if (!tenantSlug || !eventType) {
+        return res.status(400).json({ message: "Missing required fields" });
+      }
+      
+      if (!ALLOWED_EVENT_TYPES.includes(eventType)) {
+        return res.status(400).json({ message: "Invalid event type" });
+      }
+      
+      // Simple rate limiting by sessionId
+      const rateLimitKey = `${sessionId}-${eventType}`;
+      const lastCall = eventRateLimit.get(rateLimitKey);
+      const now = Date.now();
+      if (lastCall && now - lastCall < 500) {
+        return res.status(429).json({ message: "Too many requests" });
+      }
+      eventRateLimit.set(rateLimitKey, now);
+      // Clean old entries every 1000 calls
+      if (eventRateLimit.size > 1000) {
+        const oneMinuteAgo = now - 60000;
+        for (const [key, time] of eventRateLimit.entries()) {
+          if (time < oneMinuteAgo) eventRateLimit.delete(key);
+        }
+      }
+      
+      const tenant = await storage.getTenantBySlug(tenantSlug);
+      if (!tenant) {
+        return res.status(404).json({ message: "Tenant not found" });
+      }
+      
+      await storage.logEvent({
+        tenantId: tenant.id,
+        eventType,
+        sessionId,
+        visitorId,
+        pagePath,
+        referrer,
+        utmSource,
+        utmMedium,
+        utmCampaign,
+        utmContent,
+        utmTerm,
+        objectType,
+        objectId,
+        productId,
+        orderId,
+        metadata,
+      });
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Event tracking error:", error);
+      res.status(500).json({ message: "Error tracking event" });
+    }
+  });
+  
+  // ============ CART SESSION MANAGEMENT ============
+  app.post("/api/cart-session/update", async (req, res) => {
+    try {
+      const { tenantSlug, sessionId, visitorId, cartJson, totalEstimated, 
+        checkoutPhone, lastStep, utmSource, utmMedium, utmCampaign } = req.body;
+      
+      if (!tenantSlug || !sessionId) {
+        return res.status(400).json({ message: "Missing required fields" });
+      }
+      
+      const tenant = await storage.getTenantBySlug(tenantSlug);
+      if (!tenant) {
+        return res.status(404).json({ message: "Tenant not found" });
+      }
+      
+      const session = await storage.upsertCartSession({
+        tenantId: tenant.id,
+        sessionId,
+        visitorId,
+        cartJson,
+        totalEstimated: totalEstimated?.toString(),
+        checkoutPhone,
+        lastStep,
+        utmSource,
+        utmMedium,
+        utmCampaign,
+        status: 'active',
+        firstSeenAt: new Date(),
+        lastActivityAt: new Date(),
+      });
+      
+      res.json({ success: true, sessionId: session.id });
+    } catch (error) {
+      console.error("Cart session error:", error);
+      res.status(500).json({ message: "Error updating cart session" });
+    }
+  });
+  
+  app.post("/api/cart-session/convert", async (req, res) => {
+    try {
+      const { tenantSlug, sessionId, orderId } = req.body;
+      
+      if (!tenantSlug || !sessionId) {
+        return res.status(400).json({ message: "Missing required fields" });
+      }
+      
+      const tenant = await storage.getTenantBySlug(tenantSlug);
+      if (!tenant) {
+        return res.status(404).json({ message: "Tenant not found" });
+      }
+      
+      const existing = await storage.getCartSession(tenant.id, sessionId);
+      if (existing) {
+        await storage.updateCartSession(existing.id, tenant.id, {
+          status: 'converted',
+          orderId,
+        });
+      }
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Cart conversion error:", error);
+      res.status(500).json({ message: "Error converting cart" });
+    }
+  });
+  
+  // ============ ANALYTICS DASHBOARD ENDPOINTS ============
+  app.get("/api/analytics/overview", requireAuth, async (req, res) => {
+    try {
+      const { from, to } = req.query;
+      const fromDate = from ? new Date(from as string) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      const toDate = to ? new Date(to as string) : new Date();
+      
+      const overview = await storage.getAnalyticsOverview(req.user!.tenantId!, fromDate, toDate);
+      
+      // Calculate previous period for comparison
+      const periodLength = toDate.getTime() - fromDate.getTime();
+      const prevFrom = new Date(fromDate.getTime() - periodLength);
+      const prevTo = new Date(fromDate.getTime());
+      const prevOverview = await storage.getAnalyticsOverview(req.user!.tenantId!, prevFrom, prevTo);
+      
+      const calculateChange = (current: number, previous: number) => {
+        if (previous === 0) return current > 0 ? 100 : 0;
+        return ((current - previous) / previous) * 100;
+      };
+      
+      res.json({
+        current: overview,
+        previous: prevOverview,
+        changes: {
+          visits: calculateChange(overview.visits, prevOverview.visits),
+          uniqueVisitors: calculateChange(overview.uniqueVisitors, prevOverview.uniqueVisitors),
+          ordersCreated: calculateChange(overview.ordersCreated, prevOverview.ordersCreated),
+          revenue: calculateChange(overview.revenue, prevOverview.revenue),
+          conversionRate: calculateChange(overview.conversionRate, prevOverview.conversionRate),
+          abandonedCarts: calculateChange(overview.abandonedCarts, prevOverview.abandonedCarts),
+        },
+      });
+    } catch (error) {
+      console.error("Analytics overview error:", error);
+      res.status(500).json({ message: "Ошибка получения обзора аналитики" });
+    }
+  });
+  
+  app.get("/api/analytics/funnel", requireAuth, async (req, res) => {
+    try {
+      const { from, to } = req.query;
+      const fromDate = from ? new Date(from as string) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      const toDate = to ? new Date(to as string) : new Date();
+      
+      const overview = await storage.getAnalyticsOverview(req.user!.tenantId!, fromDate, toDate);
+      
+      const funnel = [
+        { step: 'Посетители', count: overview.uniqueVisitors, conversionToNext: overview.uniqueVisitors > 0 ? (overview.addToCart / overview.uniqueVisitors * 100) : 0 },
+        { step: 'Добавили в корзину', count: overview.addToCart, conversionToNext: overview.addToCart > 0 ? (overview.checkoutStarts / overview.addToCart * 100) : 0 },
+        { step: 'Начали оформление', count: overview.checkoutStarts, conversionToNext: overview.checkoutStarts > 0 ? (overview.ordersCreated / overview.checkoutStarts * 100) : 0 },
+        { step: 'Заказ создан', count: overview.ordersCreated, conversionToNext: overview.ordersCreated > 0 ? (overview.whatsappClicks / overview.ordersCreated * 100) : 0 },
+        { step: 'Открыли WhatsApp', count: overview.whatsappClicks, conversionToNext: 100 },
+      ];
+      
+      // Find bottleneck (biggest drop)
+      let bottleneckIndex = 0;
+      let biggestDrop = 100;
+      for (let i = 0; i < funnel.length - 1; i++) {
+        if (funnel[i].conversionToNext < biggestDrop && funnel[i].count > 0) {
+          biggestDrop = funnel[i].conversionToNext;
+          bottleneckIndex = i;
+        }
+      }
+      
+      // Generate recommendations based on funnel
+      const recommendations: string[] = [];
+      if (overview.uniqueVisitors > 10 && overview.cartConversion < 10) {
+        recommendations.push("Низкая конверсия в корзину. Улучшите фото товаров, добавьте подробные описания, сделайте CTA-кнопки заметнее.");
+      }
+      if (overview.addToCart > 5 && overview.checkoutStarts < overview.addToCart * 0.3) {
+        recommendations.push("Много брошенных корзин. Упростите процесс оформления, добавьте информацию о доставке и оплате.");
+      }
+      if (overview.ordersCreated > 3 && overview.whatsappConversion < 50) {
+        recommendations.push("Клиенты не нажимают кнопку WhatsApp. Проверьте, заметна ли кнопка, или есть ли технические проблемы.");
+      }
+      
+      res.json({ funnel, bottleneckIndex, recommendations });
+    } catch (error) {
+      console.error("Funnel analytics error:", error);
+      res.status(500).json({ message: "Ошибка получения воронки" });
+    }
+  });
+  
+  app.get("/api/analytics/products", requireAuth, async (req, res) => {
+    try {
+      const { from, to, sortBy = 'revenue' } = req.query;
+      const fromDate = from ? new Date(from as string) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      const toDate = to ? new Date(to as string) : new Date();
+      
+      const productStats = await storage.getProductAnalytics(req.user!.tenantId!, fromDate, toDate);
+      
+      // Sort by requested field
+      const sorted = [...productStats].sort((a, b) => {
+        switch (sortBy) {
+          case 'views': return b.views - a.views;
+          case 'addToCart': return b.addToCart - a.addToCart;
+          case 'orders': return b.orders - a.orders;
+          case 'conversion': return b.conversion - a.conversion;
+          default: return b.revenue - a.revenue;
+        }
+      });
+      
+      res.json({
+        products: sorted,
+        totals: {
+          views: productStats.reduce((sum, p) => sum + p.views, 0),
+          addToCart: productStats.reduce((sum, p) => sum + p.addToCart, 0),
+          orders: productStats.reduce((sum, p) => sum + p.orders, 0),
+          revenue: productStats.reduce((sum, p) => sum + p.revenue, 0),
+        },
+      });
+    } catch (error) {
+      console.error("Product analytics error:", error);
+      res.status(500).json({ message: "Ошибка получения аналитики товаров" });
+    }
+  });
+  
+  app.get("/api/analytics/orders", requireAuth, async (req, res) => {
+    try {
+      const { from, to, status } = req.query;
+      const fromDate = from ? new Date(from as string) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      const toDate = to ? new Date(to as string) : new Date();
+      
+      const allOrders = await storage.getOrders(req.user!.tenantId!);
+      const filtered = allOrders.filter(o => {
+        const orderDate = new Date(o.createdAt);
+        if (orderDate < fromDate || orderDate > toDate) return false;
+        if (status && o.status !== status) return false;
+        return true;
+      });
+      
+      // Get event data for orders (utm sources, etc.)
+      const events = await storage.getAnalyticsEvents(req.user!.tenantId!, fromDate, toDate);
+      const orderEvents = events.filter(e => e.eventType === 'order_created');
+      
+      const ordersWithMeta = filtered.map(order => {
+        const event = orderEvents.find(e => e.orderId === order.id);
+        return {
+          ...order,
+          utmSource: event?.utmSource,
+        };
+      });
+      
+      res.json({
+        orders: ordersWithMeta,
+        summary: {
+          total: filtered.length,
+          revenue: filtered.reduce((sum, o) => sum + parseFloat(o.total), 0),
+          avgCheck: filtered.length > 0 ? filtered.reduce((sum, o) => sum + parseFloat(o.total), 0) / filtered.length : 0,
+          byStatus: {
+            new: filtered.filter(o => o.status === 'new').length,
+            processing: filtered.filter(o => o.status === 'processing').length,
+            completed: filtered.filter(o => o.status === 'completed').length,
+            cancelled: filtered.filter(o => o.status === 'cancelled').length,
+          },
+        },
+      });
+    } catch (error) {
+      console.error("Orders analytics error:", error);
+      res.status(500).json({ message: "Ошибка получения аналитики заказов" });
+    }
+  });
+  
+  app.get("/api/analytics/abandoned", requireAuth, async (req, res) => {
+    try {
+      const { from, to, hasPhone, minTotal } = req.query;
+      const fromDate = from ? new Date(from as string) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      const toDate = to ? new Date(to as string) : new Date();
+      
+      const sessions = await storage.getCartSessions(req.user!.tenantId!, {
+        status: 'abandoned',
+        from: fromDate,
+        to: toDate,
+      });
+      
+      let filtered = sessions;
+      if (hasPhone === 'true') {
+        filtered = filtered.filter(s => s.checkoutPhone);
+      }
+      if (minTotal) {
+        filtered = filtered.filter(s => parseFloat(s.totalEstimated || '0') >= parseFloat(minTotal as string));
+      }
+      
+      res.json({
+        sessions: filtered,
+        summary: {
+          total: filtered.length,
+          withPhone: filtered.filter(s => s.checkoutPhone).length,
+          totalValue: filtered.reduce((sum, s) => sum + parseFloat(s.totalEstimated || '0'), 0),
+          byStatus: {
+            new: filtered.filter(s => s.processedStatus === 'new').length,
+            in_progress: filtered.filter(s => s.processedStatus === 'in_progress').length,
+            processed: filtered.filter(s => s.processedStatus === 'processed').length,
+          },
+        },
+      });
+    } catch (error) {
+      console.error("Abandoned carts error:", error);
+      res.status(500).json({ message: "Ошибка получения брошенных корзин" });
+    }
+  });
+  
+  app.patch("/api/analytics/abandoned/:id", requireAuth, async (req, res) => {
+    try {
+      const { processedStatus, note } = req.body;
+      const updated = await storage.updateCartSession(req.params.id, req.user!.tenantId!, {
+        processedStatus,
+        note,
+      });
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка обновления корзины" });
+    }
+  });
+  
+  // Store health check for dashboard
+  app.get("/api/analytics/health", requireAuth, async (req, res) => {
+    try {
+      const products = await storage.getProducts(req.user!.tenantId!);
+      const tenant = await storage.getTenant(req.user!.tenantId!);
+      const promotions = await storage.getPromotions(req.user!.tenantId!);
+      
+      const now = new Date();
+      const sevenDaysFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+      
+      const issues = {
+        productsWithoutPhoto: products.filter(p => !p.mainImageUrl).length,
+        productsWithoutDescription: products.filter(p => !p.description || p.description.length < 10).length,
+        outOfStock: products.filter(p => (p.stockQty || 0) <= 0).length,
+        expiringPromotions: promotions.filter(p => p.endsAt && new Date(p.endsAt) <= sevenDaysFromNow && new Date(p.endsAt) > now).length,
+        noNotificationPhone: !tenant?.notificationPhone,
+        noWhatsApp: !tenant?.contactPhone,
+      };
+      
+      res.json(issues);
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка проверки здоровья магазина" });
+    }
+  });
+
   // Serve OG meta tags for catalog pages (for messenger/social media previews)
   // Only intercept requests from bots/crawlers, let regular browsers go through Vite
   app.get("/c/:slug", async (req, res, next) => {

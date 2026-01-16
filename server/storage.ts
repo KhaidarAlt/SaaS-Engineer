@@ -2,7 +2,7 @@ import { eq, and, desc, sql, gte, lte } from "drizzle-orm";
 import { db } from "./db";
 import {
   users, tenants, subscriptions, plans, products, categories,
-  discounts, promotions, orders, orderItems, analyticsEvents,
+  discounts, promotions, orders, orderItems, analyticsEvents, cartSessions,
   subscriptionExtensions, knowledgeBase, auditLogs, carts, productVariants, productImages,
   type User, type InsertUser, type Tenant, type InsertTenant,
   type Subscription, type InsertSubscription, type Plan, type InsertPlan,
@@ -13,6 +13,7 @@ import {
   type SubscriptionExtension, type InsertSubscriptionExtension,
   type ProductVariant, type InsertProductVariant,
   type ProductImage, type InsertProductImage,
+  type CartSession, type InsertCartSession,
 } from "@shared/schema";
 import bcrypt from "bcryptjs";
 
@@ -96,6 +97,38 @@ export interface IStorage {
     totalUsers: number;
     totalRevenue: number;
   }>;
+  
+  getCartSession(tenantId: string, sessionId: string): Promise<CartSession | undefined>;
+  upsertCartSession(data: InsertCartSession): Promise<CartSession>;
+  updateCartSession(id: string, tenantId: string, data: Partial<InsertCartSession>): Promise<CartSession | undefined>;
+  getCartSessions(tenantId: string, filters?: { status?: string; from?: Date; to?: Date }): Promise<CartSession[]>;
+  markAbandonedCarts(thresholdHours: number): Promise<number>;
+  
+  getAnalyticsEvents(tenantId: string, from: Date, to: Date): Promise<AnalyticsEvent[]>;
+  getAnalyticsOverview(tenantId: string, from: Date, to: Date): Promise<{
+    visits: number;
+    uniqueVisitors: number;
+    productViews: number;
+    addToCart: number;
+    checkoutStarts: number;
+    ordersCreated: number;
+    whatsappClicks: number;
+    revenue: number;
+    avgCheck: number;
+    abandonedCarts: number;
+    conversionRate: number;
+    cartConversion: number;
+    whatsappConversion: number;
+  }>;
+  getProductAnalytics(tenantId: string, from: Date, to: Date): Promise<Array<{
+    id: string;
+    name: string;
+    views: number;
+    addToCart: number;
+    orders: number;
+    revenue: number;
+    conversion: number;
+  }>>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -487,6 +520,184 @@ export class DatabaseStorage implements IStorage {
       totalUsers: allUsers.length,
       totalRevenue: 0,
     };
+  }
+
+  async getCartSession(tenantId: string, sessionId: string): Promise<CartSession | undefined> {
+    const [session] = await db.select().from(cartSessions)
+      .where(and(eq(cartSessions.tenantId, tenantId), eq(cartSessions.sessionId, sessionId)));
+    return session;
+  }
+
+  async upsertCartSession(data: InsertCartSession): Promise<CartSession> {
+    const existing = await this.getCartSession(data.tenantId, data.sessionId);
+    if (existing) {
+      const [updated] = await db.update(cartSessions)
+        .set({ ...data, lastActivityAt: new Date() })
+        .where(eq(cartSessions.id, existing.id))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(cartSessions).values(data).returning();
+    return created;
+  }
+
+  async updateCartSession(id: string, tenantId: string, data: Partial<InsertCartSession>): Promise<CartSession | undefined> {
+    const [updated] = await db.update(cartSessions)
+      .set({ ...data, lastActivityAt: new Date() })
+      .where(and(eq(cartSessions.id, id), eq(cartSessions.tenantId, tenantId)))
+      .returning();
+    return updated;
+  }
+
+  async getCartSessions(tenantId: string, filters?: { status?: string; from?: Date; to?: Date }): Promise<CartSession[]> {
+    let query = db.select().from(cartSessions).where(eq(cartSessions.tenantId, tenantId));
+    
+    const conditions = [eq(cartSessions.tenantId, tenantId)];
+    if (filters?.status) conditions.push(eq(cartSessions.status, filters.status));
+    if (filters?.from) conditions.push(gte(cartSessions.lastActivityAt, filters.from));
+    if (filters?.to) conditions.push(lte(cartSessions.lastActivityAt, filters.to));
+    
+    return db.select().from(cartSessions)
+      .where(and(...conditions))
+      .orderBy(desc(cartSessions.lastActivityAt));
+  }
+
+  async markAbandonedCarts(thresholdHours: number): Promise<number> {
+    const threshold = new Date();
+    threshold.setHours(threshold.getHours() - thresholdHours);
+    
+    const result = await db.update(cartSessions)
+      .set({ status: 'abandoned' })
+      .where(and(
+        eq(cartSessions.status, 'active'),
+        lte(cartSessions.lastActivityAt, threshold)
+      ));
+    return result.rowCount || 0;
+  }
+
+  async getAnalyticsEvents(tenantId: string, from: Date, to: Date): Promise<AnalyticsEvent[]> {
+    return db.select().from(analyticsEvents)
+      .where(and(
+        eq(analyticsEvents.tenantId, tenantId),
+        gte(analyticsEvents.createdAt, from),
+        lte(analyticsEvents.createdAt, to)
+      ))
+      .orderBy(desc(analyticsEvents.createdAt));
+  }
+
+  async getAnalyticsOverview(tenantId: string, from: Date, to: Date): Promise<{
+    visits: number;
+    uniqueVisitors: number;
+    productViews: number;
+    addToCart: number;
+    checkoutStarts: number;
+    ordersCreated: number;
+    whatsappClicks: number;
+    revenue: number;
+    avgCheck: number;
+    abandonedCarts: number;
+    conversionRate: number;
+    cartConversion: number;
+    whatsappConversion: number;
+  }> {
+    const events = await this.getAnalyticsEvents(tenantId, from, to);
+    const periodOrders = await db.select().from(orders)
+      .where(and(
+        eq(orders.tenantId, tenantId),
+        gte(orders.createdAt, from),
+        lte(orders.createdAt, to)
+      ));
+    
+    const abandoned = await db.select().from(cartSessions)
+      .where(and(
+        eq(cartSessions.tenantId, tenantId),
+        eq(cartSessions.status, 'abandoned'),
+        gte(cartSessions.lastActivityAt, from),
+        lte(cartSessions.lastActivityAt, to)
+      ));
+
+    const visits = events.filter(e => e.eventType === 'catalog_view').length;
+    const uniqueVisitors = new Set(events.filter(e => e.eventType === 'catalog_view').map(e => e.visitorId || e.sessionId)).size;
+    const productViews = events.filter(e => e.eventType === 'product_view').length;
+    const addToCart = events.filter(e => e.eventType === 'add_to_cart').length;
+    const checkoutStarts = events.filter(e => e.eventType === 'checkout_start').length;
+    const ordersCreated = periodOrders.length;
+    const whatsappClicks = events.filter(e => e.eventType === 'whatsapp_open_clicked').length;
+    
+    const completedOrders = periodOrders.filter(o => o.status !== 'cancelled');
+    const revenue = completedOrders.reduce((sum, o) => sum + parseFloat(o.total), 0);
+    const avgCheck = ordersCreated > 0 ? revenue / ordersCreated : 0;
+
+    return {
+      visits,
+      uniqueVisitors,
+      productViews,
+      addToCart,
+      checkoutStarts,
+      ordersCreated,
+      whatsappClicks,
+      revenue,
+      avgCheck,
+      abandonedCarts: abandoned.length,
+      conversionRate: uniqueVisitors > 0 ? (ordersCreated / uniqueVisitors) * 100 : 0,
+      cartConversion: uniqueVisitors > 0 ? (new Set(events.filter(e => e.eventType === 'add_to_cart').map(e => e.sessionId)).size / uniqueVisitors) * 100 : 0,
+      whatsappConversion: ordersCreated > 0 ? (whatsappClicks / ordersCreated) * 100 : 0,
+    };
+  }
+
+  async getProductAnalytics(tenantId: string, from: Date, to: Date): Promise<Array<{
+    id: string;
+    name: string;
+    views: number;
+    addToCart: number;
+    orders: number;
+    revenue: number;
+    conversion: number;
+  }>> {
+    const events = await this.getAnalyticsEvents(tenantId, from, to);
+    const allProducts = await db.select().from(products).where(eq(products.tenantId, tenantId));
+    const periodOrders = await db.select().from(orders)
+      .where(and(
+        eq(orders.tenantId, tenantId),
+        gte(orders.createdAt, from),
+        lte(orders.createdAt, to)
+      ));
+    const periodOrderItems = periodOrders.length > 0 
+      ? await db.select().from(orderItems).where(sql`${orderItems.orderId} IN (${sql.join(periodOrders.map(o => sql`${o.id}`), sql`,`)})`)
+      : [];
+
+    const productStats = new Map<string, { views: number; addToCart: number; orders: number; revenue: number }>();
+    
+    events.forEach(e => {
+      if (e.productId && (e.eventType === 'product_view' || e.eventType === 'add_to_cart')) {
+        const stats = productStats.get(e.productId) || { views: 0, addToCart: 0, orders: 0, revenue: 0 };
+        if (e.eventType === 'product_view') stats.views++;
+        if (e.eventType === 'add_to_cart') stats.addToCart++;
+        productStats.set(e.productId, stats);
+      }
+    });
+
+    periodOrderItems.forEach(item => {
+      const stats = productStats.get(item.productId) || { views: 0, addToCart: 0, orders: 0, revenue: 0 };
+      stats.orders += item.quantity;
+      stats.revenue += parseFloat(item.total);
+      productStats.set(item.productId, stats);
+    });
+
+    return allProducts
+      .map(p => {
+        const stats = productStats.get(p.id) || { views: 0, addToCart: 0, orders: 0, revenue: 0 };
+        return {
+          id: p.id,
+          name: p.name,
+          views: stats.views,
+          addToCart: stats.addToCart,
+          orders: stats.orders,
+          revenue: stats.revenue,
+          conversion: stats.views > 0 ? (stats.orders / stats.views) * 100 : 0,
+        };
+      })
+      .sort((a, b) => b.revenue - a.revenue);
   }
 }
 
