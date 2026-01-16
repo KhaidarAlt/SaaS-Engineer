@@ -414,7 +414,9 @@ export class DatabaseStorage implements IStorage {
     const addToCart = events.filter(e => e.eventType === 'add_to_cart').length;
     const checkoutStarts = events.filter(e => e.eventType === 'checkout_start').length;
     const ordersCreated = allOrders.length;
-    const revenue = allOrders.reduce((sum, o) => sum + parseFloat(o.total), 0);
+    // Only count revenue from completed orders
+    const completedOrders = allOrders.filter(o => o.status === 'completed');
+    const revenue = completedOrders.reduce((sum, o) => sum + parseFloat(o.total), 0);
     const uniqueSessions = new Set(events.map(e => e.sessionId).filter(Boolean));
 
     return {
