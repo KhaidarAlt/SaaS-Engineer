@@ -1,0 +1,225 @@
+Ты — senior full-stack инженер и product-дизайнер. У меня уже есть SmartCatalog (Next.js 14 App Router + TypeScript + Tailwind + shadcn/ui + Prisma + Postgres). Твоя задача — НЕ переписывать проект с нуля, а ДОБАВИТЬ полноценный модуль “Дашборд и Аналитика” для владельца магазина (tenant owner/manager) и сделать так, чтобы метрики работали корректно и были удобны для понимания. Весь UI и тексты — строго на русском языке.
+
+ОГРАНИЧЕНИЯ
+- Никаких внешних сервисов. Только внутренняя аналитика на событиях в БД.
+- События фиксируем в Postgres.
+- Дизайн современный (Apple-like), много воздуха, понятные KPI, графики, таблицы. Framer Motion для микро-анимаций, Sonner для уведомлений.
+- Метрики должны быть фильтруемыми по периоду (7/30/90 дней + произвольный диапазон).
+- Данные строго multi-tenant: все события и отчёты только в рамках tenant_id.
+
+ЦЕЛЬ
+Сделать раздел “Аналитика” в кабинете магазина с 6 экранами:
+1) Обзор
+2) Воронка
+3) Заказы
+4) Брошенные корзины
+5) Товары
+6) Акции и скидки
+
+ПРИЕМКА (что должно получиться)
+- Владелец видит: сколько людей перешли в каталог, сколько добавили в корзину, сколько создали заказ, сколько открыли WhatsApp, сколько брошенных корзин, конверсии в %, выручку, топ товаров.
+- Все эти данные считаются корректно по событиям и заказам.
+- Можно выбрать период и сравнить с предыдущим периодом (например последние 7 дней vs предыдущие 7).
+- Везде понятные таблицы и графики.
+- Система не ломается при 0 данных (красивые пустые состояния).
+- Есть экспорт CSV для заказов и брошенных корзин.
+
+ЧАСТЬ 1 — СОБЫТИЯ (EVENT TRACKING)
+Внедри трекинг следующих событий на витрине (публичный каталог):
+- catalog_view (открыли каталог)
+- product_view (открыли страницу товара)
+- add_to_cart (добавили товар/вариант в корзину)
+- remove_from_cart (удалили)
+- cart_view (открыли корзину)
+- checkout_start (перешли к оформлению)
+- order_created (заказ сохранён в БД)
+- whatsapp_open_clicked (клик “Отправить в WhatsApp” на странице спасибо)
+- copy_order_text_clicked (клик “Скопировать текст заказа”)
+- promo_view (открыли вкладку “Акции”)
+- search (поиск по каталогу, сохраняй поисковый запрос)
+
+ТРЕБОВАНИЯ К EVENT DATA
+Каждый event должен иметь:
+- id (uuid)
+- tenant_id
+- created_at
+- event_type (enum/string)
+- session_id (cookie) — генерируй на клиенте и храни в cookie (например sc_sid)
+- visitor_id (cookie) — отдельный cookie для “уникальности” (например sc_vid)
+- page_path
+- referrer (если доступно)
+- utm_source, utm_medium, utm_campaign, utm_content, utm_term (если присутствуют в URL)
+- object_type + object_id (например product / productId, order / orderId)
+- metadata_json (например: qty, variantId, price, query)
+
+СОХРАНЕНИЕ В БД
+Сделай API endpoint /api/events/track, который принимает событие и записывает в БД.
+Важно: это публичный endpoint, но он должен:
+- принимать tenantSlug и резолвить tenant_id безопасно
+- rate limit по session_id (простая защита)
+- не принимать произвольные event_type (валидация whitelist)
+- не позволять писать события в чужой tenant (проверка по slug)
+
+ЧАСТЬ 2 — КОРЗИНА И “БРОШЕННЫЕ КОРЗИНЫ”
+Сделай сущность cart_session, чтобы можно было считать abandoned carts.
+Требования:
+- Каждый посетитель/сессия имеет cart_session (tenant_id + session_id).
+- cart_session хранит:
+  - status: active | converted | abandoned | expired
+  - cart_json (позиции: productId/variantId/name/qty/price)
+  - last_activity_at
+  - first_seen_at
+  - checkout_phone (если пользователь ввёл телефон на чек-ауте до создания заказа)
+  - total_estimated
+- При add_to_cart / remove_from_cart / qty_change обновляй cart_session (last_activity + total_estimated + cart_json).
+- При order_created:
+  - пометь cart_session как converted и привяжи order_id.
+- Планировщик (cron) раз в 30 минут:
+  - помечает cart_session как abandoned, если:
+    status=active AND last_activity_at < now - thresholdHours (по умолчанию 24 часа)
+  - threshold должен быть настраиваемым в tenant settings (например abandoned_cart_hours).
+
+ЧАСТЬ 3 — СХЕМА PRISMA (обязательно миграции)
+Добавь таблицы (или эквивалент):
+1) analytics_event
+2) cart_session
+3) (если нет) order, order_item уже есть
+4) (если нет) promotion/discount таблицы уже есть
+
+Пример (адаптируй под текущую схему):
+- AnalyticsEvent: id, tenantId, type, sessionId, visitorId, pagePath, referrer, utm*, objectType, objectId, metadata, createdAt
+- CartSession: id, tenantId, sessionId, visitorId, status, cartJson, totalEstimated, checkoutPhone, lastActivityAt, firstSeenAt, orderId
+
+ЧАСТЬ 4 — РАСЧЁТ МЕТРИК (формулы)
+Определения:
+- visits_total = count(catalog_view)
+- visits_unique = count(distinct visitor_id) WHERE event_type=catalog_view
+- add_to_cart = count(add_to_cart)
+- carts_unique = count(distinct session_id) WHERE event_type=add_to_cart
+- checkout_start = count(checkout_start)
+- orders_created = count(order_created) OR count(orders) по createdAt (согласуй, чтобы совпадало)
+- whatsapp_clicked = count(whatsapp_open_clicked)
+- revenue = sum(order.total) за период (только статусы не cancelled)
+- avg_check = revenue / orders_created
+- abandoned_carts = count(cart_session where status=abandoned and last_activity within period window or became abandoned within period)
+- CR_order = orders_created / visits_unique * 100
+- CR_cart = carts_unique / visits_unique * 100
+- CR_whatsapp = whatsapp_clicked / orders_created * 100
+
+Сравнение периодов:
+- Для каждого KPI показывай % изменения vs previous period with same length.
+
+ЧАСТЬ 5 — UI СТРАНИЦЫ АНАЛИТИКИ (6 экранов)
+
+ОБЩИЕ ТРЕБОВАНИЯ К UI
+- Вверху общий фильтр периода:
+  - “Сегодня”, “7 дней”, “30 дней”, “90 дней”, “Выбрать период”
+- Отображай выбранный период и сравнение с предыдущим
+- Красивые пустые состояния (если 0 данных)
+- Графики через recharts (если используете) или простые charts (без внешних API)
+- Все таблицы: сортировка по колонкам, пагинация (хотя бы клиентская)
+
+Экран 1: “Обзор”
+Покажи:
+- KPI карточки:
+  - Посетители (уникальные/всего)
+  - Добавили в корзину
+  - Заказы
+  - Брошенные корзины
+  - Конверсия в заказ (%)
+  - Выручка и Средний чек
+- Графики:
+  - Выручка по дням
+  - Заказы по дням
+  - Воронка (визуально: шаги + %)
+- Блок “Здоровье магазина”:
+  - товаров без фото
+  - товаров без описания
+  - out of stock
+  - акции истекают скоро
+  - не настроен WhatsApp номер получателя заказов
+
+Экран 2: “Воронка”
+Покажи:
+- Шаги: Посетители → Корзина → Оформление → Заказ создан → Открыли WhatsApp
+- Для каждого шага: число, конверсия к предыдущему
+- “Узкое место” подсветить автоматически (самый большой % падения)
+- Блок “Рекомендации” (простые rule-based тексты на русском):
+  - если много просмотров и мало корзин → “улучшите фото/описание/CTA”
+  - если много корзин и мало заказов → “упростите оформление, добавьте условия доставки”
+  - если много заказов и мало whatsapp clicks → “кнопка отправки не заметна / ошибка”
+
+Экран 3: “Заказы”
+Покажи:
+- Таблица заказов с фильтрами: период, статус, сумма, со скидкой, по категории (опционально)
+- Колонки: №, дата, сумма, скидка, клиент (телефон), статус, источник (utm_source), действие “Открыть”
+- Экспорт CSV (в пределах выбранного периода)
+- Карточка заказа: состав, скидки, контакты, логи (order_created, whatsapp_click, copy_text)
+
+Экран 4: “Брошенные корзины”
+Покажи:
+- Список abandoned cart sessions:
+  - дата последней активности
+  - сумма
+  - товары (коротко)
+  - последний шаг (cart/checkout)
+  - телефон (если был введён)
+  - статус обработки (новая/в работе/обработана)
+- Фильтры: сумма > X, есть телефон/нет телефона, период
+- Действия:
+  - “Скопировать сообщение для WhatsApp” (генерируй текст на русском по корзине)
+  - “Пометить как обработано”
+  - “Заметка”
+- Экспорт CSV
+
+Экран 5: “Товары”
+Покажи:
+- Топ товары:
+  - по выручке
+  - по количеству
+  - по просмотрам
+  - по add_to_cart
+- Таблица товаров с метриками:
+  - views, add_to_cart, orders, revenue, conversion (orders/views)
+- Фильтр по категории/подкатегории
+
+Экран 6: “Акции и скидки”
+Покажи:
+- Активные акции: просмотры товаров в акции, add_to_cart, заказы, выручка
+- Сравнение “со скидкой vs без скидки”:
+  - конверсия
+  - средняя выручка на товар
+- Список скидок и сроков, что истекает скоро
+
+ЧАСТЬ 6 — РОЛИ И ДОСТУП
+- Owner и Manager видят аналитику своего tenant.
+- Superadmin не использует эти страницы, у него отдельная суперадминка.
+- Защити все API аналитики проверкой tenant_id по сессии пользователя.
+
+ЧАСТЬ 7 — ТЕХНИЧЕСКИЕ ДЕТАЛИ
+- Создай серверные эндпойнты:
+  - GET /api/analytics/overview?from=&to=
+  - GET /api/analytics/funnel?from=&to=
+  - GET /api/analytics/orders?from=&to=&status=
+  - GET /api/analytics/abandoned?from=&to=
+  - GET /api/analytics/products?from=&to=&categoryId=
+  - GET /api/analytics/promos?from=&to=
+- Оптимизация:
+  - Индексы по tenant_id, created_at, event_type, session_id, visitor_id.
+  - Агрегации делай SQL/Prisma groupBy. Не тащи все события на клиент.
+- UI:
+  - Добавь раздел в сайдбар: “Аналитика”
+  - Внутри табы/меню на 6 страниц
+
+ЧАСТЬ 8 — “ТЕСТ ПЛАН”
+Добавь в README на русском:
+- Как проверить трекинг (открыть каталог, товар, добавить в корзину, оформить заказ, нажать WhatsApp)
+- Как проверить abandoned carts (уменьшить threshold до 1 часа и подождать cron)
+- Как проверить графики и таблицы
+
+НАЧИНАЙ РАБОТУ
+1) Сначала найди в текущем проекте витрину и корзину, внедри события (client hook + API).
+2) Затем добавь cart_session и cron marking abandoned.
+3) Затем API аналитики.
+4) Затем UI 6 страниц с красивым дизайном.
+5) В конце дай отчёт: список файлов и что изменилось, и как тестировать.

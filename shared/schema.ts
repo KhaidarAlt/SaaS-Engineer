@@ -353,8 +353,18 @@ export type OrderItem = typeof orderItems.$inferSelect;
 export const analyticsEvents = pgTable("analytics_events", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
-  eventType: text("event_type").notNull(), // catalog_view, product_view, add_to_cart, checkout_start, order_created, order_sent_whatsapp
+  eventType: text("event_type").notNull(), // catalog_view, product_view, add_to_cart, remove_from_cart, cart_view, checkout_start, order_created, whatsapp_open_clicked, copy_order_text_clicked, promo_view, search
   sessionId: text("session_id"),
+  visitorId: text("visitor_id"),
+  pagePath: text("page_path"),
+  referrer: text("referrer"),
+  utmSource: text("utm_source"),
+  utmMedium: text("utm_medium"),
+  utmCampaign: text("utm_campaign"),
+  utmContent: text("utm_content"),
+  utmTerm: text("utm_term"),
+  objectType: text("object_type"), // product, order, category, promotion
+  objectId: varchar("object_id"),
   productId: varchar("product_id"),
   orderId: varchar("order_id"),
   metadata: jsonb("metadata").$type<Record<string, unknown>>(),
@@ -371,6 +381,39 @@ export const analyticsEventsRelations = relations(analyticsEvents, ({ one }) => 
 export const insertAnalyticsEventSchema = createInsertSchema(analyticsEvents).omit({ id: true, createdAt: true });
 export type InsertAnalyticsEvent = z.infer<typeof insertAnalyticsEventSchema>;
 export type AnalyticsEvent = typeof analyticsEvents.$inferSelect;
+
+// ============ CART SESSIONS (for abandoned cart tracking) ============
+export const cartSessions = pgTable("cart_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  sessionId: text("session_id").notNull(),
+  visitorId: text("visitor_id"),
+  status: text("status").notNull().default("active"), // active, converted, abandoned, expired
+  cartJson: jsonb("cart_json").$type<Array<{productId: string; variantId?: string; name: string; qty: number; price: number}>>(),
+  totalEstimated: decimal("total_estimated", { precision: 12, scale: 2 }),
+  checkoutPhone: text("checkout_phone"),
+  lastStep: text("last_step"), // cart, checkout
+  orderId: varchar("order_id"),
+  note: text("note"),
+  processedStatus: text("processed_status").default("new"), // new, in_progress, processed
+  utmSource: text("utm_source"),
+  utmMedium: text("utm_medium"),
+  utmCampaign: text("utm_campaign"),
+  firstSeenAt: timestamp("first_seen_at").notNull().defaultNow(),
+  lastActivityAt: timestamp("last_activity_at").notNull().defaultNow(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const cartSessionsRelations = relations(cartSessions, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [cartSessions.tenantId],
+    references: [tenants.id],
+  }),
+}));
+
+export const insertCartSessionSchema = createInsertSchema(cartSessions).omit({ id: true, createdAt: true });
+export type InsertCartSession = z.infer<typeof insertCartSessionSchema>;
+export type CartSession = typeof cartSessions.$inferSelect;
 
 // ============ SUBSCRIPTION EXTENSIONS ============
 export const subscriptionExtensions = pgTable("subscription_extensions", {
