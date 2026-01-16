@@ -15,7 +15,7 @@ import {
   MapPin,
   Clock,
 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -37,6 +37,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { CardSkeleton } from "@/components/LoadingSpinner";
 import { useCart } from "@/contexts/CartContext";
 import { useToast } from "@/hooks/use-toast";
+import { trackEvent, updateCartSession } from "@/lib/analytics";
 import type { Tenant, Product, Category, Promotion } from "@shared/schema";
 
 interface ProductWithPrice extends Product {
@@ -201,6 +202,15 @@ export default function CatalogHome() {
       document.title = "SmartCatalog";
     };
   }, [data?.tenant]);
+
+  // Track catalog view
+  const trackedRef = useRef(false);
+  useEffect(() => {
+    if (slug && !trackedRef.current) {
+      trackedRef.current = true;
+      trackEvent({ tenantSlug: slug, eventType: 'catalog_view' });
+    }
+  }, [slug]);
 
   const getSubcategoryIds = (parentId: string): string[] => {
     return data?.categories?.filter(c => c.parentId === parentId).map(c => c.id) || [];

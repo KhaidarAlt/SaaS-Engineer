@@ -12,7 +12,7 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -20,6 +20,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { PageLoader } from "@/components/LoadingSpinner";
 import { useCart } from "@/contexts/CartContext";
 import { useToast } from "@/hooks/use-toast";
+import { trackEvent } from "@/lib/analytics";
 import type { Product, Category, Promotion, Tenant } from "@shared/schema";
 
 interface ProductWithPrice extends Product {
@@ -59,6 +60,20 @@ export default function ProductDetailPage() {
     enabled: !!slug && !!productId,
   });
 
+  const trackedRef = useRef(false);
+  useEffect(() => {
+    if (slug && productId && !trackedRef.current) {
+      trackedRef.current = true;
+      trackEvent({ 
+        tenantSlug: slug, 
+        eventType: 'product_view',
+        productId,
+        objectType: 'product',
+        objectId: productId,
+      });
+    }
+  }, [slug, productId]);
+
   const formatPrice = (value: number | string) => {
     const num = typeof value === "string" ? parseFloat(value) : value;
     return new Intl.NumberFormat("ru-KZ").format(num) + " ₸";
@@ -70,6 +85,13 @@ export default function ProductDetailPage() {
     for (let i = 0; i < quantity; i++) {
       addItem(data.product);
     }
+    
+    trackEvent({
+      tenantSlug: slug,
+      eventType: 'add_to_cart',
+      productId: data.product.id,
+      metadata: { quantity, price: data.product.computedPrice },
+    });
     
     setAddedToCart(true);
     toast({

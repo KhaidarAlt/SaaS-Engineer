@@ -1,17 +1,43 @@
 import { useRoute, Link, useLocation } from "wouter";
 import { motion } from "framer-motion";
 import { ArrowLeft, Minus, Plus, Trash2, ShoppingCart, Package } from "lucide-react";
+import { useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useCart } from "@/contexts/CartContext";
+import { trackEvent, updateCartSession } from "@/lib/analytics";
 
 export default function CartPage() {
   const [, params] = useRoute("/c/:slug/cart");
   const [, setLocation] = useLocation();
   const slug = params?.slug || "";
   const { items, updateQuantity, removeItem, subtotal, totalItems, clearCart } = useCart();
+  
+  const trackedRef = useRef(false);
+  useEffect(() => {
+    if (slug && !trackedRef.current) {
+      trackedRef.current = true;
+      trackEvent({ tenantSlug: slug, eventType: 'cart_view' });
+    }
+  }, [slug]);
+  
+  useEffect(() => {
+    if (slug && items.length > 0) {
+      updateCartSession({
+        tenantSlug: slug,
+        cartJson: items.map(i => ({
+          productId: i.product.id,
+          name: i.product.name,
+          qty: i.quantity,
+          price: parseFloat(i.product.price),
+        })),
+        totalEstimated: subtotal,
+        lastStep: 'cart',
+      });
+    }
+  }, [slug, items, subtotal]);
 
   const formatPrice = (value: number) => {
     return new Intl.NumberFormat("ru-KZ").format(value) + " ₸";

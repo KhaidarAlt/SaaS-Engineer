@@ -5,13 +5,16 @@ import { SiWhatsapp } from "react-icons/si";
 import { Copy, AlertCircle } from "lucide-react";
 import type { OrderForWhatsApp } from "@/lib/whatsapp";
 import { buildOrderWhatsAppText, copyToClipboard, openWhatsAppOrFallback } from "@/lib/whatsapp";
+import { trackEvent } from "@/lib/analytics";
 
 interface WhatsAppSendButtonProps {
   recipientPhone: string | null | undefined;
   order: OrderForWhatsApp;
+  tenantSlug?: string;
+  orderId?: string;
 }
 
-export function WhatsAppSendButton({ recipientPhone, order }: WhatsAppSendButtonProps) {
+export function WhatsAppSendButton({ recipientPhone, order, tenantSlug, orderId }: WhatsAppSendButtonProps) {
   const [busy, setBusy] = useState(false);
   const { toast } = useToast();
 
@@ -30,6 +33,14 @@ export function WhatsAppSendButton({ recipientPhone, order }: WhatsAppSendButton
     setBusy(true);
     try {
       const { opened } = await openWhatsAppOrFallback({ recipientPhone, text });
+      if (opened && tenantSlug) {
+        trackEvent({
+          tenantSlug,
+          eventType: 'whatsapp_open_clicked',
+          orderId,
+          metadata: { orderNumber: order.orderNumber },
+        });
+      }
       if (!opened) {
         toast({
           title: "Внимание",
@@ -52,6 +63,14 @@ export function WhatsAppSendButton({ recipientPhone, order }: WhatsAppSendButton
   const onCopy = async () => {
     const ok = await copyToClipboard(text);
     if (ok) {
+      if (tenantSlug) {
+        trackEvent({
+          tenantSlug,
+          eventType: 'copy_order_text_clicked',
+          orderId,
+          metadata: { orderNumber: order.orderNumber },
+        });
+      }
       toast({
         title: "Скопировано",
         description: "Текст заказа скопирован в буфер обмена.",

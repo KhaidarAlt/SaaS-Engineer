@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation } from "@tanstack/react-query";
@@ -17,6 +17,7 @@ import { useCart } from "@/contexts/CartContext";
 import { apiRequest } from "@/lib/queryClient";
 import { checkoutSchema, type CheckoutInput } from "@shared/schema";
 import { WhatsAppSendButton } from "@/components/WhatsAppSendButton";
+import { trackEvent, updateCartSession, convertCartSession } from "@/lib/analytics";
 import type { OrderForWhatsApp } from "@/lib/whatsapp";
 
 interface OrderResponse {
@@ -54,6 +55,25 @@ export default function CheckoutPage() {
   const { toast } = useToast();
   const [orderSuccess, setOrderSuccess] = useState(false);
   const [orderData, setOrderData] = useState<OrderResponse | null>(null);
+  
+  const trackedRef = useRef(false);
+  useEffect(() => {
+    if (slug && !trackedRef.current && items.length > 0) {
+      trackedRef.current = true;
+      trackEvent({ tenantSlug: slug, eventType: 'checkout_start' });
+      updateCartSession({
+        tenantSlug: slug,
+        cartJson: items.map(i => ({
+          productId: i.product.id,
+          name: i.product.name,
+          qty: i.quantity,
+          price: parseFloat(i.product.price),
+        })),
+        totalEstimated: subtotal,
+        lastStep: 'checkout',
+      });
+    }
+  }, [slug, items, subtotal]);
 
   const form = useForm<CheckoutInput>({
     resolver: zodResolver(checkoutSchema),
@@ -83,6 +103,13 @@ export default function CheckoutPage() {
       setOrderData(data);
       setOrderSuccess(true);
       clearCart();
+      trackEvent({ 
+        tenantSlug: slug, 
+        eventType: 'order_created',
+        orderId: data.orderId,
+        metadata: { orderNumber: data.orderNumber, total: data.order.total },
+      });
+      convertCartSession(slug, data.orderId);
     },
     onError: (error) => {
       toast({
@@ -147,6 +174,8 @@ export default function CheckoutPage() {
               <WhatsAppSendButton 
                 recipientPhone={orderData.ownerWhatsAppPhone}
                 order={whatsAppOrder}
+                tenantSlug={slug}
+                orderId={orderData.orderId}
               />
             </div>
           )}
