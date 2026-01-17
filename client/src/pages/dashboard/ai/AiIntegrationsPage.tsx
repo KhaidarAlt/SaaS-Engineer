@@ -3,8 +3,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { AiPaywall } from "@/components/AiPaywall";
-import { Plug, MessageCircle, Send, Globe, Settings } from "lucide-react";
+import { Plug, MessageCircle, Send, Globe, Settings, ArrowLeft } from "lucide-react";
 import { SiWhatsapp, SiTelegram } from "react-icons/si";
+import { Link } from "wouter";
 
 interface Integration {
   id: string;
@@ -72,9 +73,16 @@ export default function AiIntegrationsPage() {
 
   return (
     <div className="space-y-6 p-6">
-      <div>
-        <h1 className="text-2xl font-bold">Интеграции</h1>
-        <p className="text-muted-foreground">Подключите AI-ассистента к каналам общения с клиентами</p>
+      <div className="flex items-center gap-4">
+        <Link href="/dashboard/ai">
+          <Button variant="ghost" size="icon" data-testid="button-back">
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+        </Link>
+        <div>
+          <h1 className="text-2xl font-bold">Интеграции</h1>
+          <p className="text-muted-foreground">Подключите AI-ассистента к каналам общения с клиентами</p>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

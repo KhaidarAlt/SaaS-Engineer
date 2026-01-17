@@ -10,9 +10,10 @@ import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AiPaywall } from "@/components/AiPaywall";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, BookOpen, Trash2, Edit, Eye, EyeOff } from "lucide-react";
+import { Plus, BookOpen, Trash2, Edit, Eye, EyeOff, ArrowLeft } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { Link } from "wouter";
 
 interface AiKnowledgeArticle {
   id: string;
@@ -112,9 +113,16 @@ export default function AiKnowledgePage() {
   return (
     <div className="space-y-6 p-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">База знаний</h1>
-          <p className="text-muted-foreground">Информация, которую AI использует для ответов клиентам</p>
+        <div className="flex items-center gap-4">
+          <Link href="/dashboard/ai">
+            <Button variant="ghost" size="icon" data-testid="button-back">
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+          </Link>
+          <div>
+            <h1 className="text-2xl font-bold">База знаний</h1>
+            <p className="text-muted-foreground">Информация, которую AI использует для ответов клиентам</p>
+          </div>
         </div>
         <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) resetForm(); }}>
           <DialogTrigger asChild>

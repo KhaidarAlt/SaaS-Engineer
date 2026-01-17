@@ -5,10 +5,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AiPaywall } from "@/components/AiPaywall";
-import { Shield, Save } from "lucide-react";
+import { Shield, Save, ArrowLeft } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
+import { Link } from "wouter";
 import { useEffect } from "react";
 
 interface AiPolicy {
@@ -73,9 +74,16 @@ export default function AiPoliciesPage() {
   return (
     <div className="space-y-6 p-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Политики</h1>
-          <p className="text-muted-foreground">Правила и условия, которые AI будет использовать в ответах</p>
+        <div className="flex items-center gap-4">
+          <Link href="/dashboard/ai">
+            <Button variant="ghost" size="icon" data-testid="button-back">
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+          </Link>
+          <div>
+            <h1 className="text-2xl font-bold">Политики</h1>
+            <p className="text-muted-foreground">Правила и условия, которые AI будет использовать в ответах</p>
+          </div>
         </div>
         <Button onClick={handleSubmit(onSubmit)} disabled={!isDirty || saveMutation.isPending} data-testid="button-save-policies">
           <Save className="mr-2 h-4 w-4" />

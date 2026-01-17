@@ -9,9 +9,10 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AiPaywall } from "@/components/AiPaywall";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, CheckCircle2, FileText } from "lucide-react";
+import { Plus, CheckCircle2, FileText, ArrowLeft } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { Link } from "wouter";
 
 interface AiSalesScript {
   id: string;
@@ -93,9 +94,16 @@ export default function AiSalesScriptsPage() {
   return (
     <div className="space-y-6 p-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Скрипты продаж</h1>
-          <p className="text-muted-foreground">Сценарии общения AI-ассистента с клиентами</p>
+        <div className="flex items-center gap-4">
+          <Link href="/dashboard/ai">
+            <Button variant="ghost" size="icon" data-testid="button-back">
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+          </Link>
+          <div>
+            <h1 className="text-2xl font-bold">Скрипты продаж</h1>
+            <p className="text-muted-foreground">Сценарии общения AI-ассистента с клиентами</p>
+          </div>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>

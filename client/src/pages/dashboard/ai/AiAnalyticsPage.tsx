@@ -3,7 +3,9 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AiPaywall } from "@/components/AiPaywall";
-import { BarChart3, MessageSquare, AlertTriangle, PhoneForwarded, XCircle } from "lucide-react";
+import { BarChart3, MessageSquare, AlertTriangle, PhoneForwarded, XCircle, ArrowLeft } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Link } from "wouter";
 
 interface AiAnalytics {
   totalConversations: number;
@@ -76,9 +78,16 @@ export default function AiAnalyticsPage() {
 
   return (
     <div className="space-y-6 p-6">
-      <div>
-        <h1 className="text-2xl font-bold">Аналитика AI</h1>
-        <p className="text-muted-foreground">Статистика работы AI-ассистента за последние 30 дней</p>
+      <div className="flex items-center gap-4">
+        <Link href="/dashboard/ai">
+          <Button variant="ghost" size="icon" data-testid="button-back">
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+        </Link>
+        <div>
+          <h1 className="text-2xl font-bold">Аналитика AI</h1>
+          <p className="text-muted-foreground">Статистика работы AI-ассистента за последние 30 дней</p>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">

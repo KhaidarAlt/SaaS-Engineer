@@ -6,9 +6,10 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AiPaywall } from "@/components/AiPaywall";
-import { Send, Bot, User, RefreshCw, MessageSquare } from "lucide-react";
+import { Send, Bot, User, RefreshCw, MessageSquare, ArrowLeft } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
+import { Link } from "wouter";
 
 interface AiMessage {
   id: string;
@@ -81,9 +82,16 @@ export default function AiSandboxPage() {
   return (
     <div className="h-[calc(100vh-140px)] flex flex-col p-6 gap-4">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Песочница</h1>
-          <p className="text-muted-foreground">Тестируйте диалоги с AI-ассистентом</p>
+        <div className="flex items-center gap-4">
+          <Link href="/dashboard/ai">
+            <Button variant="ghost" size="icon" data-testid="button-back">
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+          </Link>
+          <div>
+            <h1 className="text-2xl font-bold">Песочница</h1>
+            <p className="text-muted-foreground">Тестируйте диалоги с AI-ассистентом</p>
+          </div>
         </div>
         <Button onClick={handleNewConversation} variant="outline" data-testid="button-new-conversation">
           <RefreshCw className="mr-2 h-4 w-4" />

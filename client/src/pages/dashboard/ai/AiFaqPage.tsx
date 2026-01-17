@@ -10,9 +10,10 @@ import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AiPaywall } from "@/components/AiPaywall";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, HelpCircle, Trash2, Edit, GripVertical } from "lucide-react";
+import { Plus, HelpCircle, Trash2, Edit, GripVertical, ArrowLeft } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { Link } from "wouter";
 
 interface AiFaqItem {
   id: string;
@@ -110,11 +111,18 @@ export default function AiFaqPage() {
   return (
     <div className="space-y-6 p-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">FAQ</h1>
-          <p className="text-muted-foreground">
-            Часто задаваемые вопросы ({publishedCount} опубликовано, минимум 5 для полной настройки)
-          </p>
+        <div className="flex items-center gap-4">
+          <Link href="/dashboard/ai">
+            <Button variant="ghost" size="icon" data-testid="button-back">
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+          </Link>
+          <div>
+            <h1 className="text-2xl font-bold">FAQ</h1>
+            <p className="text-muted-foreground">
+              Часто задаваемые вопросы ({publishedCount} опубликовано, минимум 5 для полной настройки)
+            </p>
+          </div>
         </div>
         <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) resetForm(); }}>
           <DialogTrigger asChild>

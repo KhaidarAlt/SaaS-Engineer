@@ -5,9 +5,10 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AiPaywall } from "@/components/AiPaywall";
-import { Inbox, CheckCircle, Clock, AlertCircle, MessageSquare, User } from "lucide-react";
+import { Inbox, CheckCircle, Clock, AlertCircle, MessageSquare, User, ArrowLeft } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { Link } from "wouter";
 
 interface AiInboxTicket {
   id: string;
@@ -150,9 +151,16 @@ export default function AiInboxPage() {
 
   return (
     <div className="space-y-6 p-6">
-      <div>
-        <h1 className="text-2xl font-bold">Inbox</h1>
-        <p className="text-muted-foreground">Уведомления и тикеты, требующие внимания</p>
+      <div className="flex items-center gap-4">
+        <Link href="/dashboard/ai">
+          <Button variant="ghost" size="icon" data-testid="button-back">
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+        </Link>
+        <div>
+          <h1 className="text-2xl font-bold">Inbox</h1>
+          <p className="text-muted-foreground">Уведомления и тикеты, требующие внимания</p>
+        </div>
       </div>
 
       <Tabs defaultValue="open">
