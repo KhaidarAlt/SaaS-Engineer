@@ -168,9 +168,11 @@ const dateRanges: { value: DateRange; label: string }[] = [
   { value: "90d", label: "90 дней" },
 ];
 
-function getDateRange(range: DateRange): { from: Date; to: Date } {
-  const to = new Date();
-  const from = new Date();
+function getDateRangeStrings(range: DateRange): { fromStr: string; toStr: string } {
+  const now = new Date();
+  const to = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+  const from = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+  
   switch (range) {
     case "7d":
       from.setDate(from.getDate() - 7);
@@ -184,7 +186,7 @@ function getDateRange(range: DateRange): { from: Date; to: Date } {
     default:
       from.setDate(from.getDate() - 30);
   }
-  return { from, to };
+  return { fromStr: from.toISOString(), toStr: to.toISOString() };
 }
 
 function StatCard({
@@ -297,8 +299,10 @@ function FunnelStep({
 }
 
 function OverviewTab({ dateRange }: { dateRange: DateRange }) {
-  const { from, to } = getDateRange(dateRange);
-  const url = `/api/analytics/overview?from=${from.toISOString()}&to=${to.toISOString()}`;
+  const url = useMemo(() => {
+    const { fromStr, toStr } = getDateRangeStrings(dateRange);
+    return `/api/analytics/overview?from=${fromStr}&to=${toStr}`;
+  }, [dateRange]);
   
   const { data, isLoading } = useQuery<OverviewData>({
     queryKey: [url],
@@ -399,8 +403,10 @@ function OverviewTab({ dateRange }: { dateRange: DateRange }) {
 }
 
 function FunnelTab({ dateRange }: { dateRange: DateRange }) {
-  const { from, to } = getDateRange(dateRange);
-  const url = `/api/analytics/funnel?from=${from.toISOString()}&to=${to.toISOString()}`;
+  const url = useMemo(() => {
+    const { fromStr, toStr } = getDateRangeStrings(dateRange);
+    return `/api/analytics/funnel?from=${fromStr}&to=${toStr}`;
+  }, [dateRange]);
   
   const { data, isLoading } = useQuery<FunnelData>({
     queryKey: [url],
@@ -483,9 +489,11 @@ function FunnelTab({ dateRange }: { dateRange: DateRange }) {
 }
 
 function ProductsTab({ dateRange }: { dateRange: DateRange }) {
-  const { from, to } = getDateRange(dateRange);
   const [sortBy, setSortBy] = useState<string>("revenue");
-  const url = `/api/analytics/products?from=${from.toISOString()}&to=${to.toISOString()}&sortBy=${sortBy}`;
+  const url = useMemo(() => {
+    const { fromStr, toStr } = getDateRangeStrings(dateRange);
+    return `/api/analytics/products?from=${fromStr}&to=${toStr}&sortBy=${sortBy}`;
+  }, [dateRange, sortBy]);
   
   const { data, isLoading } = useQuery<ProductAnalyticsData>({
     queryKey: [url],
@@ -578,10 +586,12 @@ function ProductsTab({ dateRange }: { dateRange: DateRange }) {
 }
 
 function OrdersTab({ dateRange }: { dateRange: DateRange }) {
-  const { from, to } = getDateRange(dateRange);
   const [statusFilter, setStatusFilter] = useState<string>("all");
-  const statusParam = statusFilter !== "all" ? `&status=${statusFilter}` : "";
-  const url = `/api/analytics/orders?from=${from.toISOString()}&to=${to.toISOString()}${statusParam}`;
+  const url = useMemo(() => {
+    const { fromStr, toStr } = getDateRangeStrings(dateRange);
+    const statusParam = statusFilter !== "all" ? `&status=${statusFilter}` : "";
+    return `/api/analytics/orders?from=${fromStr}&to=${toStr}${statusParam}`;
+  }, [dateRange, statusFilter]);
   
   const { data, isLoading } = useQuery<OrderAnalyticsData>({
     queryKey: [url],
@@ -621,7 +631,7 @@ function OrdersTab({ dateRange }: { dateRange: DateRange }) {
     const csvUrl = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = csvUrl;
-    a.download = `orders_${from.toISOString().slice(0, 10)}_${to.toISOString().slice(0, 10)}.csv`;
+    a.download = `orders_${dateRange}_${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(csvUrl);
   };
@@ -723,11 +733,13 @@ interface CartItem {
 }
 
 function AbandonedCartsTab({ dateRange }: { dateRange: DateRange }) {
-  const { from, to } = getDateRange(dateRange);
   const { toast } = useToast();
   const [selectedCart, setSelectedCart] = useState<CartSession | null>(null);
   const [note, setNote] = useState("");
-  const url = `/api/analytics/abandoned?from=${from.toISOString()}&to=${to.toISOString()}`;
+  const url = useMemo(() => {
+    const { fromStr, toStr } = getDateRangeStrings(dateRange);
+    return `/api/analytics/abandoned?from=${fromStr}&to=${toStr}`;
+  }, [dateRange]);
   
   const { data, isLoading } = useQuery<AbandonedCartsData>({
     queryKey: [url],
@@ -1013,8 +1025,6 @@ function AbandonedCartsTab({ dateRange }: { dateRange: DateRange }) {
 }
 
 function PromotionsTab({ dateRange }: { dateRange: DateRange }) {
-  const { from, to } = getDateRange(dateRange);
-  
   const { data: promotions, isLoading } = useQuery<PromotionAnalytics[]>({
     queryKey: ["/api/promotions"],
   });
