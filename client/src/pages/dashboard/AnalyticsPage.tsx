@@ -253,9 +253,10 @@ function FunnelStep({
 
 function OverviewTab({ dateRange }: { dateRange: DateRange }) {
   const { from, to } = getDateRange(dateRange);
+  const url = `/api/analytics/overview?from=${from.toISOString()}&to=${to.toISOString()}`;
   
   const { data, isLoading } = useQuery<OverviewData>({
-    queryKey: ["/api/analytics/overview", from.toISOString(), to.toISOString()],
+    queryKey: [url],
   });
 
   const formatCurrency = (value: number) => {
@@ -349,9 +350,10 @@ function OverviewTab({ dateRange }: { dateRange: DateRange }) {
 
 function FunnelTab({ dateRange }: { dateRange: DateRange }) {
   const { from, to } = getDateRange(dateRange);
+  const url = `/api/analytics/funnel?from=${from.toISOString()}&to=${to.toISOString()}`;
   
   const { data, isLoading } = useQuery<FunnelData>({
-    queryKey: ["/api/analytics/funnel", from.toISOString(), to.toISOString()],
+    queryKey: [url],
   });
 
   if (isLoading) {
@@ -401,9 +403,10 @@ function FunnelTab({ dateRange }: { dateRange: DateRange }) {
 function ProductsTab({ dateRange }: { dateRange: DateRange }) {
   const { from, to } = getDateRange(dateRange);
   const [sortBy, setSortBy] = useState<string>("revenue");
+  const url = `/api/analytics/products?from=${from.toISOString()}&to=${to.toISOString()}&sortBy=${sortBy}`;
   
   const { data, isLoading } = useQuery<ProductAnalytics[]>({
-    queryKey: ["/api/analytics/products", from.toISOString(), to.toISOString(), sortBy],
+    queryKey: [url],
   });
 
   const formatCurrency = (value: number) => {
@@ -490,9 +493,11 @@ function ProductsTab({ dateRange }: { dateRange: DateRange }) {
 function OrdersTab({ dateRange }: { dateRange: DateRange }) {
   const { from, to } = getDateRange(dateRange);
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const statusParam = statusFilter !== "all" ? `&status=${statusFilter}` : "";
+  const url = `/api/analytics/orders?from=${from.toISOString()}&to=${to.toISOString()}${statusParam}`;
   
   const { data, isLoading } = useQuery<OrderAnalytics[]>({
-    queryKey: ["/api/analytics/orders", from.toISOString(), to.toISOString(), statusFilter],
+    queryKey: [url],
   });
 
   const formatCurrency = (value: string) => {
@@ -621,9 +626,10 @@ function AbandonedCartsTab({ dateRange }: { dateRange: DateRange }) {
   const { toast } = useToast();
   const [selectedCart, setSelectedCart] = useState<AbandonedCart | null>(null);
   const [note, setNote] = useState("");
+  const url = `/api/analytics/abandoned?from=${from.toISOString()}&to=${to.toISOString()}`;
   
-  const { data, isLoading, refetch } = useQuery<AbandonedCart[]>({
-    queryKey: ["/api/analytics/abandoned", from.toISOString(), to.toISOString()],
+  const { data, isLoading } = useQuery<AbandonedCart[]>({
+    queryKey: [url],
   });
 
   const updateMutation = useMutation({
@@ -631,7 +637,12 @@ function AbandonedCartsTab({ dateRange }: { dateRange: DateRange }) {
       return apiRequest("PATCH", `/api/analytics/abandoned/${id}`, { processedStatus, note });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/analytics/abandoned"] });
+      queryClient.invalidateQueries({ 
+        predicate: (query) => {
+          const key = query.queryKey[0];
+          return typeof key === 'string' && key.startsWith('/api/analytics/abandoned');
+        }
+      });
       toast({ title: "Статус обновлён" });
       setSelectedCart(null);
     },
