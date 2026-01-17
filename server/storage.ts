@@ -4,6 +4,8 @@ import {
   users, tenants, subscriptions, plans, products, categories,
   discounts, promotions, orders, orderItems, analyticsEvents, cartSessions,
   subscriptionExtensions, knowledgeBase, auditLogs, carts, productVariants, productImages,
+  aiSettings, aiSalesScripts, aiTagRules, aiKnowledgeArticles, aiFaqItems,
+  aiPolicies, aiConversations, aiMessages, aiInterventionEvents, aiInboxTickets,
   type User, type InsertUser, type Tenant, type InsertTenant,
   type Subscription, type InsertSubscription, type Plan, type InsertPlan,
   type Product, type InsertProduct, type Category, type InsertCategory,
@@ -14,6 +16,16 @@ import {
   type ProductVariant, type InsertProductVariant,
   type ProductImage, type InsertProductImage,
   type CartSession, type InsertCartSession,
+  type AiSettings, type InsertAiSettings,
+  type AiSalesScript, type InsertAiSalesScript,
+  type AiTagRule, type InsertAiTagRule,
+  type AiKnowledgeArticle, type InsertAiKnowledgeArticle,
+  type AiFaqItem, type InsertAiFaqItem,
+  type AiPolicy, type InsertAiPolicy,
+  type AiConversation, type InsertAiConversation,
+  type AiMessage, type InsertAiMessage,
+  type AiInterventionEvent, type InsertAiInterventionEvent,
+  type AiInboxTicket, type InsertAiInboxTicket,
 } from "@shared/schema";
 import bcrypt from "bcryptjs";
 
@@ -201,7 +213,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createPlan(insertPlan: InsertPlan): Promise<Plan> {
-    const [plan] = await db.insert(plans).values(insertPlan).returning();
+    const [plan] = await db.insert(plans).values(insertPlan as any).returning();
     return plan;
   }
 
@@ -256,7 +268,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createProduct(insertProduct: InsertProduct): Promise<Product> {
-    const [product] = await db.insert(products).values(insertProduct).returning();
+    const [product] = await db.insert(products).values(insertProduct as any).returning();
     return product;
   }
 
@@ -264,7 +276,7 @@ export class DatabaseStorage implements IStorage {
     const [product] = await db.update(products).set({
       ...data,
       updatedAt: new Date(),
-    }).where(and(eq(products.id, id), eq(products.tenantId, tenantId))).returning();
+    } as any).where(and(eq(products.id, id), eq(products.tenantId, tenantId))).returning();
     return product;
   }
 
@@ -532,18 +544,18 @@ export class DatabaseStorage implements IStorage {
     const existing = await this.getCartSession(data.tenantId, data.sessionId);
     if (existing) {
       const [updated] = await db.update(cartSessions)
-        .set({ ...data, lastActivityAt: new Date() })
+        .set({ ...data, lastActivityAt: new Date() } as any)
         .where(eq(cartSessions.id, existing.id))
         .returning();
       return updated;
     }
-    const [created] = await db.insert(cartSessions).values(data).returning();
+    const [created] = await db.insert(cartSessions).values(data as any).returning();
     return created;
   }
 
   async updateCartSession(id: string, tenantId: string, data: Partial<InsertCartSession>): Promise<CartSession | undefined> {
     const [updated] = await db.update(cartSessions)
-      .set({ ...data, lastActivityAt: new Date() })
+      .set({ ...data, lastActivityAt: new Date() } as any)
       .where(and(eq(cartSessions.id, id), eq(cartSessions.tenantId, tenantId)))
       .returning();
     return updated;
@@ -698,6 +710,328 @@ export class DatabaseStorage implements IStorage {
         };
       })
       .sort((a, b) => b.revenue - a.revenue);
+  }
+
+  // ============ AI SETTINGS ============
+  async getAiSettings(tenantId: string): Promise<AiSettings | undefined> {
+    const [settings] = await db.select().from(aiSettings).where(eq(aiSettings.tenantId, tenantId));
+    return settings;
+  }
+
+  async createAiSettings(data: InsertAiSettings): Promise<AiSettings> {
+    const [settings] = await db.insert(aiSettings).values(data as any).returning();
+    return settings;
+  }
+
+  async updateAiSettings(tenantId: string, data: Partial<InsertAiSettings>): Promise<AiSettings | undefined> {
+    const [settings] = await db.update(aiSettings)
+      .set({ ...data, updatedAt: new Date() } as any)
+      .where(eq(aiSettings.tenantId, tenantId))
+      .returning();
+    return settings;
+  }
+
+  async getOrCreateAiSettings(tenantId: string): Promise<AiSettings> {
+    const existing = await this.getAiSettings(tenantId);
+    if (existing) return existing;
+    return this.createAiSettings({ tenantId, enabled: false });
+  }
+
+  // ============ AI SALES SCRIPTS ============
+  async getAiSalesScripts(tenantId: string): Promise<AiSalesScript[]> {
+    return db.select().from(aiSalesScripts)
+      .where(eq(aiSalesScripts.tenantId, tenantId))
+      .orderBy(desc(aiSalesScripts.version));
+  }
+
+  async getActiveAiSalesScript(tenantId: string): Promise<AiSalesScript | undefined> {
+    const [script] = await db.select().from(aiSalesScripts)
+      .where(and(eq(aiSalesScripts.tenantId, tenantId), eq(aiSalesScripts.isActive, true)));
+    return script;
+  }
+
+  async createAiSalesScript(data: InsertAiSalesScript): Promise<AiSalesScript> {
+    const existing = await this.getAiSalesScripts(data.tenantId);
+    const nextVersion = existing.length > 0 ? Math.max(...existing.map(s => s.version)) + 1 : 1;
+    const [script] = await db.insert(aiSalesScripts).values({ ...data, version: nextVersion } as any).returning();
+    return script;
+  }
+
+  async setActiveAiSalesScript(id: string, tenantId: string): Promise<void> {
+    await db.update(aiSalesScripts).set({ isActive: false }).where(eq(aiSalesScripts.tenantId, tenantId));
+    await db.update(aiSalesScripts).set({ isActive: true }).where(and(eq(aiSalesScripts.id, id), eq(aiSalesScripts.tenantId, tenantId)));
+  }
+
+  // ============ AI TAG RULES ============
+  async getAiTagRules(tenantId: string): Promise<AiTagRule[]> {
+    return db.select().from(aiTagRules)
+      .where(eq(aiTagRules.tenantId, tenantId))
+      .orderBy(desc(aiTagRules.priority));
+  }
+
+  async createAiTagRule(data: InsertAiTagRule): Promise<AiTagRule> {
+    const [rule] = await db.insert(aiTagRules).values(data as any).returning();
+    return rule;
+  }
+
+  async updateAiTagRule(id: string, tenantId: string, data: Partial<InsertAiTagRule>): Promise<AiTagRule | undefined> {
+    const [rule] = await db.update(aiTagRules)
+      .set(data as any)
+      .where(and(eq(aiTagRules.id, id), eq(aiTagRules.tenantId, tenantId)))
+      .returning();
+    return rule;
+  }
+
+  async deleteAiTagRule(id: string, tenantId: string): Promise<boolean> {
+    const result = await db.delete(aiTagRules)
+      .where(and(eq(aiTagRules.id, id), eq(aiTagRules.tenantId, tenantId)));
+    return true;
+  }
+
+  async ensureDefaultTags(tenantId: string): Promise<void> {
+    const existing = await this.getAiTagRules(tenantId);
+    if (existing.length > 0) return;
+
+    const defaultTags: InsertAiTagRule[] = [
+      { tenantId, tag: "handoff_human", displayName: "Переведи на человека", keywordsJson: ["хочу человека", "живой оператор", "позови менеджера", "переведи на менеджера"], priority: 100, action: "handoff" },
+      { tenantId, tag: "handoff_manager", displayName: "Хочу менеджера", keywordsJson: ["хочу поговорить с менеджером", "нужен менеджер", "где менеджер"], priority: 100, action: "handoff" },
+      { tenantId, tag: "no_answer", displayName: "Нет ответа от ИИ", keywordsJson: [], priority: 50, action: "notify" },
+      { tenantId, tag: "catalog", displayName: "Каталог", keywordsJson: ["покажи каталог", "весь ассортимент", "что есть", "все товары"], priority: 30, action: "send_catalog_link" },
+      { tenantId, tag: "complaint", displayName: "Жалоба/Негатив", keywordsJson: ["это ужасно", "отвратительно", "жалоба", "негатив", "плохо", "ужас"], priority: 90, action: "handoff" },
+      { tenantId, tag: "delivery", displayName: "Доставка", keywordsJson: ["доставка", "когда привезут", "как доставляете", "сроки доставки"], priority: 20, action: "none" },
+      { tenantId, tag: "payment", displayName: "Оплата", keywordsJson: ["как оплатить", "способы оплаты", "карта", "наличные", "каспи"], priority: 20, action: "none" },
+      { tenantId, tag: "return", displayName: "Возврат/Гарантия", keywordsJson: ["возврат", "гарантия", "обмен", "вернуть деньги"], priority: 20, action: "none" },
+    ];
+
+    for (const tag of defaultTags) {
+      await this.createAiTagRule(tag);
+    }
+  }
+
+  // ============ AI KNOWLEDGE ARTICLES ============
+  async getAiKnowledgeArticles(tenantId: string): Promise<AiKnowledgeArticle[]> {
+    return db.select().from(aiKnowledgeArticles)
+      .where(eq(aiKnowledgeArticles.tenantId, tenantId))
+      .orderBy(desc(aiKnowledgeArticles.updatedAt));
+  }
+
+  async getAiKnowledgeArticle(id: string, tenantId: string): Promise<AiKnowledgeArticle | undefined> {
+    const [article] = await db.select().from(aiKnowledgeArticles)
+      .where(and(eq(aiKnowledgeArticles.id, id), eq(aiKnowledgeArticles.tenantId, tenantId)));
+    return article;
+  }
+
+  async createAiKnowledgeArticle(data: InsertAiKnowledgeArticle): Promise<AiKnowledgeArticle> {
+    const [article] = await db.insert(aiKnowledgeArticles).values(data).returning();
+    return article;
+  }
+
+  async updateAiKnowledgeArticle(id: string, tenantId: string, data: Partial<InsertAiKnowledgeArticle>): Promise<AiKnowledgeArticle | undefined> {
+    const [article] = await db.update(aiKnowledgeArticles)
+      .set({ ...data, updatedAt: new Date() })
+      .where(and(eq(aiKnowledgeArticles.id, id), eq(aiKnowledgeArticles.tenantId, tenantId)))
+      .returning();
+    return article;
+  }
+
+  async deleteAiKnowledgeArticle(id: string, tenantId: string): Promise<boolean> {
+    await db.delete(aiKnowledgeArticles)
+      .where(and(eq(aiKnowledgeArticles.id, id), eq(aiKnowledgeArticles.tenantId, tenantId)));
+    return true;
+  }
+
+  // ============ AI FAQ ============
+  async getAiFaqItems(tenantId: string): Promise<AiFaqItem[]> {
+    return db.select().from(aiFaqItems)
+      .where(eq(aiFaqItems.tenantId, tenantId))
+      .orderBy(aiFaqItems.sortOrder);
+  }
+
+  async createAiFaqItem(data: InsertAiFaqItem): Promise<AiFaqItem> {
+    const [item] = await db.insert(aiFaqItems).values(data).returning();
+    return item;
+  }
+
+  async updateAiFaqItem(id: string, tenantId: string, data: Partial<InsertAiFaqItem>): Promise<AiFaqItem | undefined> {
+    const [item] = await db.update(aiFaqItems)
+      .set({ ...data, updatedAt: new Date() })
+      .where(and(eq(aiFaqItems.id, id), eq(aiFaqItems.tenantId, tenantId)))
+      .returning();
+    return item;
+  }
+
+  async deleteAiFaqItem(id: string, tenantId: string): Promise<boolean> {
+    await db.delete(aiFaqItems)
+      .where(and(eq(aiFaqItems.id, id), eq(aiFaqItems.tenantId, tenantId)));
+    return true;
+  }
+
+  // ============ AI POLICIES ============
+  async getAiPolicies(tenantId: string): Promise<AiPolicy | undefined> {
+    const [policy] = await db.select().from(aiPolicies).where(eq(aiPolicies.tenantId, tenantId));
+    return policy;
+  }
+
+  async getOrCreateAiPolicies(tenantId: string): Promise<AiPolicy> {
+    const existing = await this.getAiPolicies(tenantId);
+    if (existing) return existing;
+    const [policy] = await db.insert(aiPolicies).values({ tenantId }).returning();
+    return policy;
+  }
+
+  async updateAiPolicies(tenantId: string, data: Partial<InsertAiPolicy>): Promise<AiPolicy | undefined> {
+    const [policy] = await db.update(aiPolicies)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(aiPolicies.tenantId, tenantId))
+      .returning();
+    return policy;
+  }
+
+  // ============ AI CONVERSATIONS ============
+  async getAiConversations(tenantId: string, limit = 50): Promise<AiConversation[]> {
+    return db.select().from(aiConversations)
+      .where(eq(aiConversations.tenantId, tenantId))
+      .orderBy(desc(aiConversations.updatedAt))
+      .limit(limit);
+  }
+
+  async getAiConversation(id: string): Promise<AiConversation | undefined> {
+    const [conv] = await db.select().from(aiConversations).where(eq(aiConversations.id, id));
+    return conv;
+  }
+
+  async createAiConversation(data: InsertAiConversation): Promise<AiConversation> {
+    const [conv] = await db.insert(aiConversations).values(data).returning();
+    return conv;
+  }
+
+  async updateAiConversation(id: string, data: Partial<InsertAiConversation>): Promise<AiConversation | undefined> {
+    const [conv] = await db.update(aiConversations)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(aiConversations.id, id))
+      .returning();
+    return conv;
+  }
+
+  // ============ AI MESSAGES ============
+  async getAiMessages(conversationId: string): Promise<AiMessage[]> {
+    return db.select().from(aiMessages)
+      .where(eq(aiMessages.conversationId, conversationId))
+      .orderBy(aiMessages.createdAt);
+  }
+
+  async createAiMessage(data: InsertAiMessage): Promise<AiMessage> {
+    const [msg] = await db.insert(aiMessages).values(data).returning();
+    await db.update(aiConversations).set({ updatedAt: new Date() }).where(eq(aiConversations.id, data.conversationId));
+    return msg;
+  }
+
+  // ============ AI INTERVENTION EVENTS ============
+  async createAiInterventionEvent(data: InsertAiInterventionEvent): Promise<AiInterventionEvent> {
+    const [event] = await db.insert(aiInterventionEvents).values(data).returning();
+    return event;
+  }
+
+  async getAiInterventionEvents(tenantId: string, from: Date, to: Date): Promise<AiInterventionEvent[]> {
+    return db.select().from(aiInterventionEvents)
+      .where(and(
+        eq(aiInterventionEvents.tenantId, tenantId),
+        gte(aiInterventionEvents.createdAt, from),
+        lte(aiInterventionEvents.createdAt, to)
+      ))
+      .orderBy(desc(aiInterventionEvents.createdAt));
+  }
+
+  // ============ AI INBOX TICKETS ============
+  async getAiInboxTickets(tenantId: string, status?: string): Promise<AiInboxTicket[]> {
+    if (status) {
+      return db.select().from(aiInboxTickets)
+        .where(and(eq(aiInboxTickets.tenantId, tenantId), eq(aiInboxTickets.status, status)))
+        .orderBy(desc(aiInboxTickets.createdAt));
+    }
+    return db.select().from(aiInboxTickets)
+      .where(eq(aiInboxTickets.tenantId, tenantId))
+      .orderBy(desc(aiInboxTickets.createdAt));
+  }
+
+  async createAiInboxTicket(data: InsertAiInboxTicket): Promise<AiInboxTicket> {
+    const [ticket] = await db.insert(aiInboxTickets).values(data).returning();
+    return ticket;
+  }
+
+  async updateAiInboxTicket(id: string, tenantId: string, data: Partial<InsertAiInboxTicket>): Promise<AiInboxTicket | undefined> {
+    const [ticket] = await db.update(aiInboxTickets)
+      .set({ ...data, updatedAt: new Date() })
+      .where(and(eq(aiInboxTickets.id, id), eq(aiInboxTickets.tenantId, tenantId)))
+      .returning();
+    return ticket;
+  }
+
+  // ============ AI ANALYTICS ============
+  async getAiAnalytics(tenantId: string, from: Date, to: Date): Promise<{
+    totalConversations: number;
+    handoffs: number;
+    noAnswers: number;
+    complaints: number;
+    ordersFromAi: number;
+    avgMessagesPerConversation: number;
+    interventionsByType: Record<string, number>;
+  }> {
+    const conversations = await db.select().from(aiConversations)
+      .where(and(
+        eq(aiConversations.tenantId, tenantId),
+        gte(aiConversations.createdAt, from),
+        lte(aiConversations.createdAt, to)
+      ));
+
+    const events = await this.getAiInterventionEvents(tenantId, from, to);
+    
+    const interventionsByType: Record<string, number> = {};
+    events.forEach(e => {
+      interventionsByType[e.type] = (interventionsByType[e.type] || 0) + 1;
+    });
+
+    const messages = conversations.length > 0
+      ? await db.select().from(aiMessages).where(sql`${aiMessages.conversationId} IN (${sql.join(conversations.map(c => sql`${c.id}`), sql`,`)})`)
+      : [];
+
+    return {
+      totalConversations: conversations.length,
+      handoffs: events.filter(e => e.type === 'handoff_requested' || e.type === 'tag_triggered').length,
+      noAnswers: events.filter(e => e.type === 'no_answer').length,
+      complaints: events.filter(e => e.type === 'complaint').length,
+      ordersFromAi: 0, // TODO: track orders created from AI conversations
+      avgMessagesPerConversation: conversations.length > 0 ? messages.length / conversations.length : 0,
+      interventionsByType,
+    };
+  }
+
+  async getAiReadinessStatus(tenantId: string): Promise<{
+    salesScriptConfigured: boolean;
+    tagsConfigured: boolean;
+    faqConfigured: boolean;
+    knowledgeConfigured: boolean;
+    policiesConfigured: boolean;
+    overallProgress: number;
+  }> {
+    const [scripts, tags, faqs, articles, policies] = await Promise.all([
+      this.getAiSalesScripts(tenantId),
+      this.getAiTagRules(tenantId),
+      this.getAiFaqItems(tenantId),
+      this.getAiKnowledgeArticles(tenantId),
+      this.getAiPolicies(tenantId),
+    ]);
+
+    const salesScriptConfigured = scripts.some(s => s.isActive);
+    const tagsConfigured = tags.length >= 3;
+    const faqConfigured = faqs.filter(f => f.isPublished).length >= 5;
+    const knowledgeConfigured = articles.filter(a => a.isPublished).length >= 1;
+    const policiesConfigured = !!policies;
+
+    const completed = [salesScriptConfigured, tagsConfigured, faqConfigured, knowledgeConfigured, policiesConfigured].filter(Boolean).length;
+    const overallProgress = Math.round((completed / 5) * 100);
+
+    return { salesScriptConfigured, tagsConfigured, faqConfigured, knowledgeConfigured, policiesConfigured, overallProgress };
   }
 }
 

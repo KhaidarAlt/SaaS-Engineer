@@ -17,6 +17,7 @@ import {
   Users,
   Building2,
   Upload,
+  Bot,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -38,6 +39,7 @@ const tenantNavItems: NavItem[] = [
   { href: "/dashboard/orders", label: "Заказы", icon: ShoppingCart },
   { href: "/dashboard/discounts", label: "Скидки", icon: Percent },
   { href: "/dashboard/import", label: "Импорт", icon: Upload },
+  { href: "/dashboard/ai", label: "AI-ассистент", icon: Bot },
   { href: "/dashboard/analytics", label: "Аналитика", icon: BarChart3 },
   { href: "/dashboard/billing", label: "Биллинг", icon: CreditCard },
   { href: "/dashboard/settings", label: "Настройки", icon: Settings },

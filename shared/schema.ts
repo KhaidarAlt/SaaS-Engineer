@@ -17,6 +17,7 @@ export const plans = pgTable("plans", {
   maxManagers: integer("max_managers").notNull(),
   maxWahaInstances: integer("max_waha_instances").notNull(),
   aiMessagesLimit: integer("ai_messages_limit").notNull(),
+  hasAiAccess: boolean("has_ai_access").notNull().default(false),
   features: jsonb("features").$type<string[]>(),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -539,6 +540,263 @@ export const cartsRelations = relations(carts, ({ one }) => ({
 export const insertCartSchema = createInsertSchema(carts).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertCart = z.infer<typeof insertCartSchema>;
 export type Cart = typeof carts.$inferSelect;
+
+// ============ AI SETTINGS ============
+export const aiSettings = pgTable("ai_settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id).unique(),
+  enabled: boolean("enabled").notNull().default(false),
+  language: text("language").notNull().default("ru"),
+  tone: text("tone").notNull().default("friendly"), // neutral, friendly, strict
+  workingHoursJson: jsonb("working_hours_json").$type<{from: string; to: string; days: number[]}>(),
+  fallbackHandoffText: text("fallback_handoff_text").default("К сожалению, я не могу ответить на этот вопрос. Сейчас передам ваш вопрос менеджеру."),
+  systemPromptCustom: text("system_prompt_custom"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const aiSettingsRelations = relations(aiSettings, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [aiSettings.tenantId],
+    references: [tenants.id],
+  }),
+}));
+
+export const insertAiSettingsSchema = createInsertSchema(aiSettings).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertAiSettings = z.infer<typeof insertAiSettingsSchema>;
+export type AiSettings = typeof aiSettings.$inferSelect;
+
+// ============ AI SALES SCRIPT ============
+export const aiSalesScripts = pgTable("ai_sales_scripts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  version: integer("version").notNull().default(1),
+  title: text("title").notNull(),
+  stagesJson: jsonb("stages_json").$type<Array<{
+    stage: string;
+    goal: string;
+    questions: string[];
+    transitionCriteria: string[];
+  }>>().notNull(),
+  forbiddenPhrasesJson: jsonb("forbidden_phrases_json").$type<string[]>(),
+  isActive: boolean("is_active").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const aiSalesScriptsRelations = relations(aiSalesScripts, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [aiSalesScripts.tenantId],
+    references: [tenants.id],
+  }),
+}));
+
+export const insertAiSalesScriptSchema = createInsertSchema(aiSalesScripts).omit({ id: true, createdAt: true });
+export type InsertAiSalesScript = z.infer<typeof insertAiSalesScriptSchema>;
+export type AiSalesScript = typeof aiSalesScripts.$inferSelect;
+
+// ============ AI TAG RULES ============
+export const aiTagRules = pgTable("ai_tag_rules", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  tag: text("tag").notNull(),
+  displayName: text("display_name").notNull(),
+  keywordsJson: jsonb("keywords_json").$type<string[]>().notNull(),
+  priority: integer("priority").notNull().default(0),
+  action: text("action").notNull().default("none"), // handoff, notify, send_catalog_link, stop_ai, none
+  responseTemplate: text("response_template"),
+  isEnabled: boolean("is_enabled").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const aiTagRulesRelations = relations(aiTagRules, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [aiTagRules.tenantId],
+    references: [tenants.id],
+  }),
+}));
+
+export const insertAiTagRuleSchema = createInsertSchema(aiTagRules).omit({ id: true, createdAt: true });
+export type InsertAiTagRule = z.infer<typeof insertAiTagRuleSchema>;
+export type AiTagRule = typeof aiTagRules.$inferSelect;
+
+// ============ AI KNOWLEDGE ARTICLES ============
+export const aiKnowledgeArticles = pgTable("ai_knowledge_articles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  title: text("title").notNull(),
+  content: text("content").notNull(),
+  category: text("category"),
+  isPublished: boolean("is_published").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const aiKnowledgeArticlesRelations = relations(aiKnowledgeArticles, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [aiKnowledgeArticles.tenantId],
+    references: [tenants.id],
+  }),
+}));
+
+export const insertAiKnowledgeArticleSchema = createInsertSchema(aiKnowledgeArticles).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertAiKnowledgeArticle = z.infer<typeof insertAiKnowledgeArticleSchema>;
+export type AiKnowledgeArticle = typeof aiKnowledgeArticles.$inferSelect;
+
+// ============ AI FAQ ============
+export const aiFaqItems = pgTable("ai_faq_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  question: text("question").notNull(),
+  answer: text("answer").notNull(),
+  isPublished: boolean("is_published").notNull().default(true),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const aiFaqItemsRelations = relations(aiFaqItems, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [aiFaqItems.tenantId],
+    references: [tenants.id],
+  }),
+}));
+
+export const insertAiFaqItemSchema = createInsertSchema(aiFaqItems).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertAiFaqItem = z.infer<typeof insertAiFaqItemSchema>;
+export type AiFaqItem = typeof aiFaqItems.$inferSelect;
+
+// ============ AI POLICIES ============
+export const aiPolicies = pgTable("ai_policies", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id).unique(),
+  answerOnlyFromData: boolean("answer_only_from_data").notNull().default(true),
+  offerHandoffIfNoAnswer: boolean("offer_handoff_if_no_answer").notNull().default(true),
+  neverInventPrices: boolean("never_invent_prices").notNull().default(true),
+  prioritizePromotions: boolean("prioritize_promotions").notNull().default(true),
+  followSalesScript: boolean("follow_sales_script").notNull().default(true),
+  boundariesText: text("boundaries_text").default("Отвечай только про товары, наличие, акции, доставку и условия. Не обсуждай посторонние темы."),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const aiPoliciesRelations = relations(aiPolicies, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [aiPolicies.tenantId],
+    references: [tenants.id],
+  }),
+}));
+
+export const insertAiPolicySchema = createInsertSchema(aiPolicies).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertAiPolicy = z.infer<typeof insertAiPolicySchema>;
+export type AiPolicy = typeof aiPolicies.$inferSelect;
+
+// ============ AI CONVERSATIONS ============
+export const aiConversations = pgTable("ai_conversations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  channel: text("channel").notNull().default("sandbox"), // sandbox, whatsapp, telegram, web
+  visitorId: text("visitor_id"),
+  sessionId: text("session_id"),
+  customerPhone: text("customer_phone"),
+  customerName: text("customer_name"),
+  status: text("status").notNull().default("open"), // open, handoff, closed
+  currentStage: text("current_stage"), // for sales script tracking
+  metaJson: jsonb("meta_json").$type<Record<string, unknown>>(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const aiConversationsRelations = relations(aiConversations, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [aiConversations.tenantId],
+    references: [tenants.id],
+  }),
+}));
+
+export const insertAiConversationSchema = createInsertSchema(aiConversations).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertAiConversation = z.infer<typeof insertAiConversationSchema>;
+export type AiConversation = typeof aiConversations.$inferSelect;
+
+// ============ AI MESSAGES ============
+export const aiMessages = pgTable("ai_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  conversationId: varchar("conversation_id").notNull().references(() => aiConversations.id, { onDelete: "cascade" }),
+  role: text("role").notNull(), // user, assistant, system, manager
+  content: text("content").notNull(),
+  tagMatched: text("tag_matched"),
+  metaJson: jsonb("meta_json").$type<Record<string, unknown>>(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const aiMessagesRelations = relations(aiMessages, ({ one }) => ({
+  conversation: one(aiConversations, {
+    fields: [aiMessages.conversationId],
+    references: [aiConversations.id],
+  }),
+}));
+
+export const insertAiMessageSchema = createInsertSchema(aiMessages).omit({ id: true, createdAt: true });
+export type InsertAiMessage = z.infer<typeof insertAiMessageSchema>;
+export type AiMessage = typeof aiMessages.$inferSelect;
+
+// ============ AI INTERVENTION EVENTS ============
+export const aiInterventionEvents = pgTable("ai_intervention_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  conversationId: varchar("conversation_id").references(() => aiConversations.id),
+  type: text("type").notNull(), // handoff_requested, no_answer, complaint, manual_takeover, tag_triggered
+  tag: text("tag"),
+  note: text("note"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const aiInterventionEventsRelations = relations(aiInterventionEvents, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [aiInterventionEvents.tenantId],
+    references: [tenants.id],
+  }),
+  conversation: one(aiConversations, {
+    fields: [aiInterventionEvents.conversationId],
+    references: [aiConversations.id],
+  }),
+}));
+
+export const insertAiInterventionEventSchema = createInsertSchema(aiInterventionEvents).omit({ id: true, createdAt: true });
+export type InsertAiInterventionEvent = z.infer<typeof insertAiInterventionEventSchema>;
+export type AiInterventionEvent = typeof aiInterventionEvents.$inferSelect;
+
+// ============ AI INBOX TICKETS ============
+export const aiInboxTickets = pgTable("ai_inbox_tickets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  conversationId: varchar("conversation_id").references(() => aiConversations.id),
+  title: text("title").notNull(),
+  status: text("status").notNull().default("new"), // new, in_progress, done
+  priority: text("priority").notNull().default("normal"), // low, normal, high
+  note: text("note"),
+  assignedUserId: varchar("assigned_user_id").references(() => users.id),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const aiInboxTicketsRelations = relations(aiInboxTickets, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [aiInboxTickets.tenantId],
+    references: [tenants.id],
+  }),
+  conversation: one(aiConversations, {
+    fields: [aiInboxTickets.conversationId],
+    references: [aiConversations.id],
+  }),
+  assignedUser: one(users, {
+    fields: [aiInboxTickets.assignedUserId],
+    references: [users.id],
+  }),
+}));
+
+export const insertAiInboxTicketSchema = createInsertSchema(aiInboxTickets).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertAiInboxTicket = z.infer<typeof insertAiInboxTicketSchema>;
+export type AiInboxTicket = typeof aiInboxTickets.$inferSelect;
 
 // ============ FORM VALIDATION SCHEMAS ============
 export const loginSchema = z.object({

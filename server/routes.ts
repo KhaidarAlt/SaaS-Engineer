@@ -181,9 +181,10 @@ function computeProductPrice(
 async function ensureDefaultPlans() {
   const existingPlans = await storage.getPlans();
   if (existingPlans.length === 0) {
+    // Basic catalog plan - no AI
     await storage.createPlan({
-      name: "Старт",
-      price: 19900,
+      name: "Каталог",
+      price: 9990,
       currency: "KZT",
       periodDays: 30,
       maxProducts: 300,
@@ -191,11 +192,30 @@ async function ensureDefaultPlans() {
       maxPromotions: 10,
       maxDiscountRules: 20,
       maxManagers: 1,
-      maxWahaInstances: 1,
-      aiMessagesLimit: 500,
-      features: ["Базовая аналитика", "WhatsApp интеграция"],
+      maxWahaInstances: 0,
+      aiMessagesLimit: 0,
+      hasAiAccess: false,
+      features: ["Онлайн-каталог", "Базовая аналитика", "WhatsApp заказы"],
       isActive: true,
     });
+    // Catalog + AI plan
+    await storage.createPlan({
+      name: "Каталог + AI",
+      price: 19990,
+      currency: "KZT",
+      periodDays: 30,
+      maxProducts: 1000,
+      maxCategories: 50,
+      maxPromotions: 20,
+      maxDiscountRules: 50,
+      maxManagers: 2,
+      maxWahaInstances: 1,
+      aiMessagesLimit: 1000,
+      hasAiAccess: true,
+      features: ["Онлайн-каталог", "AI-ассистент", "Расширенная аналитика", "WhatsApp интеграция"],
+      isActive: true,
+    });
+    // Pro plan with AI
     await storage.createPlan({
       name: "Про",
       price: 49900,
@@ -208,9 +228,11 @@ async function ensureDefaultPlans() {
       maxManagers: 5,
       maxWahaInstances: 3,
       aiMessagesLimit: 5000,
-      features: ["Расширенная аналитика", "WhatsApp интеграция", "Приоритетная поддержка"],
+      hasAiAccess: true,
+      features: ["Расширенная аналитика", "AI-ассистент", "WhatsApp интеграция", "Приоритетная поддержка"],
       isActive: true,
     });
+    // Business plan with full AI
     await storage.createPlan({
       name: "Бизнес",
       price: 99900,
@@ -223,7 +245,8 @@ async function ensureDefaultPlans() {
       maxManagers: 20,
       maxWahaInstances: 10,
       aiMessagesLimit: 20000,
-      features: ["Полная аналитика", "WhatsApp интеграция", "API доступ", "Приоритетная поддержка"],
+      hasAiAccess: true,
+      features: ["Полная аналитика", "AI-ассистент", "WhatsApp интеграция", "API доступ", "Приоритетная поддержка"],
       isActive: true,
     });
     console.log("Default plans created");
@@ -240,6 +263,26 @@ const requireAuth = (req: Request, res: Response, next: NextFunction) => {
 const requireSuperAdmin = (req: Request, res: Response, next: NextFunction) => {
   if (!req.isAuthenticated() || req.user?.role !== "superadmin") {
     return res.status(403).json({ message: "Недостаточно прав" });
+  }
+  next();
+};
+
+const requireAiAccess = async (req: Request, res: Response, next: NextFunction) => {
+  if (!req.isAuthenticated()) {
+    return res.status(401).json({ message: "Требуется авторизация" });
+  }
+  const tenantId = req.user?.tenantId;
+  if (!tenantId) {
+    return res.status(403).json({ message: "Доступ запрещён" });
+  }
+  
+  const subscription = await storage.getSubscription(tenantId);
+  if (!subscription?.plan?.hasAiAccess) {
+    return res.status(403).json({ 
+      message: "AI-ассистент недоступен на вашем тарифе",
+      code: "AI_ACCESS_DENIED",
+      upgradeRequired: true
+    });
   }
   next();
 };
@@ -1695,6 +1738,334 @@ export async function registerRoutes(
       res.send(html);
     } catch (error) {
       next(); // Let Vite handle errors
+    }
+  });
+
+  // ============ AI API ROUTES ============
+  
+  // Get AI access status (available even without AI access for paywall check)
+  app.get("/api/ai/status", requireAuth, async (req, res) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const subscription = await storage.getSubscription(tenantId);
+      const hasAiAccess = subscription?.plan?.hasAiAccess || false;
+      
+      if (!hasAiAccess) {
+        return res.json({ 
+          hasAccess: false,
+          planName: subscription?.plan?.name || "Нет подписки",
+          upgradeRequired: true
+        });
+      }
+
+      const settings = await storage.getOrCreateAiSettings(tenantId);
+      const readiness = await storage.getAiReadinessStatus(tenantId);
+      
+      res.json({
+        hasAccess: true,
+        enabled: settings.enabled,
+        readiness,
+        planName: subscription?.plan?.name,
+        aiMessagesLimit: subscription?.plan?.aiMessagesLimit || 0,
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка получения статуса AI" });
+    }
+  });
+
+  // AI Settings
+  app.get("/api/ai/settings", requireAuth, requireAiAccess, async (req, res) => {
+    try {
+      const settings = await storage.getOrCreateAiSettings(req.user!.tenantId!);
+      res.json(settings);
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка получения настроек" });
+    }
+  });
+
+  app.put("/api/ai/settings", requireAuth, requireAiAccess, async (req, res) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      await storage.getOrCreateAiSettings(tenantId);
+      const settings = await storage.updateAiSettings(tenantId, req.body);
+      res.json(settings);
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка сохранения настроек" });
+    }
+  });
+
+  // AI Sales Scripts
+  app.get("/api/ai/sales-scripts", requireAuth, requireAiAccess, async (req, res) => {
+    try {
+      const scripts = await storage.getAiSalesScripts(req.user!.tenantId!);
+      res.json(scripts);
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка получения скриптов" });
+    }
+  });
+
+  app.post("/api/ai/sales-scripts", requireAuth, requireAiAccess, async (req, res) => {
+    try {
+      const script = await storage.createAiSalesScript({
+        ...req.body,
+        tenantId: req.user!.tenantId!,
+      });
+      res.json(script);
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка создания скрипта" });
+    }
+  });
+
+  app.post("/api/ai/sales-scripts/:id/activate", requireAuth, requireAiAccess, async (req, res) => {
+    try {
+      await storage.setActiveAiSalesScript(req.params.id, req.user!.tenantId!);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка активации скрипта" });
+    }
+  });
+
+  // AI Tag Rules
+  app.get("/api/ai/tags", requireAuth, requireAiAccess, async (req, res) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      await storage.ensureDefaultTags(tenantId);
+      const tags = await storage.getAiTagRules(tenantId);
+      res.json(tags);
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка получения тегов" });
+    }
+  });
+
+  app.post("/api/ai/tags", requireAuth, requireAiAccess, async (req, res) => {
+    try {
+      const tag = await storage.createAiTagRule({
+        ...req.body,
+        tenantId: req.user!.tenantId!,
+      });
+      res.json(tag);
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка создания тега" });
+    }
+  });
+
+  app.put("/api/ai/tags/:id", requireAuth, requireAiAccess, async (req, res) => {
+    try {
+      const tag = await storage.updateAiTagRule(req.params.id, req.user!.tenantId!, req.body);
+      res.json(tag);
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка обновления тега" });
+    }
+  });
+
+  app.delete("/api/ai/tags/:id", requireAuth, requireAiAccess, async (req, res) => {
+    try {
+      await storage.deleteAiTagRule(req.params.id, req.user!.tenantId!);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка удаления тега" });
+    }
+  });
+
+  // AI Knowledge Articles
+  app.get("/api/ai/knowledge", requireAuth, requireAiAccess, async (req, res) => {
+    try {
+      const articles = await storage.getAiKnowledgeArticles(req.user!.tenantId!);
+      res.json(articles);
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка получения статей" });
+    }
+  });
+
+  app.post("/api/ai/knowledge", requireAuth, requireAiAccess, async (req, res) => {
+    try {
+      const article = await storage.createAiKnowledgeArticle({
+        ...req.body,
+        tenantId: req.user!.tenantId!,
+      });
+      res.json(article);
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка создания статьи" });
+    }
+  });
+
+  app.put("/api/ai/knowledge/:id", requireAuth, requireAiAccess, async (req, res) => {
+    try {
+      const article = await storage.updateAiKnowledgeArticle(req.params.id, req.user!.tenantId!, req.body);
+      res.json(article);
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка обновления статьи" });
+    }
+  });
+
+  app.delete("/api/ai/knowledge/:id", requireAuth, requireAiAccess, async (req, res) => {
+    try {
+      await storage.deleteAiKnowledgeArticle(req.params.id, req.user!.tenantId!);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка удаления статьи" });
+    }
+  });
+
+  // AI FAQ
+  app.get("/api/ai/faq", requireAuth, requireAiAccess, async (req, res) => {
+    try {
+      const items = await storage.getAiFaqItems(req.user!.tenantId!);
+      res.json(items);
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка получения FAQ" });
+    }
+  });
+
+  app.post("/api/ai/faq", requireAuth, requireAiAccess, async (req, res) => {
+    try {
+      const item = await storage.createAiFaqItem({
+        ...req.body,
+        tenantId: req.user!.tenantId!,
+      });
+      res.json(item);
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка создания FAQ" });
+    }
+  });
+
+  app.put("/api/ai/faq/:id", requireAuth, requireAiAccess, async (req, res) => {
+    try {
+      const item = await storage.updateAiFaqItem(req.params.id, req.user!.tenantId!, req.body);
+      res.json(item);
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка обновления FAQ" });
+    }
+  });
+
+  app.delete("/api/ai/faq/:id", requireAuth, requireAiAccess, async (req, res) => {
+    try {
+      await storage.deleteAiFaqItem(req.params.id, req.user!.tenantId!);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка удаления FAQ" });
+    }
+  });
+
+  // AI Policies
+  app.get("/api/ai/policies", requireAuth, requireAiAccess, async (req, res) => {
+    try {
+      const policies = await storage.getOrCreateAiPolicies(req.user!.tenantId!);
+      res.json(policies);
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка получения политик" });
+    }
+  });
+
+  app.put("/api/ai/policies", requireAuth, requireAiAccess, async (req, res) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      await storage.getOrCreateAiPolicies(tenantId);
+      const policies = await storage.updateAiPolicies(tenantId, req.body);
+      res.json(policies);
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка сохранения политик" });
+    }
+  });
+
+  // AI Inbox Tickets
+  app.get("/api/ai/inbox", requireAuth, requireAiAccess, async (req, res) => {
+    try {
+      const status = req.query.status as string | undefined;
+      const tickets = await storage.getAiInboxTickets(req.user!.tenantId!, status);
+      res.json(tickets);
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка получения тикетов" });
+    }
+  });
+
+  app.post("/api/ai/inbox", requireAuth, requireAiAccess, async (req, res) => {
+    try {
+      const ticket = await storage.createAiInboxTicket({
+        ...req.body,
+        tenantId: req.user!.tenantId!,
+      });
+      res.json(ticket);
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка создания тикета" });
+    }
+  });
+
+  app.put("/api/ai/inbox/:id", requireAuth, requireAiAccess, async (req, res) => {
+    try {
+      const ticket = await storage.updateAiInboxTicket(req.params.id, req.user!.tenantId!, req.body);
+      res.json(ticket);
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка обновления тикета" });
+    }
+  });
+
+  // AI Conversations (Sandbox)
+  app.get("/api/ai/conversations", requireAuth, requireAiAccess, async (req, res) => {
+    try {
+      const conversations = await storage.getAiConversations(req.user!.tenantId!);
+      res.json(conversations);
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка получения диалогов" });
+    }
+  });
+
+  app.post("/api/ai/conversations", requireAuth, requireAiAccess, async (req, res) => {
+    try {
+      const conversation = await storage.createAiConversation({
+        tenantId: req.user!.tenantId!,
+        channel: "sandbox",
+        sessionId: `sandbox-${Date.now()}`,
+      });
+      res.json(conversation);
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка создания диалога" });
+    }
+  });
+
+  app.get("/api/ai/conversations/:id/messages", requireAuth, requireAiAccess, async (req, res) => {
+    try {
+      const messages = await storage.getAiMessages(req.params.id);
+      res.json(messages);
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка получения сообщений" });
+    }
+  });
+
+  app.post("/api/ai/conversations/:id/messages", requireAuth, requireAiAccess, async (req, res) => {
+    try {
+      const message = await storage.createAiMessage({
+        conversationId: req.params.id,
+        role: req.body.role || "user",
+        content: req.body.content,
+      });
+
+      // For sandbox, generate a simple AI response (placeholder for real AI integration)
+      if (req.body.role === "user") {
+        const aiResponse = await storage.createAiMessage({
+          conversationId: req.params.id,
+          role: "assistant",
+          content: "Это тестовый ответ AI-ассистента. Для полноценной работы необходимо подключить OpenAI API.",
+        });
+        return res.json([message, aiResponse]);
+      }
+
+      res.json(message);
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка отправки сообщения" });
+    }
+  });
+
+  // AI Analytics
+  app.get("/api/ai/analytics", requireAuth, requireAiAccess, async (req, res) => {
+    try {
+      const from = req.query.from ? new Date(req.query.from as string) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      const to = req.query.to ? new Date(req.query.to as string) : new Date();
+      
+      const analytics = await storage.getAiAnalytics(req.user!.tenantId!, from, to);
+      res.json(analytics);
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка получения аналитики" });
     }
   });
 
