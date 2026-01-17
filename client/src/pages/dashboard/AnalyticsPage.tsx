@@ -41,47 +41,66 @@ import { useToast } from "@/hooks/use-toast";
 
 type DateRange = "7d" | "30d" | "90d" | "custom";
 
-interface OverviewData {
-  catalogViews: number;
+interface OverviewMetrics {
+  visits: number;
   uniqueVisitors: number;
   productViews: number;
   addToCart: number;
   checkoutStarts: number;
   ordersCreated: number;
+  whatsappClicks: number;
   revenue: number;
-  avgOrderValue: number;
+  avgCheck: number;
+  abandonedCarts: number;
   conversionRate: number;
-  cartAbandonmentRate: number;
-  periodComparison: {
-    catalogViewsChange: number;
-    revenueChange: number;
-    ordersChange: number;
-    conversionChange: number;
+  cartConversion: number;
+  whatsappConversion: number;
+}
+
+interface OverviewData {
+  current: OverviewMetrics;
+  previous: OverviewMetrics;
+  changes: {
+    visits: number;
+    uniqueVisitors: number;
+    ordersCreated: number;
+    revenue: number;
+    conversionRate: number;
+    abandonedCarts: number;
   };
 }
 
 interface FunnelData {
-  steps: Array<{
-    name: string;
+  funnel: Array<{
+    step: string;
     count: number;
-    percentage: number;
-    dropoff: number;
+    conversionToNext: number;
   }>;
-  overallConversion: number;
+  bottleneckIndex: number;
+  recommendations: string[];
 }
 
-interface ProductAnalytics {
+interface ProductStat {
   id: string;
   name: string;
-  sku: string;
   views: number;
   addToCart: number;
   orders: number;
   revenue: number;
-  conversionRate: number;
+  conversion: number;
 }
 
-interface OrderAnalytics {
+interface ProductAnalyticsData {
+  products: ProductStat[];
+  totals: {
+    views: number;
+    addToCart: number;
+    orders: number;
+    revenue: number;
+  };
+}
+
+interface OrderItem {
   id: string;
   orderNumber: string;
   customerName: string;
@@ -89,21 +108,47 @@ interface OrderAnalytics {
   total: string;
   status: string;
   createdAt: string;
-  source: string;
+  utmSource?: string;
 }
 
-interface AbandonedCart {
+interface OrderAnalyticsData {
+  orders: OrderItem[];
+  summary: {
+    total: number;
+    revenue: number;
+    avgCheck: number;
+    byStatus: {
+      new: number;
+      processing: number;
+      completed: number;
+      cancelled: number;
+    };
+  };
+}
+
+interface CartSession {
   id: string;
+  tenantId: string;
   visitorId: string;
-  customerPhone: string | null;
-  customerEmail: string | null;
-  cartJson: Array<{ productId: string; name: string; qty: number; price: number }>;
-  totalEstimated: number;
-  lastStep: string;
+  sessionId: string;
+  checkoutPhone: string | null;
+  checkoutEmail: string | null;
+  cartJson: string | null;
+  totalEstimated: string | null;
+  lastStep: string | null;
   processedStatus: string;
   note: string | null;
   createdAt: string;
-  updatedAt: string;
+  lastActivityAt: string;
+}
+
+interface AbandonedCartsData {
+  sessions: CartSession[];
+  summary: {
+    total: number;
+    withPhone: number;
+    totalValue: number;
+  };
 }
 
 interface PromotionAnalytics {
@@ -279,36 +324,39 @@ function OverviewTab({ dateRange }: { dateRange: DateRange }) {
     return "neutral";
   };
 
+  const current = data?.current;
+  const changes = data?.changes;
+
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           title="Просмотры каталога"
-          value={data?.catalogViews || 0}
-          subtitle={`${data?.uniqueVisitors || 0} уникальных`}
+          value={current?.visits || 0}
+          subtitle={`${current?.uniqueVisitors || 0} уникальных`}
           icon={Eye}
-          change={data?.periodComparison?.catalogViewsChange}
-          changeType={getChangeType(data?.periodComparison?.catalogViewsChange || 0)}
+          change={changes?.visits}
+          changeType={getChangeType(changes?.visits || 0)}
           index={0}
         />
         <StatCard
           title="Просмотры товаров"
-          value={data?.productViews || 0}
+          value={current?.productViews || 0}
           icon={Package}
           index={1}
         />
         <StatCard
           title="Добавлено в корзину"
-          value={data?.addToCart || 0}
+          value={current?.addToCart || 0}
           icon={ShoppingCart}
           index={2}
         />
         <StatCard
           title="Заказы"
-          value={data?.ordersCreated || 0}
+          value={current?.ordersCreated || 0}
           icon={CheckCircle}
-          change={data?.periodComparison?.ordersChange}
-          changeType={getChangeType(data?.periodComparison?.ordersChange || 0)}
+          change={changes?.ordersCreated}
+          changeType={getChangeType(changes?.ordersCreated || 0)}
           index={3}
         />
       </div>
@@ -316,31 +364,33 @@ function OverviewTab({ dateRange }: { dateRange: DateRange }) {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           title="Выручка"
-          value={formatCurrency(data?.revenue || 0)}
+          value={formatCurrency(current?.revenue || 0)}
           icon={DollarSign}
-          change={data?.periodComparison?.revenueChange}
-          changeType={getChangeType(data?.periodComparison?.revenueChange || 0)}
+          change={changes?.revenue}
+          changeType={getChangeType(changes?.revenue || 0)}
           index={4}
         />
         <StatCard
           title="Средний чек"
-          value={formatCurrency(data?.avgOrderValue || 0)}
+          value={formatCurrency(current?.avgCheck || 0)}
           icon={TrendingUp}
           index={5}
         />
         <StatCard
           title="Конверсия"
-          value={`${(data?.conversionRate || 0).toFixed(2)}%`}
-          subtitle="Заказы / Просмотры"
+          value={`${(current?.conversionRate || 0).toFixed(2)}%`}
+          subtitle="Заказы / Посетители"
           icon={Target}
-          change={data?.periodComparison?.conversionChange}
-          changeType={getChangeType(data?.periodComparison?.conversionChange || 0)}
+          change={changes?.conversionRate}
+          changeType={getChangeType(changes?.conversionRate || 0)}
           index={6}
         />
         <StatCard
           title="Брошенные корзины"
-          value={`${(data?.cartAbandonmentRate || 0).toFixed(1)}%`}
+          value={current?.abandonedCarts || 0}
           icon={XCircle}
+          change={changes?.abandonedCarts}
+          changeType={getChangeType(-(changes?.abandonedCarts || 0))}
           index={7}
         />
       </div>
@@ -366,37 +416,69 @@ function FunnelTab({ dateRange }: { dateRange: DateRange }) {
     );
   }
 
+  const funnel = data?.funnel || [];
+  const maxCount = funnel.length > 0 ? funnel[0].count : 0;
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <BarChart3 className="h-5 w-5" />
-          Воронка продаж
-        </CardTitle>
-        <CardDescription>
-          Общая конверсия: {(data?.overallConversion || 0).toFixed(2)}%
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {data?.steps?.map((step, index) => (
-          <FunnelStep
-            key={step.name}
-            name={step.name}
-            count={step.count}
-            percentage={step.percentage}
-            dropoff={step.dropoff}
-            isLast={index === (data?.steps?.length || 0) - 1}
-            index={index}
-          />
-        ))}
-        {(!data?.steps || data.steps.length === 0) && (
-          <div className="text-center py-8 text-muted-foreground">
-            <BarChart3 className="h-12 w-12 mx-auto mb-3 opacity-50" />
-            <p>Нет данных за выбранный период</p>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <BarChart3 className="h-5 w-5" />
+            Воронка продаж
+          </CardTitle>
+          <CardDescription>
+            Общая конверсия: {maxCount > 0 && funnel.length > 0 
+              ? ((funnel[funnel.length - 1]?.count || 0) / maxCount * 100).toFixed(2) 
+              : 0}%
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {funnel.map((step, index) => {
+            const percentage = maxCount > 0 ? (step.count / maxCount) * 100 : 0;
+            const dropoff = index < funnel.length - 1 ? 100 - step.conversionToNext : 0;
+            return (
+              <FunnelStep
+                key={step.step}
+                name={step.step}
+                count={step.count}
+                percentage={percentage}
+                dropoff={dropoff}
+                isLast={index === funnel.length - 1}
+                index={index}
+              />
+            );
+          })}
+          {funnel.length === 0 && (
+            <div className="text-center py-8 text-muted-foreground">
+              <BarChart3 className="h-12 w-12 mx-auto mb-3 opacity-50" />
+              <p>Нет данных за выбранный период</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+      
+      {data?.recommendations && data.recommendations.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Target className="h-5 w-5" />
+              Рекомендации
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-2">
+              {data.recommendations.map((rec, i) => (
+                <li key={i} className="flex items-start gap-2">
+                  <CheckCircle className="h-4 w-4 mt-1 text-green-500 shrink-0" />
+                  <span className="text-sm">{rec}</span>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+    </div>
   );
 }
 
@@ -405,7 +487,7 @@ function ProductsTab({ dateRange }: { dateRange: DateRange }) {
   const [sortBy, setSortBy] = useState<string>("revenue");
   const url = `/api/analytics/products?from=${from.toISOString()}&to=${to.toISOString()}&sortBy=${sortBy}`;
   
-  const { data, isLoading } = useQuery<ProductAnalytics[]>({
+  const { data, isLoading } = useQuery<ProductAnalyticsData>({
     queryKey: [url],
   });
 
@@ -423,13 +505,19 @@ function ProductsTab({ dateRange }: { dateRange: DateRange }) {
     );
   }
 
+  const products = data?.products || [];
+
   return (
     <Card>
       <CardHeader>
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <CardTitle>Аналитика товаров</CardTitle>
-            <CardDescription>Эффективность товаров за период</CardDescription>
+            <CardDescription>
+              {data?.totals && (
+                <span>Всего: {formatCurrency(data.totals.revenue)} / {data.totals.orders} заказов</span>
+              )}
+            </CardDescription>
           </div>
           <Select value={sortBy} onValueChange={setSortBy}>
             <SelectTrigger className="w-40" data-testid="select-sort-products">
@@ -445,9 +533,9 @@ function ProductsTab({ dateRange }: { dateRange: DateRange }) {
         </div>
       </CardHeader>
       <CardContent>
-        {data && data.length > 0 ? (
+        {products.length > 0 ? (
           <div className="space-y-3">
-            {data.map((product, index) => (
+            {products.map((product, index) => (
               <motion.div
                 key={product.id}
                 initial={{ opacity: 0, y: 10 }}
@@ -461,7 +549,6 @@ function ProductsTab({ dateRange }: { dateRange: DateRange }) {
                   </span>
                   <div className="min-w-0">
                     <p className="font-medium truncate">{product.name}</p>
-                    <p className="text-xs text-muted-foreground">{product.sku}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-4 shrink-0">
@@ -472,7 +559,7 @@ function ProductsTab({ dateRange }: { dateRange: DateRange }) {
                   <div className="text-right">
                     <Badge variant="secondary">{formatCurrency(product.revenue)}</Badge>
                     <p className="text-xs text-muted-foreground mt-1">
-                      {product.conversionRate.toFixed(1)}% конв.
+                      {product.conversion.toFixed(1)}% конв.
                     </p>
                   </div>
                 </div>
@@ -496,12 +583,13 @@ function OrdersTab({ dateRange }: { dateRange: DateRange }) {
   const statusParam = statusFilter !== "all" ? `&status=${statusFilter}` : "";
   const url = `/api/analytics/orders?from=${from.toISOString()}&to=${to.toISOString()}${statusParam}`;
   
-  const { data, isLoading } = useQuery<OrderAnalytics[]>({
+  const { data, isLoading } = useQuery<OrderAnalyticsData>({
     queryKey: [url],
   });
 
-  const formatCurrency = (value: string) => {
-    return new Intl.NumberFormat("ru-KZ").format(parseFloat(value)) + " ₸";
+  const formatCurrency = (value: string | number) => {
+    const num = typeof value === 'string' ? parseFloat(value) : value;
+    return new Intl.NumberFormat("ru-KZ").format(num) + " ₸";
   };
 
   const formatDate = (dateStr: string) => {
@@ -513,11 +601,13 @@ function OrdersTab({ dateRange }: { dateRange: DateRange }) {
     });
   };
 
+  const orders = data?.orders || [];
+
   const exportToCSV = () => {
-    if (!data || data.length === 0) return;
+    if (orders.length === 0) return;
     
     const headers = ["Номер", "Клиент", "Телефон", "Сумма", "Статус", "Дата"];
-    const rows = data.map((o) => [
+    const rows = orders.map((o) => [
       o.orderNumber,
       o.customerName,
       o.customerPhone,
@@ -528,17 +618,17 @@ function OrdersTab({ dateRange }: { dateRange: DateRange }) {
     
     const csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
+    const csvUrl = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url;
+    a.href = csvUrl;
     a.download = `orders_${from.toISOString().slice(0, 10)}_${to.toISOString().slice(0, 10)}.csv`;
     a.click();
-    URL.revokeObjectURL(url);
+    URL.revokeObjectURL(csvUrl);
   };
 
   const statusLabels: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
     new: { label: "Новый", variant: "default" },
-    in_progress: { label: "В работе", variant: "secondary" },
+    processing: { label: "В работе", variant: "secondary" },
     completed: { label: "Выполнен", variant: "outline" },
     cancelled: { label: "Отменён", variant: "destructive" },
   };
@@ -559,7 +649,11 @@ function OrdersTab({ dateRange }: { dateRange: DateRange }) {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <CardTitle>Заказы</CardTitle>
-            <CardDescription>{data?.length || 0} заказов за период</CardDescription>
+            <CardDescription>
+              {data?.summary && (
+                <span>{data.summary.total} заказов · {formatCurrency(data.summary.revenue)}</span>
+              )}
+            </CardDescription>
           </div>
           <div className="flex items-center gap-2">
             <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -569,7 +663,7 @@ function OrdersTab({ dateRange }: { dateRange: DateRange }) {
               <SelectContent>
                 <SelectItem value="all">Все</SelectItem>
                 <SelectItem value="new">Новые</SelectItem>
-                <SelectItem value="in_progress">В работе</SelectItem>
+                <SelectItem value="processing">В работе</SelectItem>
                 <SelectItem value="completed">Выполнены</SelectItem>
                 <SelectItem value="cancelled">Отменены</SelectItem>
               </SelectContent>
@@ -582,9 +676,9 @@ function OrdersTab({ dateRange }: { dateRange: DateRange }) {
         </div>
       </CardHeader>
       <CardContent>
-        {data && data.length > 0 ? (
+        {orders.length > 0 ? (
           <div className="space-y-3">
-            {data.map((order, index) => (
+            {orders.map((order, index) => (
               <motion.div
                 key={order.id}
                 initial={{ opacity: 0, y: 10 }}
@@ -621,14 +715,21 @@ function OrdersTab({ dateRange }: { dateRange: DateRange }) {
   );
 }
 
+interface CartItem {
+  productId: string;
+  name: string;
+  qty: number;
+  price: number;
+}
+
 function AbandonedCartsTab({ dateRange }: { dateRange: DateRange }) {
   const { from, to } = getDateRange(dateRange);
   const { toast } = useToast();
-  const [selectedCart, setSelectedCart] = useState<AbandonedCart | null>(null);
+  const [selectedCart, setSelectedCart] = useState<CartSession | null>(null);
   const [note, setNote] = useState("");
   const url = `/api/analytics/abandoned?from=${from.toISOString()}&to=${to.toISOString()}`;
   
-  const { data, isLoading } = useQuery<AbandonedCart[]>({
+  const { data, isLoading } = useQuery<AbandonedCartsData>({
     queryKey: [url],
   });
 
@@ -648,8 +749,9 @@ function AbandonedCartsTab({ dateRange }: { dateRange: DateRange }) {
     },
   });
 
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat("ru-KZ").format(value) + " ₸";
+  const formatCurrency = (value: number | string) => {
+    const num = typeof value === 'string' ? parseFloat(value) : value;
+    return new Intl.NumberFormat("ru-KZ").format(num || 0) + " ₸";
   };
 
   const formatDate = (dateStr: string) => {
@@ -659,6 +761,15 @@ function AbandonedCartsTab({ dateRange }: { dateRange: DateRange }) {
       hour: "2-digit",
       minute: "2-digit",
     });
+  };
+
+  const parseCartJson = (cartJson: string | null): CartItem[] => {
+    if (!cartJson) return [];
+    try {
+      return JSON.parse(cartJson);
+    } catch {
+      return [];
+    }
   };
 
   const statusLabels: Record<string, { label: string; icon: React.ElementType; color: string }> = {
@@ -678,8 +789,8 @@ function AbandonedCartsTab({ dateRange }: { dateRange: DateRange }) {
     );
   }
 
-  const cartsWithContact = data?.filter((c) => c.customerPhone || c.customerEmail) || [];
-  const totalValue = data?.reduce((sum, c) => sum + (c.totalEstimated || 0), 0) || 0;
+  const sessions = data?.sessions || [];
+  const summary = data?.summary;
 
   return (
     <>
@@ -687,20 +798,20 @@ function AbandonedCartsTab({ dateRange }: { dateRange: DateRange }) {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <StatCard
             title="Брошенных корзин"
-            value={data?.length || 0}
+            value={summary?.total || 0}
             icon={ShoppingCart}
             index={0}
           />
           <StatCard
             title="С контактами"
-            value={cartsWithContact.length}
+            value={summary?.withPhone || 0}
             subtitle="Можно связаться"
             icon={Phone}
             index={1}
           />
           <StatCard
             title="Потенциальная выручка"
-            value={formatCurrency(totalValue)}
+            value={formatCurrency(summary?.totalValue || 0)}
             icon={DollarSign}
             index={2}
           />
@@ -714,11 +825,12 @@ function AbandonedCartsTab({ dateRange }: { dateRange: DateRange }) {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {data && data.length > 0 ? (
+            {sessions.length > 0 ? (
               <div className="space-y-3">
-                {data.map((cart, index) => {
+                {sessions.map((cart, index) => {
                   const status = statusLabels[cart.processedStatus] || statusLabels.not_processed;
                   const StatusIcon = status.icon;
+                  const cartItems = parseCartJson(cart.cartJson);
                   
                   return (
                     <motion.div
@@ -739,20 +851,20 @@ function AbandonedCartsTab({ dateRange }: { dateRange: DateRange }) {
                             <StatusIcon className={`h-4 w-4 ${status.color}`} />
                             <span className="text-sm">{status.label}</span>
                             <Badge variant="outline" className="text-xs">
-                              {cart.lastStep}
+                              {cart.lastStep || "Корзина"}
                             </Badge>
                           </div>
                           <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                            {cart.customerPhone && (
+                            {cart.checkoutPhone && (
                               <span className="flex items-center gap-1">
                                 <Phone className="h-3 w-3" />
-                                {cart.customerPhone}
+                                {cart.checkoutPhone}
                               </span>
                             )}
-                            {cart.customerEmail && (
+                            {cart.checkoutEmail && (
                               <span className="flex items-center gap-1">
                                 <Mail className="h-3 w-3" />
-                                {cart.customerEmail}
+                                {cart.checkoutEmail}
                               </span>
                             )}
                             <span className="flex items-center gap-1">
@@ -761,20 +873,20 @@ function AbandonedCartsTab({ dateRange }: { dateRange: DateRange }) {
                             </span>
                           </div>
                           <div className="mt-2 text-sm">
-                            {cart.cartJson?.slice(0, 2).map((item, i) => (
+                            {cartItems.slice(0, 2).map((item: CartItem, i: number) => (
                               <span key={i} className="mr-2">
-                                {item.name} ×{item.qty}
+                                {item.name} x{item.qty}
                               </span>
                             ))}
-                            {(cart.cartJson?.length || 0) > 2 && (
+                            {cartItems.length > 2 && (
                               <span className="text-muted-foreground">
-                                +{(cart.cartJson?.length || 0) - 2} ещё
+                                +{cartItems.length - 2} ещё
                               </span>
                             )}
                           </div>
                         </div>
                         <div className="text-right shrink-0">
-                          <p className="font-bold">{formatCurrency(cart.totalEstimated)}</p>
+                          <p className="font-bold">{formatCurrency(cart.totalEstimated || 0)}</p>
                         </div>
                       </div>
                     </motion.div>
@@ -797,41 +909,43 @@ function AbandonedCartsTab({ dateRange }: { dateRange: DateRange }) {
           <DialogHeader>
             <DialogTitle>Обработка брошенной корзины</DialogTitle>
           </DialogHeader>
-          {selectedCart && (
+          {selectedCart && (() => {
+            const cartItems = parseCartJson(selectedCart.cartJson);
+            return (
             <div className="space-y-4">
               <div className="space-y-2">
                 <p className="font-medium">Товары:</p>
-                {selectedCart.cartJson?.map((item, i) => (
+                {cartItems.map((item: CartItem, i: number) => (
                   <div key={i} className="flex justify-between text-sm">
-                    <span>{item.name} ×{item.qty}</span>
+                    <span>{item.name} x{item.qty}</span>
                     <span>{formatCurrency(item.price * item.qty)}</span>
                   </div>
                 ))}
                 <div className="flex justify-between font-bold pt-2 border-t">
                   <span>Итого:</span>
-                  <span>{formatCurrency(selectedCart.totalEstimated)}</span>
+                  <span>{formatCurrency(selectedCart.totalEstimated || 0)}</span>
                 </div>
               </div>
 
-              {(selectedCart.customerPhone || selectedCart.customerEmail) && (
+              {(selectedCart.checkoutPhone || selectedCart.checkoutEmail) && (
                 <div className="space-y-1">
                   <p className="font-medium">Контакты:</p>
-                  {selectedCart.customerPhone && (
+                  {selectedCart.checkoutPhone && (
                     <a
-                      href={`tel:${selectedCart.customerPhone}`}
+                      href={`tel:${selectedCart.checkoutPhone}`}
                       className="flex items-center gap-2 text-primary hover:underline"
                     >
                       <Phone className="h-4 w-4" />
-                      {selectedCart.customerPhone}
+                      {selectedCart.checkoutPhone}
                     </a>
                   )}
-                  {selectedCart.customerEmail && (
+                  {selectedCart.checkoutEmail && (
                     <a
-                      href={`mailto:${selectedCart.customerEmail}`}
+                      href={`mailto:${selectedCart.checkoutEmail}`}
                       className="flex items-center gap-2 text-primary hover:underline"
                     >
                       <Mail className="h-4 w-4" />
-                      {selectedCart.customerEmail}
+                      {selectedCart.checkoutEmail}
                     </a>
                   )}
                 </div>
@@ -890,7 +1004,8 @@ function AbandonedCartsTab({ dateRange }: { dateRange: DateRange }) {
                 </Button>
               </div>
             </div>
-          )}
+          );
+          })()}
         </DialogContent>
       </Dialog>
     </>
