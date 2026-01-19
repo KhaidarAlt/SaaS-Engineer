@@ -824,6 +824,30 @@ export const insertWahaInstanceSchema = createInsertSchema(wahaInstances).omit({
 export type InsertWahaInstance = z.infer<typeof insertWahaInstanceSchema>;
 export type WahaInstance = typeof wahaInstances.$inferSelect;
 
+// ============ AI RESPONSE CORRECTIONS ============
+export const aiResponseCorrections = pgTable("ai_response_corrections", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  userMessagePattern: text("user_message_pattern").notNull(),
+  originalResponse: text("original_response").notNull(),
+  correctedResponse: text("corrected_response").notNull(),
+  isActive: boolean("is_active").notNull().default(true),
+  usageCount: integer("usage_count").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const aiResponseCorrectionsRelations = relations(aiResponseCorrections, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [aiResponseCorrections.tenantId],
+    references: [tenants.id],
+  }),
+}));
+
+export const insertAiResponseCorrectionSchema = createInsertSchema(aiResponseCorrections).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertAiResponseCorrection = z.infer<typeof insertAiResponseCorrectionSchema>;
+export type AiResponseCorrection = typeof aiResponseCorrections.$inferSelect;
+
 // ============ FORM VALIDATION SCHEMAS ============
 export const loginSchema = z.object({
   email: z.string().email("Введите корректный email"),
