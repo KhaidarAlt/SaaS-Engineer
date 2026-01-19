@@ -347,7 +347,7 @@ export default function AiSandboxPage() {
                               </div>
                             ) : (
                               <>
-                                <p className="text-[13px] whitespace-pre-wrap leading-relaxed">
+                                <p className="text-[13px] whitespace-pre-wrap leading-relaxed text-gray-900">
                                   {formatMessageContent(msg.content)}
                                 </p>
                                 <div className="flex items-center justify-end gap-1 mt-1">
@@ -399,7 +399,7 @@ export default function AiSandboxPage() {
                       placeholder="Сообщение"
                       onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
                       disabled={sendMessageMutation.isPending}
-                      className="rounded-full border-0 bg-white h-10 text-sm"
+                      className="rounded-full border-0 bg-white h-10 text-sm text-gray-900 placeholder:text-gray-500"
                       data-testid="input-message"
                     />
                   </div>
