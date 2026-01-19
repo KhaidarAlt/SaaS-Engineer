@@ -1731,7 +1731,9 @@ export async function registerRoutes(
       const ogTitle = tenantData.ogTitle || tenant.name || "Каталог";
       const ogDescription = tenantData.ogDescription || tenant.description || "Онлайн-каталог товаров";
       const ogImage = tenantData.ogImageUrl || tenant.logoUrl || "";
-      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      // Use https for production (Replit proxy uses x-forwarded-proto)
+      const protocol = req.get('x-forwarded-proto') || req.protocol;
+      const baseUrl = `${protocol}://${req.get('host')}`;
       const fullUrl = `${baseUrl}/c/${tenant.slug}`;
       
       // Serve a minimal HTML page with OG meta tags for bots
