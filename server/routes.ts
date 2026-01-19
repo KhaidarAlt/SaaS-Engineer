@@ -2034,24 +2034,64 @@ export async function registerRoutes(
 
   app.post("/api/ai/conversations/:id/messages", requireAuth, requireAiAccess, async (req, res) => {
     try {
+      const { generateAiResponse, isOpenAiConfigured } = await import("./services/openai");
+      
       const message = await storage.createAiMessage({
         conversationId: req.params.id,
         role: req.body.role || "user",
         content: req.body.content,
       });
 
-      // For sandbox, generate a simple AI response (placeholder for real AI integration)
+      // Generate AI response for user messages
       if (req.body.role === "user") {
+        let aiContent: string;
+        
+        if (isOpenAiConfigured()) {
+          // Get conversation history for context
+          const allMessages = await storage.getAiMessages(req.params.id);
+          const history = allMessages.slice(-10).map(m => ({
+            role: m.role as "user" | "assistant",
+            content: m.content,
+          }));
+          
+          // Get tenant info for context
+          const tenant = await storage.getTenant(req.user!.tenantId!);
+          const products = await storage.getProducts(req.user!.tenantId!);
+          const aiSettings = await storage.getAiSettings(req.user!.tenantId!);
+          
+          // Build context for AI
+          const context = {
+            storeName: tenant?.name || "Магазин",
+            storeDescription: tenant?.description || undefined,
+            tone: aiSettings?.tone || "friendly",
+            products: products.slice(0, 10).map(p => ({
+              name: p.name,
+              price: Number(p.price),
+              description: p.description || undefined,
+            })),
+          };
+          
+          try {
+            aiContent = await generateAiResponse(req.body.content, history, context);
+          } catch (error) {
+            console.error("AI generation error:", error);
+            aiContent = "Извините, произошла ошибка. Пожалуйста, попробуйте позже.";
+          }
+        } else {
+          aiContent = "AI-ассистент временно недоступен. Пожалуйста, попробуйте позже.";
+        }
+        
         const aiResponse = await storage.createAiMessage({
           conversationId: req.params.id,
           role: "assistant",
-          content: "Это тестовый ответ AI-ассистента. Для полноценной работы необходимо подключить OpenAI API.",
+          content: aiContent,
         });
         return res.json([message, aiResponse]);
       }
 
       res.json(message);
     } catch (error) {
+      console.error("Message creation error:", error);
       res.status(500).json({ message: "Ошибка отправки сообщения" });
     }
   });
