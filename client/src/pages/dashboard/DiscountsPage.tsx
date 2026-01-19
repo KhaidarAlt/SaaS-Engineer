@@ -44,6 +44,8 @@ const discountFormSchema = z.object({
   value: z.string().min(1, "Значение обязательно"),
   priority: z.coerce.number().min(0),
   isActive: z.boolean(),
+  startsAt: z.string().optional(),
+  endsAt: z.string().optional(),
 });
 
 type DiscountFormData = z.infer<typeof discountFormSchema>;
@@ -75,6 +77,8 @@ export default function DiscountsPage() {
       value: "",
       priority: 0,
       isActive: true,
+      startsAt: "",
+      endsAt: "",
     },
   });
 
@@ -118,6 +122,12 @@ export default function DiscountsPage() {
     },
   });
 
+  const formatDateForInput = (date: Date | string | null | undefined): string => {
+    if (!date) return "";
+    const d = new Date(date);
+    return d.toISOString().split("T")[0];
+  };
+
   const openEditDialog = (discount: Discount) => {
     setEditingDiscount(discount);
     form.reset({
@@ -128,6 +138,8 @@ export default function DiscountsPage() {
       value: discount.value,
       priority: discount.priority,
       isActive: discount.isActive,
+      startsAt: formatDateForInput(discount.startsAt),
+      endsAt: formatDateForInput(discount.endsAt),
     });
     setDialogOpen(true);
   };
@@ -142,6 +154,8 @@ export default function DiscountsPage() {
       value: "",
       priority: 0,
       isActive: true,
+      startsAt: "",
+      endsAt: "",
     });
     setDialogOpen(true);
   };
@@ -235,7 +249,7 @@ export default function DiscountsPage() {
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="space-y-3">
                     <div className="flex items-center justify-between">
                       <span className="text-2xl font-bold text-green-500">
                         {formatValue(discount)}
@@ -244,6 +258,20 @@ export default function DiscountsPage() {
                         {discount.isActive ? "Активна" : "Неактивна"}
                       </Badge>
                     </div>
+                    {(discount.startsAt || discount.endsAt) && (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Calendar className="h-4 w-4" />
+                        <span>
+                          {discount.startsAt 
+                            ? new Date(discount.startsAt).toLocaleDateString("ru-RU") 
+                            : "—"} 
+                          {" — "}
+                          {discount.endsAt 
+                            ? new Date(discount.endsAt).toLocaleDateString("ru-RU") 
+                            : "бессрочно"}
+                        </span>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               </motion.div>
@@ -355,6 +383,27 @@ export default function DiscountsPage() {
                     placeholder="10"
                     {...form.register("value")}
                     data-testid="input-discount-value"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="startsAt">Дата начала</Label>
+                  <Input
+                    id="startsAt"
+                    type="date"
+                    {...form.register("startsAt")}
+                    data-testid="input-discount-starts-at"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="endsAt">Дата окончания</Label>
+                  <Input
+                    id="endsAt"
+                    type="date"
+                    {...form.register("endsAt")}
+                    data-testid="input-discount-ends-at"
                   />
                 </div>
               </div>
