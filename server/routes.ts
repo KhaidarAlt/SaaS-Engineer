@@ -853,21 +853,40 @@ export async function registerRoutes(
         return res.status(403).json({ message: limitCheck.message });
       }
       
+      const data = { ...req.body };
+      // Convert date strings to Date objects or null
+      if (data.startsAt !== undefined) {
+        data.startsAt = data.startsAt ? new Date(data.startsAt) : null;
+      }
+      if (data.endsAt !== undefined) {
+        data.endsAt = data.endsAt ? new Date(data.endsAt) : null;
+      }
+      
       const discount = await storage.createDiscount({
-        ...req.body,
+        ...data,
         tenantId: req.user!.tenantId!,
       });
       res.json(discount);
     } catch (error) {
+      console.error("Error creating discount:", error);
       res.status(500).json({ message: "Ошибка создания скидки" });
     }
   });
 
   app.put("/api/discounts/:id", requireAuth, async (req, res) => {
     try {
-      const discount = await storage.updateDiscount(req.params.id, req.user!.tenantId!, req.body);
+      const data = { ...req.body };
+      // Convert date strings to Date objects or null
+      if (data.startsAt !== undefined) {
+        data.startsAt = data.startsAt ? new Date(data.startsAt) : null;
+      }
+      if (data.endsAt !== undefined) {
+        data.endsAt = data.endsAt ? new Date(data.endsAt) : null;
+      }
+      const discount = await storage.updateDiscount(req.params.id, req.user!.tenantId!, data);
       res.json(discount);
     } catch (error) {
+      console.error("Error updating discount:", error);
       res.status(500).json({ message: "Ошибка обновления скидки" });
     }
   });
