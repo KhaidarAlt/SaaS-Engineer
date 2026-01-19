@@ -798,6 +798,32 @@ export const insertAiInboxTicketSchema = createInsertSchema(aiInboxTickets).omit
 export type InsertAiInboxTicket = z.infer<typeof insertAiInboxTicketSchema>;
 export type AiInboxTicket = typeof aiInboxTickets.$inferSelect;
 
+// ============ WAHA INSTANCES ============
+export const wahaInstances = pgTable("waha_instances", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  instanceName: text("instance_name").notNull().unique(),
+  phoneNumber: text("phone_number"),
+  status: text("status").notNull().default("created"), // created, starting, running, stopped, failed, scan_qr
+  qrCode: text("qr_code"),
+  lastConnectedAt: timestamp("last_connected_at"),
+  webhookUrl: text("webhook_url"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const wahaInstancesRelations = relations(wahaInstances, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [wahaInstances.tenantId],
+    references: [tenants.id],
+  }),
+}));
+
+export const insertWahaInstanceSchema = createInsertSchema(wahaInstances).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertWahaInstance = z.infer<typeof insertWahaInstanceSchema>;
+export type WahaInstance = typeof wahaInstances.$inferSelect;
+
 // ============ FORM VALIDATION SCHEMAS ============
 export const loginSchema = z.object({
   email: z.string().email("Введите корректный email"),

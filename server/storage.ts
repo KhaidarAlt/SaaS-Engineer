@@ -6,6 +6,7 @@ import {
   subscriptionExtensions, knowledgeBase, auditLogs, carts, productVariants, productImages,
   aiSettings, aiSalesScripts, aiTagRules, aiKnowledgeArticles, aiFaqItems,
   aiPolicies, aiConversations, aiMessages, aiInterventionEvents, aiInboxTickets,
+  wahaInstances,
   type User, type InsertUser, type Tenant, type InsertTenant,
   type Subscription, type InsertSubscription, type Plan, type InsertPlan,
   type Product, type InsertProduct, type Category, type InsertCategory,
@@ -26,6 +27,7 @@ import {
   type AiMessage, type InsertAiMessage,
   type AiInterventionEvent, type InsertAiInterventionEvent,
   type AiInboxTicket, type InsertAiInboxTicket,
+  type WahaInstance, type InsertWahaInstance,
 } from "@shared/schema";
 import bcrypt from "bcryptjs";
 
@@ -1032,6 +1034,50 @@ export class DatabaseStorage implements IStorage {
     const overallProgress = Math.round((completed / 5) * 100);
 
     return { salesScriptConfigured, tagsConfigured, faqConfigured, knowledgeConfigured, policiesConfigured, overallProgress };
+  }
+
+  // ============ WAHA INSTANCES ============
+  async getWahaInstances(tenantId: string): Promise<WahaInstance[]> {
+    return db.select().from(wahaInstances)
+      .where(eq(wahaInstances.tenantId, tenantId))
+      .orderBy(desc(wahaInstances.createdAt));
+  }
+
+  async getWahaInstance(id: string, tenantId: string): Promise<WahaInstance | undefined> {
+    const [instance] = await db.select().from(wahaInstances)
+      .where(and(eq(wahaInstances.id, id), eq(wahaInstances.tenantId, tenantId)));
+    return instance;
+  }
+
+  async getWahaInstanceByName(instanceName: string): Promise<WahaInstance | undefined> {
+    const [instance] = await db.select().from(wahaInstances)
+      .where(eq(wahaInstances.instanceName, instanceName));
+    return instance;
+  }
+
+  async createWahaInstance(data: InsertWahaInstance): Promise<WahaInstance> {
+    const [instance] = await db.insert(wahaInstances).values(data as any).returning();
+    return instance;
+  }
+
+  async updateWahaInstance(id: string, tenantId: string, data: Partial<InsertWahaInstance>): Promise<WahaInstance | undefined> {
+    const [instance] = await db.update(wahaInstances)
+      .set({ ...data, updatedAt: new Date() } as any)
+      .where(and(eq(wahaInstances.id, id), eq(wahaInstances.tenantId, tenantId)))
+      .returning();
+    return instance;
+  }
+
+  async deleteWahaInstance(id: string, tenantId: string): Promise<boolean> {
+    await db.delete(wahaInstances)
+      .where(and(eq(wahaInstances.id, id), eq(wahaInstances.tenantId, tenantId)));
+    return true;
+  }
+
+  async countWahaInstances(tenantId: string): Promise<number> {
+    const instances = await db.select().from(wahaInstances)
+      .where(and(eq(wahaInstances.tenantId, tenantId), eq(wahaInstances.isActive, true)));
+    return instances.length;
   }
 }
 

@@ -1,0 +1,151 @@
+const WAHA_BASE_URL = process.env.WAHA_BASE_URL || "https://waha.botfactory.kz";
+const WAHA_API_KEY = process.env.WAHA_API_KEY || "";
+
+interface WahaSession {
+  name: string;
+  status: string;
+  me?: {
+    id: string;
+    pushName: string;
+  };
+}
+
+interface WahaQRResponse {
+  mimetype: string;
+  data: string;
+}
+
+interface WahaSessionConfig {
+  name: string;
+  webhooks?: {
+    url: string;
+    events: string[];
+  }[];
+}
+
+async function wahaRequest(method: string, endpoint: string, body?: any): Promise<any> {
+  const url = `${WAHA_BASE_URL}${endpoint}`;
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  
+  if (WAHA_API_KEY) {
+    headers["X-Api-Key"] = WAHA_API_KEY;
+  }
+
+  const options: RequestInit = {
+    method,
+    headers,
+  };
+
+  if (body) {
+    options.body = JSON.stringify(body);
+  }
+
+  const response = await fetch(url, options);
+  
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`WAHA API error: ${response.status} ${errorText}`);
+  }
+
+  const contentType = response.headers.get("content-type");
+  if (contentType && contentType.includes("application/json")) {
+    return response.json();
+  }
+  return response.text();
+}
+
+export const wahaService = {
+  async listSessions(): Promise<WahaSession[]> {
+    return wahaRequest("GET", "/api/sessions");
+  },
+
+  async getSession(sessionName: string): Promise<WahaSession> {
+    return wahaRequest("GET", `/api/sessions/${sessionName}`);
+  },
+
+  async createSession(sessionName: string, webhookUrl?: string): Promise<WahaSession> {
+    const config: WahaSessionConfig = {
+      name: sessionName,
+    };
+
+    if (webhookUrl) {
+      config.webhooks = [
+        {
+          url: webhookUrl,
+          events: ["message", "message.any", "session.status"],
+        },
+      ];
+    }
+
+    return wahaRequest("POST", "/api/sessions", config);
+  },
+
+  async startSession(sessionName: string): Promise<WahaSession> {
+    return wahaRequest("POST", `/api/sessions/${sessionName}/start`);
+  },
+
+  async stopSession(sessionName: string): Promise<void> {
+    return wahaRequest("POST", `/api/sessions/${sessionName}/stop`);
+  },
+
+  async deleteSession(sessionName: string): Promise<void> {
+    return wahaRequest("DELETE", `/api/sessions/${sessionName}`);
+  },
+
+  async getQRCode(sessionName: string): Promise<string> {
+    try {
+      const response: WahaQRResponse = await wahaRequest("GET", `/api/${sessionName}/auth/qr?format=raw`);
+      if (response && response.data) {
+        return `data:${response.mimetype};base64,${response.data}`;
+      }
+      return "";
+    } catch (error) {
+      return "";
+    }
+  },
+
+  async getScreenshot(sessionName: string): Promise<string> {
+    try {
+      const response = await wahaRequest("GET", `/api/screenshot?session=${sessionName}`);
+      return response;
+    } catch (error) {
+      return "";
+    }
+  },
+
+  async sendTextMessage(sessionName: string, chatId: string, text: string): Promise<any> {
+    return wahaRequest("POST", `/api/sendText`, {
+      session: sessionName,
+      chatId,
+      text,
+    });
+  },
+
+  async sendImageMessage(sessionName: string, chatId: string, imageUrl: string, caption?: string): Promise<any> {
+    return wahaRequest("POST", `/api/sendImage`, {
+      session: sessionName,
+      chatId,
+      file: {
+        url: imageUrl,
+      },
+      caption,
+    });
+  },
+
+  async checkHealth(): Promise<boolean> {
+    try {
+      await wahaRequest("GET", "/api/sessions");
+      return true;
+    } catch {
+      return false;
+    }
+  },
+
+  generateInstanceName(tenantId: string): string {
+    const shortId = tenantId.substring(0, 8);
+    const timestamp = Date.now().toString(36);
+    return `sc_${shortId}_${timestamp}`;
+  },
+};

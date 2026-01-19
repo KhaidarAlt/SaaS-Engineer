@@ -2069,6 +2069,264 @@ export async function registerRoutes(
     }
   });
 
+  // ============ WAHA INTEGRATION ============
+  const { wahaService } = await import("./services/waha");
+
+  // Get WAHA health status
+  app.get("/api/waha/health", requireAuth, requireAiAccess, async (_req, res) => {
+    try {
+      const healthy = await wahaService.checkHealth();
+      res.json({ healthy, baseUrl: process.env.WAHA_BASE_URL });
+    } catch (error) {
+      res.json({ healthy: false, error: (error as Error).message });
+    }
+  });
+
+  // Get tenant's WAHA instances
+  app.get("/api/waha/instances", requireAuth, requireAiAccess, async (req, res) => {
+    try {
+      const instances = await storage.getWahaInstances(req.user!.tenantId!);
+      
+      // Enrich with live status from WAHA server
+      const enrichedInstances = await Promise.all(instances.map(async (instance) => {
+        try {
+          const session = await wahaService.getSession(instance.instanceName);
+          return {
+            ...instance,
+            liveStatus: session.status,
+            phoneNumber: session.me?.id?.replace("@c.us", "") || instance.phoneNumber,
+          };
+        } catch {
+          return { ...instance, liveStatus: "unknown" };
+        }
+      }));
+      
+      res.json(enrichedInstances);
+    } catch (error) {
+      console.error("Error fetching WAHA instances:", error);
+      res.status(500).json({ message: "Ошибка получения инстансов" });
+    }
+  });
+
+  // Create new WAHA instance
+  app.post("/api/waha/instances", requireAuth, requireAiAccess, async (req, res) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      
+      // Check plan limits
+      const subscription = await storage.getSubscription(tenantId);
+      if (!subscription?.plan) {
+        return res.status(403).json({ message: "Нет активной подписки" });
+      }
+      
+      const currentCount = await storage.countWahaInstances(tenantId);
+      if (currentCount >= subscription.plan.maxWahaInstances) {
+        return res.status(403).json({ 
+          message: `Достигнут лимит инстансов WhatsApp (${subscription.plan.maxWahaInstances})` 
+        });
+      }
+
+      const instanceName = wahaService.generateInstanceName(tenantId);
+      
+      // Get webhook URL from environment or construct from current host
+      const webhookUrl = `${process.env.REPLIT_DEV_DOMAIN ? 'https://' + process.env.REPLIT_DEV_DOMAIN : ''}/api/waha/webhook`;
+      
+      // Create session in WAHA
+      await wahaService.createSession(instanceName, webhookUrl);
+      
+      // Start session
+      await wahaService.startSession(instanceName);
+      
+      // Save to database
+      const instance = await storage.createWahaInstance({
+        tenantId,
+        instanceName,
+        status: "starting",
+        webhookUrl,
+      });
+      
+      res.json(instance);
+    } catch (error) {
+      console.error("Error creating WAHA instance:", error);
+      res.status(500).json({ message: (error as Error).message || "Ошибка создания инстанса" });
+    }
+  });
+
+  // Get QR code for an instance
+  app.get("/api/waha/instances/:id/qr", requireAuth, requireAiAccess, async (req, res) => {
+    try {
+      const instance = await storage.getWahaInstance(req.params.id, req.user!.tenantId!);
+      if (!instance) {
+        return res.status(404).json({ message: "Инстанс не найден" });
+      }
+      
+      const qrCode = await wahaService.getQRCode(instance.instanceName);
+      
+      // Update stored QR
+      if (qrCode) {
+        await storage.updateWahaInstance(instance.id, req.user!.tenantId!, { 
+          qrCode, 
+          status: "scan_qr" 
+        });
+      }
+      
+      res.json({ qrCode, instanceName: instance.instanceName });
+    } catch (error) {
+      console.error("Error getting QR code:", error);
+      res.status(500).json({ message: "Ошибка получения QR-кода" });
+    }
+  });
+
+  // Get instance status
+  app.get("/api/waha/instances/:id/status", requireAuth, requireAiAccess, async (req, res) => {
+    try {
+      const instance = await storage.getWahaInstance(req.params.id, req.user!.tenantId!);
+      if (!instance) {
+        return res.status(404).json({ message: "Инстанс не найден" });
+      }
+      
+      const session = await wahaService.getSession(instance.instanceName);
+      
+      // Update local status based on WAHA response
+      let newStatus = instance.status;
+      if (session.status === "WORKING") {
+        newStatus = "running";
+        await storage.updateWahaInstance(instance.id, req.user!.tenantId!, { 
+          status: "running",
+          phoneNumber: session.me?.id?.replace("@c.us", "") || null,
+          lastConnectedAt: new Date(),
+        });
+      } else if (session.status === "SCAN_QR_CODE") {
+        newStatus = "scan_qr";
+      } else if (session.status === "STOPPED") {
+        newStatus = "stopped";
+      } else if (session.status === "FAILED") {
+        newStatus = "failed";
+      }
+      
+      res.json({ 
+        ...instance, 
+        status: newStatus,
+        wahaStatus: session.status,
+        phoneNumber: session.me?.id?.replace("@c.us", "") || instance.phoneNumber,
+      });
+    } catch (error) {
+      console.error("Error getting instance status:", error);
+      res.status(500).json({ message: "Ошибка получения статуса" });
+    }
+  });
+
+  // Stop instance
+  app.post("/api/waha/instances/:id/stop", requireAuth, requireAiAccess, async (req, res) => {
+    try {
+      const instance = await storage.getWahaInstance(req.params.id, req.user!.tenantId!);
+      if (!instance) {
+        return res.status(404).json({ message: "Инстанс не найден" });
+      }
+      
+      await wahaService.stopSession(instance.instanceName);
+      await storage.updateWahaInstance(instance.id, req.user!.tenantId!, { status: "stopped" });
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error stopping instance:", error);
+      res.status(500).json({ message: "Ошибка остановки инстанса" });
+    }
+  });
+
+  // Start instance
+  app.post("/api/waha/instances/:id/start", requireAuth, requireAiAccess, async (req, res) => {
+    try {
+      const instance = await storage.getWahaInstance(req.params.id, req.user!.tenantId!);
+      if (!instance) {
+        return res.status(404).json({ message: "Инстанс не найден" });
+      }
+      
+      await wahaService.startSession(instance.instanceName);
+      await storage.updateWahaInstance(instance.id, req.user!.tenantId!, { status: "starting" });
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error starting instance:", error);
+      res.status(500).json({ message: "Ошибка запуска инстанса" });
+    }
+  });
+
+  // Delete instance
+  app.delete("/api/waha/instances/:id", requireAuth, requireAiAccess, async (req, res) => {
+    try {
+      const instance = await storage.getWahaInstance(req.params.id, req.user!.tenantId!);
+      if (!instance) {
+        return res.status(404).json({ message: "Инстанс не найден" });
+      }
+      
+      // Delete from WAHA
+      try {
+        await wahaService.deleteSession(instance.instanceName);
+      } catch (e) {
+        // Session might already be deleted
+        console.log("Session might already be deleted:", e);
+      }
+      
+      // Delete from database
+      await storage.deleteWahaInstance(instance.id, req.user!.tenantId!);
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting instance:", error);
+      res.status(500).json({ message: "Ошибка удаления инстанса" });
+    }
+  });
+
+  // WAHA Webhook endpoint (for receiving messages)
+  app.post("/api/waha/webhook", async (req, res) => {
+    try {
+      const { event, session, payload } = req.body;
+      console.log("WAHA Webhook received:", { event, session });
+      
+      // Find instance by session name
+      const instance = await storage.getWahaInstanceByName(session);
+      if (!instance) {
+        console.log("Unknown session:", session);
+        return res.json({ ok: true });
+      }
+      
+      // Handle different event types
+      if (event === "session.status") {
+        const status = payload?.status;
+        let newStatus = instance.status;
+        
+        if (status === "WORKING") {
+          newStatus = "running";
+        } else if (status === "SCAN_QR_CODE") {
+          newStatus = "scan_qr";
+        } else if (status === "STOPPED") {
+          newStatus = "stopped";
+        } else if (status === "FAILED") {
+          newStatus = "failed";
+        }
+        
+        await storage.updateWahaInstance(instance.id, instance.tenantId, { status: newStatus });
+      }
+      
+      if (event === "message" || event === "message.any") {
+        // Handle incoming messages - store in AI conversations
+        const from = payload?.from;
+        const text = payload?.body;
+        
+        if (from && text) {
+          console.log(`Message from ${from}: ${text}`);
+          // TODO: Create or continue AI conversation, process with AI, send response
+        }
+      }
+      
+      res.json({ ok: true });
+    } catch (error) {
+      console.error("Webhook error:", error);
+      res.json({ ok: true }); // Always return 200 to WAHA
+    }
+  });
+
   return httpServer;
 }
 
