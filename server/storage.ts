@@ -6,7 +6,7 @@ import {
   subscriptionExtensions, knowledgeBase, auditLogs, carts, productVariants, productImages,
   aiSettings, aiSalesScripts, aiTagRules, aiKnowledgeArticles, aiFaqItems,
   aiPolicies, aiConversations, aiMessages, aiInterventionEvents, aiInboxTickets,
-  wahaInstances,
+  wahaInstances, aiResponseCorrections,
   type User, type InsertUser, type Tenant, type InsertTenant,
   type Subscription, type InsertSubscription, type Plan, type InsertPlan,
   type Product, type InsertProduct, type Category, type InsertCategory,
@@ -28,6 +28,7 @@ import {
   type AiInterventionEvent, type InsertAiInterventionEvent,
   type AiInboxTicket, type InsertAiInboxTicket,
   type WahaInstance, type InsertWahaInstance,
+  type AiResponseCorrection, type InsertAiResponseCorrection,
 } from "@shared/schema";
 import bcrypt from "bcryptjs";
 
@@ -926,6 +927,79 @@ export class DatabaseStorage implements IStorage {
     const [msg] = await db.insert(aiMessages).values(data).returning();
     await db.update(aiConversations).set({ updatedAt: new Date() }).where(eq(aiConversations.id, data.conversationId));
     return msg;
+  }
+
+  async updateAiMessage(id: string, data: { content: string }): Promise<AiMessage | undefined> {
+    const [msg] = await db.update(aiMessages)
+      .set({ content: data.content })
+      .where(eq(aiMessages.id, id))
+      .returning();
+    return msg;
+  }
+
+  async updateAiMessageSecure(messageId: string, tenantId: string, data: { content: string }): Promise<AiMessage | undefined> {
+    // First verify the message belongs to a conversation owned by this tenant
+    const [message] = await db.select().from(aiMessages).where(eq(aiMessages.id, messageId));
+    if (!message) return undefined;
+    
+    const [conversation] = await db.select().from(aiConversations)
+      .where(and(
+        eq(aiConversations.id, message.conversationId),
+        eq(aiConversations.tenantId, tenantId)
+      ));
+    
+    if (!conversation) return undefined;
+    
+    // Now safe to update
+    const [updated] = await db.update(aiMessages)
+      .set({ content: data.content })
+      .where(eq(aiMessages.id, messageId))
+      .returning();
+    return updated;
+  }
+
+  // ============ AI RESPONSE CORRECTIONS ============
+  async getAiResponseCorrections(tenantId: string): Promise<AiResponseCorrection[]> {
+    return db.select().from(aiResponseCorrections)
+      .where(and(
+        eq(aiResponseCorrections.tenantId, tenantId),
+        eq(aiResponseCorrections.isActive, true)
+      ))
+      .orderBy(desc(aiResponseCorrections.createdAt));
+  }
+
+  async createAiResponseCorrection(data: InsertAiResponseCorrection): Promise<AiResponseCorrection> {
+    const [correction] = await db.insert(aiResponseCorrections).values(data).returning();
+    return correction;
+  }
+
+  async findMatchingCorrection(tenantId: string, userMessage: string): Promise<AiResponseCorrection | undefined> {
+    const corrections = await this.getAiResponseCorrections(tenantId);
+    const lowerMessage = userMessage.toLowerCase().trim();
+    
+    for (const correction of corrections) {
+      const pattern = correction.userMessagePattern.toLowerCase().trim();
+      if (lowerMessage.includes(pattern) || pattern.includes(lowerMessage) || 
+          this.calculateSimilarity(lowerMessage, pattern) > 0.7) {
+        await db.update(aiResponseCorrections)
+          .set({ usageCount: sql`${aiResponseCorrections.usageCount} + 1` })
+          .where(eq(aiResponseCorrections.id, correction.id));
+        return correction;
+      }
+    }
+    return undefined;
+  }
+
+  private calculateSimilarity(str1: string, str2: string): number {
+    const words1 = str1.split(/\s+/);
+    const words2 = str2.split(/\s+/);
+    const set1 = new Set(words1);
+    const set2 = new Set(words2);
+    const arr1 = Array.from(set1);
+    const intersection = arr1.filter(x => set2.has(x)).length;
+    const unionSet = new Set(words1.concat(words2));
+    const union = unionSet.size;
+    return union > 0 ? intersection / union : 0;
   }
 
   // ============ AI INTERVENTION EVENTS ============

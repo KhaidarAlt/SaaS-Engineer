@@ -2047,7 +2047,14 @@ export async function registerRoutes(
         let aiContent: string;
         let matchedTag: string | undefined;
         
-        if (isOpenAiConfigured()) {
+        const tenantId = req.user!.tenantId!;
+        
+        // First, check for saved corrections
+        const matchedCorrection = await storage.findMatchingCorrection(tenantId, req.body.content);
+        if (matchedCorrection) {
+          aiContent = matchedCorrection.correctedResponse;
+          matchedTag = "correction_used";
+        } else if (isOpenAiConfigured()) {
           // Get conversation history for context
           const allMessages = await storage.getAiMessages(req.params.id);
           const history = allMessages.slice(-10).map(m => ({
@@ -2056,7 +2063,6 @@ export async function registerRoutes(
           }));
           
           // Get all context data in parallel
-          const tenantId = req.user!.tenantId!;
           const [tenant, products, aiSettings, salesScripts, tagRules, faqItems, knowledge, policies, promotions] = await Promise.all([
             storage.getTenant(tenantId),
             storage.getProducts(tenantId),
@@ -2153,6 +2159,54 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Message creation error:", error);
       res.status(500).json({ message: "Ошибка отправки сообщения" });
+    }
+  });
+
+  // Update AI message content (with tenant ownership verification)
+  app.patch("/api/ai/messages/:id", requireAuth, requireAiAccess, async (req, res) => {
+    try {
+      const { content } = req.body;
+      if (!content || typeof content !== "string" || content.trim().length === 0) {
+        return res.status(400).json({ message: "Контент обязателен" });
+      }
+      const updated = await storage.updateAiMessageSecure(req.params.id, req.user!.tenantId!, { content: content.trim() });
+      if (!updated) {
+        return res.status(404).json({ message: "Сообщение не найдено" });
+      }
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating message:", error);
+      res.status(500).json({ message: "Ошибка обновления сообщения" });
+    }
+  });
+
+  // Create AI response correction
+  app.post("/api/ai/corrections", requireAuth, requireAiAccess, async (req, res) => {
+    try {
+      const { userMessagePattern, originalResponse, correctedResponse } = req.body;
+      if (!userMessagePattern || !originalResponse || !correctedResponse) {
+        return res.status(400).json({ message: "Все поля обязательны" });
+      }
+      const correction = await storage.createAiResponseCorrection({
+        tenantId: req.user!.tenantId!,
+        userMessagePattern,
+        originalResponse,
+        correctedResponse,
+      });
+      res.json(correction);
+    } catch (error) {
+      console.error("Error creating correction:", error);
+      res.status(500).json({ message: "Ошибка сохранения корректировки" });
+    }
+  });
+
+  // Get AI response corrections
+  app.get("/api/ai/corrections", requireAuth, requireAiAccess, async (req, res) => {
+    try {
+      const corrections = await storage.getAiResponseCorrections(req.user!.tenantId!);
+      res.json(corrections);
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка получения корректировок" });
     }
   });
 

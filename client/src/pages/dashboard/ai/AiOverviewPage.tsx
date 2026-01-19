@@ -42,7 +42,7 @@ const aiModules = [
 
 const aiPages = [
   { title: "Inbox", icon: Inbox, path: "/dashboard/ai/inbox", description: "Уведомления и тикеты" },
-  { title: "Песочница", icon: MessageSquare, path: "/dashboard/ai/sandbox", description: "Тестирование диалогов" },
+  { title: "Тестовый чат", icon: MessageSquare, path: "/dashboard/ai/sandbox", description: "Проверьте как AI отвечает" },
   { title: "Аналитика AI", icon: BarChart3, path: "/dashboard/ai/analytics", description: "Статистика ассистента" },
   { title: "Интеграции", icon: Plug, path: "/dashboard/ai/integrations", description: "Подключение каналов" },
 ];
