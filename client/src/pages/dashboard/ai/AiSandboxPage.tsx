@@ -27,7 +27,7 @@ function formatMessageContent(content: string) {
           className="inline-flex items-center gap-1 text-primary underline hover:text-primary/80 font-medium"
           onClick={(e) => e.stopPropagation()}
         >
-          {part.includes('/catalog/') ? '🛍️ Открыть каталог' : part}
+          {(part.includes('/catalog/') || part.includes('/c/')) ? '🛍️ Открыть каталог' : part}
           <ExternalLink className="h-3 w-3" />
         </a>
       );

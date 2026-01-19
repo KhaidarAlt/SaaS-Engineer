@@ -77,7 +77,7 @@ export async function generateAiResponse(
   conversationHistory: ChatMessage[],
   context: TenantContext
 ): Promise<AiResponseResult> {
-  const catalogUrl = `https://${process.env.REPLIT_DEV_DOMAIN || 'app.replit.dev'}/catalog/${context.slug}`;
+  const catalogUrl = `https://${process.env.REPLIT_DEV_DOMAIN || 'app.replit.dev'}/c/${context.slug}`;
   
   // Check for handoff request first
   if (isHandoffRequest(userMessage)) {
