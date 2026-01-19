@@ -2128,11 +2128,22 @@ export async function registerRoutes(
 
       const instanceName = wahaService.generateInstanceName(tenantId);
       
-      // Get webhook URL from environment or construct from current host
-      const webhookUrl = `${process.env.REPLIT_DEV_DOMAIN ? 'https://' + process.env.REPLIT_DEV_DOMAIN : ''}/api/waha/webhook`;
+      // Get webhook URL - use explicit env var, then REPLIT_DEV_DOMAIN, then derive from request
+      let baseUrl = process.env.WAHA_WEBHOOK_BASE_URL;
+      if (!baseUrl && process.env.REPLIT_DEV_DOMAIN) {
+        baseUrl = `https://${process.env.REPLIT_DEV_DOMAIN}`;
+      }
+      if (!baseUrl) {
+        const protocol = req.headers["x-forwarded-proto"] || req.protocol || "https";
+        const host = req.headers["x-forwarded-host"] || req.headers.host;
+        if (host) {
+          baseUrl = `${protocol}://${host}`;
+        }
+      }
+      const webhookUrl = baseUrl ? `${baseUrl}/api/waha/webhook` : "";
       
       // Create session in WAHA
-      await wahaService.createSession(instanceName, webhookUrl);
+      await wahaService.createSession(instanceName, webhookUrl || undefined);
       
       // Start session
       await wahaService.startSession(instanceName);
@@ -2142,7 +2153,8 @@ export async function registerRoutes(
         tenantId,
         instanceName,
         status: "starting",
-        webhookUrl,
+        webhookUrl: webhookUrl || null,
+        isActive: true,
       });
       
       res.json(instance);
