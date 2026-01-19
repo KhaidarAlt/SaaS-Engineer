@@ -320,7 +320,7 @@ export default function AiSandboxPage() {
                                 <Textarea
                                   value={editedContent}
                                   onChange={(e) => setEditedContent(e.target.value)}
-                                  className="min-h-[80px] text-sm bg-white border-green-300 focus:border-green-500"
+                                  className="min-h-[80px] text-sm bg-white border-green-300 focus:border-green-500 text-gray-900 placeholder:text-gray-500"
                                   autoFocus
                                   data-testid="textarea-edit-message"
                                 />
