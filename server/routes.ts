@@ -2057,7 +2057,7 @@ export async function registerRoutes(
           
           // Get all context data in parallel
           const tenantId = req.user!.tenantId!;
-          const [tenant, products, aiSettings, salesScripts, tagRules, faqItems, knowledge, policies] = await Promise.all([
+          const [tenant, products, aiSettings, salesScripts, tagRules, faqItems, knowledge, policies, promotions] = await Promise.all([
             storage.getTenant(tenantId),
             storage.getProducts(tenantId),
             storage.getAiSettings(tenantId),
@@ -2066,6 +2066,7 @@ export async function registerRoutes(
             storage.getAiFaqItems(tenantId),
             storage.getAiKnowledgeArticles(tenantId),
             storage.getAiPolicies(tenantId),
+            storage.getPromotions(tenantId),
           ]);
           
           // Get active sales script
@@ -2116,6 +2117,15 @@ export async function registerRoutes(
               followSalesScript: policies.followSalesScript,
               boundariesText: policies.boundariesText || undefined,
             } : undefined,
+            promotions: promotions.filter(p => p.isActive).map(p => ({
+              name: p.title,
+              description: p.description || undefined,
+              discountPercent: p.discountType === 'percent' && p.discountValue ? Number(p.discountValue) : undefined,
+              discountAmount: p.discountType === 'amount' && p.discountValue ? Number(p.discountValue) : undefined,
+              startDate: p.startsAt || undefined,
+              endDate: p.endsAt || undefined,
+            })),
+            contactPhone: tenant?.contactPhone || undefined,
           };
           
           try {

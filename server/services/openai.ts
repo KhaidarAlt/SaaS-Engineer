@@ -25,11 +25,22 @@ interface TagRule {
   responseTemplate?: string;
 }
 
+interface Promotion {
+  name: string;
+  description?: string;
+  discountPercent?: number;
+  discountAmount?: number;
+  startDate?: Date;
+  endDate?: Date;
+}
+
 interface TenantContext {
   storeName: string;
   slug: string;
   storeDescription?: string;
+  contactPhone?: string;
   products?: Array<{ name: string; price: number; description?: string; category?: string }>;
+  promotions?: Promotion[];
   policies?: {
     answerOnlyFromData?: boolean;
     offerHandoffIfNoAnswer?: boolean;
@@ -55,25 +66,54 @@ interface AiResponseResult {
   action?: string;
 }
 
+const HANDOFF_KEYWORDS = [
+  "менеджер", "оператор", "человек", "живой", "позовите", "позови", 
+  "переключите", "переключи", "передайте", "передай", "свяжите", 
+  "консультант", "специалист", "поддержка", "помощь человека"
+];
+
 export async function generateAiResponse(
   userMessage: string,
   conversationHistory: ChatMessage[],
   context: TenantContext
 ): Promise<AiResponseResult> {
-  const matchedTag = checkTagRules(userMessage, context.tagRules);
+  const catalogUrl = `https://${process.env.REPLIT_DEV_DOMAIN || 'app.replit.dev'}/catalog/${context.slug}`;
   
-  if (matchedTag && matchedTag.action === "send_catalog_link") {
-    const catalogUrl = `https://${process.env.REPLIT_DEV_DOMAIN || 'app.replit.dev'}/catalog/${context.slug}`;
-    let response = matchedTag.responseTemplate || `Вот ссылка на наш каталог: ${catalogUrl}`;
-    response = response.replace("{catalog_link}", catalogUrl);
+  // Check for handoff request first
+  if (isHandoffRequest(userMessage)) {
     return {
-      content: response,
-      matchedTag: matchedTag.tag,
-      action: matchedTag.action,
+      content: `Конечно! Сейчас позову менеджера, он скоро подключится к нашему диалогу и поможет вам. Пожалуйста, подождите немного 🙏`,
+      matchedTag: "handoff",
+      action: "handoff",
     };
   }
   
-  const systemPrompt = buildSystemPrompt(context, matchedTag);
+  // Check tag rules
+  const matchedTag = checkTagRules(userMessage, context.tagRules);
+  
+  if (matchedTag) {
+    if (matchedTag.action === "send_catalog_link") {
+      let response = matchedTag.responseTemplate || 
+        `С удовольствием покажу наш каталог! 🛍️\n\n👉 **Каталог "${context.storeName}"**\n${catalogUrl}\n\nТам вы найдёте все товары с ценами и сможете оформить заказ.`;
+      response = response.replace("{catalog_link}", catalogUrl);
+      response = response.replace("{store_name}", context.storeName);
+      return {
+        content: response,
+        matchedTag: matchedTag.tag,
+        action: matchedTag.action,
+      };
+    }
+    
+    if (matchedTag.action === "handoff") {
+      return {
+        content: `Хорошо, сейчас позову менеджера! Он скоро подключится и поможет вам. Подождите, пожалуйста 🙏`,
+        matchedTag: matchedTag.tag,
+        action: "handoff",
+      };
+    }
+  }
+  
+  const systemPrompt = buildSystemPrompt(context, catalogUrl, matchedTag);
   
   const messages: ChatMessage[] = [
     { role: "system", content: systemPrompt },
@@ -102,6 +142,11 @@ export async function generateAiResponse(
   }
 }
 
+function isHandoffRequest(message: string): boolean {
+  const lowerMessage = message.toLowerCase();
+  return HANDOFF_KEYWORDS.some(keyword => lowerMessage.includes(keyword));
+}
+
 function checkTagRules(message: string, tagRules?: TagRule[]): TagRule | undefined {
   if (!tagRules || tagRules.length === 0) return undefined;
   
@@ -126,9 +171,7 @@ function detectSuggestedStage(response: string, stages?: SalesStage[]): string |
   return undefined;
 }
 
-function buildSystemPrompt(context: TenantContext, matchedTag?: TagRule): string {
-  const catalogUrl = `https://${process.env.REPLIT_DEV_DOMAIN || 'app.replit.dev'}/catalog/${context.slug}`;
-  
+function buildSystemPrompt(context: TenantContext, catalogUrl: string, matchedTag?: TagRule): string {
   let prompt = `Ты — профессиональный AI-продавец-консультант магазина "${context.storeName}".`;
   
   if (context.storeDescription) {
@@ -137,6 +180,28 @@ function buildSystemPrompt(context: TenantContext, matchedTag?: TagRule): string
   
   prompt += `\n\n## ТВОЯ ГЛАВНАЯ ЗАДАЧА
 Твоя цель — не просто отвечать на вопросы, а вести клиента к покупке через выявление потребностей.`;
+
+  // Promotions section - IMPORTANT
+  if (context.promotions && context.promotions.length > 0) {
+    prompt += `\n\n## 🔥 АКТУАЛЬНЫЕ АКЦИИ И СКИДКИ (ОБЯЗАТЕЛЬНО УПОМИНАЙ!)`;
+    context.promotions.forEach(promo => {
+      prompt += `\n\n**${promo.name}**`;
+      if (promo.description) {
+        prompt += `\n${promo.description}`;
+      }
+      if (promo.discountPercent) {
+        prompt += `\nСкидка: ${promo.discountPercent}%`;
+      }
+      if (promo.discountAmount) {
+        prompt += `\nСкидка: ${promo.discountAmount.toLocaleString()} тг`;
+      }
+      if (promo.endDate) {
+        const endDate = new Date(promo.endDate);
+        prompt += `\nДействует до: ${endDate.toLocaleDateString('ru-RU')}`;
+      }
+    });
+    prompt += `\n\nАКТИВНО предлагай акции клиентам! Это отличный повод для покупки.`;
+  }
 
   if (context.salesScript?.stages && context.salesScript.stages.length > 0) {
     prompt += `\n\n## СКРИПТ ПРОДАЖ - СЛЕДУЙ ЭТИМ ЭТАПАМ`;
@@ -173,8 +238,16 @@ function buildSystemPrompt(context: TenantContext, matchedTag?: TagRule): string
   }
 
   prompt += `\n\n## ССЫЛКА НА КАТАЛОГ
-Каталог магазина: ${catalogUrl}
-Когда клиент хочет посмотреть товары, выбрать или купить — ОБЯЗАТЕЛЬНО дай ссылку на каталог.`;
+Когда клиент хочет посмотреть товары, выбрать или купить — ОБЯЗАТЕЛЬНО дай ссылку в таком формате:
+
+👉 **Каталог "${context.storeName}"**
+${catalogUrl}
+
+Там все товары с ценами и можно оформить заказ!`;
+
+  prompt += `\n\n## ПЕРЕДАЧА МЕНЕДЖЕРУ
+Если клиент просит менеджера, оператора или живого человека — НЕ ГОВОРИ звонить по телефону!
+Отвечай: "Конечно! Сейчас позову менеджера, он скоро подключится к нашему диалогу. Подождите, пожалуйста 🙏"`;
 
   if (context.tone === "formal") {
     prompt += `\n\n## СТИЛЬ ОБЩЕНИЯ
@@ -184,7 +257,7 @@ function buildSystemPrompt(context: TenantContext, matchedTag?: TagRule): string
 Общайся в непринуждённом дружеском стиле, можно на "ты".`;
   } else {
     prompt += `\n\n## СТИЛЬ ОБЩЕНИЯ
-Общайся дружелюбно, вежливо, с энтузиазмом продавца.`;
+Общайся дружелюбно, вежливо, с энтузиазмом продавца. Используй эмодзи умеренно.`;
   }
 
   if (context.policies) {
@@ -196,7 +269,7 @@ function buildSystemPrompt(context: TenantContext, matchedTag?: TagRule): string
       prompt += `\n- НИКОГДА не придумывай цены. Если не знаешь цену — предложи посмотреть в каталоге.`;
     }
     if (context.policies.offerHandoffIfNoAnswer) {
-      prompt += `\n- Если не можешь ответить — предложи связаться с менеджером.`;
+      prompt += `\n- Если не можешь ответить — предложи позвать менеджера (НЕ звонить по телефону!).`;
     }
     if (context.policies.boundariesText) {
       prompt += `\n- ${context.policies.boundariesText}`;
@@ -207,9 +280,6 @@ function buildSystemPrompt(context: TenantContext, matchedTag?: TagRule): string
     prompt += `\n\n## ОБНАРУЖЕН ТЕГ: ${matchedTag.displayName}`;
     if (matchedTag.responseTemplate) {
       prompt += `\nИспользуй этот шаблон ответа: ${matchedTag.responseTemplate}`;
-    }
-    if (matchedTag.action === "handoff") {
-      prompt += `\nПредложи связаться с менеджером для этого вопроса.`;
     }
   }
   
@@ -250,9 +320,11 @@ function buildSystemPrompt(context: TenantContext, matchedTag?: TagRule): string
   prompt += `\n\n## ВАЖНЫЕ ПРАВИЛА
 1. ВСЕГДА задавай уточняющие вопросы для выявления потребностей
 2. НЕ просто отвечай — веди клиента к покупке
-3. При запросе товаров — давай ССЫЛКУ НА КАТАЛОГ: ${catalogUrl}
-4. Отвечай кратко, по делу, максимум 2-3 предложения
-5. Если клиент готов купить — направь в каталог для оформления заказа`;
+3. При запросе товаров — давай ССЫЛКУ НА КАТАЛОГ в красивом формате
+4. АКТИВНО предлагай актуальные акции и скидки!
+5. Отвечай кратко, по делу, максимум 2-3 предложения
+6. Если клиент готов купить — направь в каталог
+7. При просьбе о менеджере — НЕ говори звонить, скажи что позовёшь менеджера`;
   
   return prompt;
 }
