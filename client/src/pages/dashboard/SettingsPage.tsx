@@ -5,8 +5,10 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { 
   Save, Store, MessageCircle, Bell, ExternalLink, Upload, Image, 
-  Share2, QrCode, Download, Clock, MapPin, Link2, Copy, Check
+  Share2, QrCode, Download, Clock, MapPin, Link2, Copy, Check, 
+  Loader2, Phone, Trash2, CheckCircle, AlertCircle, RefreshCw
 } from "lucide-react";
+import { SiWhatsapp } from "react-icons/si";
 import { z } from "zod";
 import QRCode from "qrcode";
 import { Button } from "@/components/ui/button";
@@ -36,14 +38,40 @@ const settingsFormSchema = z.object({
   ogTitle: z.string().optional(),
   ogDescription: z.string().optional(),
   ogImageUrl: z.string().optional(),
-  wahaBaseUrl: z.string().optional(),
-  wahaInstanceName: z.string().optional(),
   notificationPhone: z.string().optional(),
   telegramChatId: z.string().optional(),
   aiEnabled: z.boolean(),
 });
 
 type SettingsFormData = z.infer<typeof settingsFormSchema>;
+
+interface WahaInstance {
+  id: string;
+  instanceName: string;
+  phoneNumber: string | null;
+  status: string;
+  createdAt: string;
+}
+
+const wahaStatusLabels: Record<string, string> = {
+  created: "Создан",
+  starting: "Запуск...",
+  running: "Подключен",
+  stopped: "Остановлен",
+  failed: "Ошибка",
+  scan_qr: "Ожидает сканирования",
+  unknown: "Неизвестно",
+};
+
+const wahaStatusColors: Record<string, string> = {
+  running: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100",
+  scan_qr: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-100",
+  starting: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100",
+  stopped: "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-100",
+  failed: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-100",
+  created: "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-100",
+  unknown: "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-100",
+};
 
 export default function SettingsPage() {
   const { toast } = useToast();
@@ -52,11 +80,85 @@ export default function SettingsPage() {
   const [copied, setCopied] = useState(false);
   const [logoPreview, setLogoPreview] = useState<string>("");
   const [ogImagePreview, setOgImagePreview] = useState<string>("");
+  const [showWhatsAppQr, setShowWhatsAppQr] = useState(false);
+  const [currentInstance, setCurrentInstance] = useState<WahaInstance | null>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
   const ogImageInputRef = useRef<HTMLInputElement>(null);
 
   const { data: tenant, isLoading } = useQuery<Tenant>({
     queryKey: ["/api/tenant"],
+  });
+
+  const { data: wahaInstances, refetch: refetchWahaInstances } = useQuery<WahaInstance[]>({
+    queryKey: ["/api/waha/instances"],
+    refetchInterval: showWhatsAppQr ? 3000 : 10000,
+  });
+
+  const connectedInstance = wahaInstances?.find(i => i.status === "running");
+  const pendingInstance = wahaInstances?.find(i => i.status === "scan_qr" || i.status === "starting");
+
+  useEffect(() => {
+    if (pendingInstance && !currentInstance) {
+      setCurrentInstance(pendingInstance);
+      setShowWhatsAppQr(true);
+    }
+    if (connectedInstance && showWhatsAppQr) {
+      setShowWhatsAppQr(false);
+      setCurrentInstance(null);
+      toast({ title: "WhatsApp успешно подключен!" });
+    }
+  }, [pendingInstance, connectedInstance, currentInstance, showWhatsAppQr]);
+
+  const { data: wahaQr, refetch: refetchWahaQr } = useQuery<{ qrCode: string }>({
+    queryKey: ["/api/waha/instances", currentInstance?.id || "none", "qr"],
+    enabled: !!currentInstance?.id && showWhatsAppQr,
+    refetchInterval: showWhatsAppQr && !!currentInstance?.id ? 5000 : false,
+  });
+
+  const { data: wahaStatus, refetch: refetchWahaStatus } = useQuery<WahaInstance>({
+    queryKey: ["/api/waha/instances", currentInstance?.id || "none", "status"],
+    enabled: !!currentInstance?.id && showWhatsAppQr,
+    refetchInterval: showWhatsAppQr && !!currentInstance?.id ? 3000 : false,
+  });
+
+  useEffect(() => {
+    if (wahaStatus?.status === "running") {
+      setShowWhatsAppQr(false);
+      setCurrentInstance(null);
+      toast({ title: "WhatsApp успешно подключен!" });
+      refetchWahaInstances();
+    }
+  }, [wahaStatus?.status]);
+
+  const createWahaMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/waha/instances");
+      return res.json();
+    },
+    onSuccess: (data: WahaInstance) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/waha/instances"] });
+      setCurrentInstance(data);
+      setShowWhatsAppQr(true);
+      toast({ title: "Сканируйте QR-код в WhatsApp" });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Ошибка", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const deleteWahaMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return apiRequest("DELETE", `/api/waha/instances/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/waha/instances"] });
+      setShowWhatsAppQr(false);
+      setCurrentInstance(null);
+      toast({ title: "WhatsApp отключен" });
+    },
+    onError: () => {
+      toast({ title: "Ошибка отключения", variant: "destructive" });
+    },
   });
 
   const form = useForm<SettingsFormData>({
@@ -74,8 +176,6 @@ export default function SettingsPage() {
       ogTitle: "",
       ogDescription: "",
       ogImageUrl: "",
-      wahaBaseUrl: "",
-      wahaInstanceName: "",
       notificationPhone: "",
       telegramChatId: "",
       aiEnabled: false,
@@ -97,8 +197,6 @@ export default function SettingsPage() {
         ogTitle: (tenant as any).ogTitle || "",
         ogDescription: (tenant as any).ogDescription || "",
         ogImageUrl: (tenant as any).ogImageUrl || "",
-        wahaBaseUrl: tenant.wahaBaseUrl || "",
-        wahaInstanceName: tenant.wahaInstanceName || "",
         notificationPhone: tenant.notificationPhone || "",
         telegramChatId: tenant.telegramChatId || "",
         aiEnabled: tenant.aiEnabled,
@@ -457,10 +555,10 @@ export default function SettingsPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.15 }}
           >
-            <Card>
+            <Card data-testid="card-whatsapp-settings">
               <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2">
-                  <MessageCircle className="h-5 w-5" />
+                  <SiWhatsapp className="h-5 w-5 text-green-600" />
                   WhatsApp (WAHA)
                 </CardTitle>
                 <CardDescription>
@@ -468,46 +566,141 @@ export default function SettingsPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label>Статус подключения</Label>
-                    <p className="text-sm text-muted-foreground">
-                      {tenant?.wahaStatus === "connected"
-                        ? "WhatsApp подключен и готов к работе"
-                        : "WhatsApp не подключен"}
-                    </p>
+                {connectedInstance ? (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between p-4 border rounded-lg bg-green-50 dark:bg-green-950">
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-full bg-green-100 dark:bg-green-900 flex items-center justify-center">
+                          <CheckCircle className="h-5 w-5 text-green-600" />
+                        </div>
+                        <div>
+                          <p className="font-medium">WhatsApp подключен</p>
+                          <p className="text-sm text-muted-foreground">
+                            {connectedInstance.phoneNumber 
+                              ? `+${connectedInstance.phoneNumber}` 
+                              : connectedInstance.instanceName}
+                          </p>
+                        </div>
+                      </div>
+                      <Badge className={wahaStatusColors.running}>
+                        {wahaStatusLabels.running}
+                      </Badge>
+                    </div>
+                    <Button 
+                      type="button" 
+                      variant="outline"
+                      onClick={() => deleteWahaMutation.mutate(connectedInstance.id)}
+                      disabled={deleteWahaMutation.isPending}
+                      className="w-full text-destructive hover:text-destructive"
+                      data-testid="button-disconnect-whatsapp"
+                    >
+                      {deleteWahaMutation.isPending ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="mr-2 h-4 w-4" />
+                      )}
+                      Отключить WhatsApp
+                    </Button>
                   </div>
-                  <Badge
-                    variant={
-                      tenant?.wahaStatus === "connected" ? "default" : "secondary"
-                    }
-                  >
-                    {tenant?.wahaStatus === "connected" ? "Подключен" : "Не подключен"}
-                  </Badge>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="wahaBaseUrl">WAHA URL</Label>
-                    <Input
-                      id="wahaBaseUrl"
-                      placeholder="https://waha.example.com"
-                      {...form.register("wahaBaseUrl")}
-                    />
+                ) : showWhatsAppQr ? (
+                  <div className="space-y-4">
+                    <div className="flex flex-col items-center py-6">
+                      {wahaStatus?.status === "running" ? (
+                        <div className="text-center">
+                          <CheckCircle className="h-16 w-16 text-green-600 mx-auto mb-4" />
+                          <p className="text-lg font-medium">WhatsApp подключен!</p>
+                        </div>
+                      ) : wahaQr?.qrCode ? (
+                        <div className="space-y-4 text-center">
+                          <p className="text-sm text-muted-foreground">
+                            Откройте WhatsApp на телефоне → Связанные устройства → Привязка устройства
+                          </p>
+                          <div className="p-4 bg-white rounded-lg inline-block">
+                            <img 
+                              src={wahaQr.qrCode} 
+                              alt="WhatsApp QR Code" 
+                              className="w-48 h-48"
+                              data-testid="img-whatsapp-qr"
+                            />
+                          </div>
+                          <Badge className={wahaStatusColors.scan_qr}>
+                            {wahaStatusLabels.scan_qr}
+                          </Badge>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center gap-4 py-8">
+                          <Loader2 className="h-12 w-12 animate-spin text-muted-foreground" />
+                          <p className="text-muted-foreground">Загрузка QR-кода...</p>
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex gap-2">
+                      <Button 
+                        type="button"
+                        variant="outline" 
+                        onClick={() => {
+                          refetchWahaQr();
+                          refetchWahaStatus();
+                        }}
+                        className="flex-1"
+                      >
+                        <RefreshCw className="mr-2 h-4 w-4" />
+                        Обновить
+                      </Button>
+                      <Button 
+                        type="button"
+                        variant="ghost" 
+                        onClick={() => {
+                          setShowWhatsAppQr(false);
+                          if (currentInstance) {
+                            deleteWahaMutation.mutate(currentInstance.id);
+                          }
+                        }}
+                        className="flex-1"
+                      >
+                        Отмена
+                      </Button>
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="wahaInstanceName">Имя инстанса</Label>
-                    <Input
-                      id="wahaInstanceName"
-                      placeholder="default"
-                      {...form.register("wahaInstanceName")}
-                    />
+                ) : (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between p-4 border rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+                          <Phone className="h-5 w-5 text-muted-foreground" />
+                        </div>
+                        <div>
+                          <p className="font-medium">WhatsApp не подключен</p>
+                          <p className="text-sm text-muted-foreground">
+                            Подключите номер для получения заказов
+                          </p>
+                        </div>
+                      </div>
+                      <Badge variant="secondary">Не подключен</Badge>
+                    </div>
+                    <Button 
+                      type="button" 
+                      onClick={() => {
+                        if (pendingInstance) {
+                          setCurrentInstance(pendingInstance);
+                          setShowWhatsAppQr(true);
+                        } else {
+                          createWahaMutation.mutate();
+                        }
+                      }}
+                      disabled={createWahaMutation.isPending}
+                      className="w-full"
+                      data-testid="button-connect-whatsapp"
+                    >
+                      {createWahaMutation.isPending ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <QrCode className="mr-2 h-4 w-4" />
+                      )}
+                      Подключить через QR-код
+                    </Button>
                   </div>
-                </div>
-
-                <Button type="button" variant="outline" disabled>
-                  Подключить через QR-код
-                </Button>
+                )}
               </CardContent>
             </Card>
           </motion.div>

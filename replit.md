@@ -117,6 +117,13 @@ Preferred communication style: Simple, everyday language.
 - Added tenant schema fields: gisLink, workingHours, ogTitle, ogDescription, ogImageUrl
 - Settings page: logo/OG image upload, working hours, 2GIS link, custom slug editing
 - QR code generation with download and copy-to-clipboard functionality
+- WAHA WhatsApp integration implemented:
+  - Server service (server/services/waha.ts) for WAHA API communication
+  - waha_instances table for storing tenant WhatsApp connections
+  - Full API: create, start, stop, delete instances, get QR codes, status polling
+  - Settings page WhatsApp section: connect via QR, status display, disconnect
+  - Auto-detect pending instances on page load, auto-refresh status
+  - Webhook endpoint for receiving WAHA events
 
 ## API Endpoints
 
@@ -155,3 +162,14 @@ Preferred communication style: Simple, everyday language.
 - `PATCH /api/admin/tenants/:id` - Update tenant
 - `GET /api/admin/plans` - List all plans
 - `POST /api/admin/subscriptions/extend` - Extend subscription
+
+### WAHA WhatsApp Integration
+- `GET /api/waha/health` - Check WAHA server status
+- `GET /api/waha/instances` - List tenant WhatsApp instances
+- `POST /api/waha/instances` - Create new WhatsApp instance
+- `GET /api/waha/instances/:id/qr` - Get QR code for scanning
+- `GET /api/waha/instances/:id/status` - Get instance live status
+- `POST /api/waha/instances/:id/start` - Start stopped instance
+- `POST /api/waha/instances/:id/stop` - Stop running instance
+- `DELETE /api/waha/instances/:id` - Delete instance
+- `POST /api/waha/webhook` - WAHA webhook endpoint
