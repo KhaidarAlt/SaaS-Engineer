@@ -34,6 +34,15 @@ interface Promotion {
   endDate?: Date;
 }
 
+interface DiscountInfo {
+  name: string;
+  type: string;
+  value: number;
+  scope: string;
+  categoryName?: string;
+  productName?: string;
+}
+
 interface TenantContext {
   storeName: string;
   slug: string;
@@ -41,6 +50,7 @@ interface TenantContext {
   contactPhone?: string;
   products?: Array<{ name: string; price: number; description?: string; category?: string }>;
   promotions?: Promotion[];
+  discounts?: DiscountInfo[];
   policies?: {
     answerOnlyFromData?: boolean;
     offerHandoffIfNoAnswer?: boolean;
@@ -183,7 +193,7 @@ function buildSystemPrompt(context: TenantContext, catalogUrl: string, matchedTa
 
   // Promotions section - IMPORTANT
   if (context.promotions && context.promotions.length > 0) {
-    prompt += `\n\n## 🔥 АКТУАЛЬНЫЕ АКЦИИ И СКИДКИ (ОБЯЗАТЕЛЬНО УПОМИНАЙ!)`;
+    prompt += `\n\n## 🔥 АКТУАЛЬНЫЕ АКЦИИ (ОБЯЗАТЕЛЬНО УПОМИНАЙ!)`;
     context.promotions.forEach(promo => {
       prompt += `\n\n**${promo.name}**`;
       if (promo.description) {
@@ -201,6 +211,25 @@ function buildSystemPrompt(context: TenantContext, catalogUrl: string, matchedTa
       }
     });
     prompt += `\n\nАКТИВНО предлагай акции клиентам! Это отличный повод для покупки.`;
+  }
+
+  // Discounts section - IMPORTANT
+  if (context.discounts && context.discounts.length > 0) {
+    prompt += `\n\n## 💰 СКИДКИ В МАГАЗИНЕ (ОБЯЗАТЕЛЬНО УПОМИНАЙ!)`;
+    context.discounts.forEach(discount => {
+      const valueText = discount.type === 'percent' 
+        ? `${discount.value}%` 
+        : `${discount.value.toLocaleString()} тг`;
+      
+      if (discount.scope === 'product' && discount.productName) {
+        prompt += `\n- **${discount.name}**: скидка ${valueText} на товар "${discount.productName}"`;
+      } else if (discount.scope === 'category' && discount.categoryName) {
+        prompt += `\n- **${discount.name}**: скидка ${valueText} на всю категорию "${discount.categoryName}"`;
+      } else {
+        prompt += `\n- **${discount.name}**: скидка ${valueText}`;
+      }
+    });
+    prompt += `\n\nПредлагай товары со скидками! Клиенты любят выгодные предложения.`;
   }
 
   if (context.salesScript?.stages && context.salesScript.stages.length > 0) {
