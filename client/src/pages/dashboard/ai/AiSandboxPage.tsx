@@ -6,10 +6,35 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AiPaywall } from "@/components/AiPaywall";
-import { Send, Bot, User, RefreshCw, MessageSquare, ArrowLeft } from "lucide-react";
+import { Send, Bot, User, RefreshCw, MessageSquare, ArrowLeft, ExternalLink } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import { Link } from "wouter";
+
+function formatMessageContent(content: string) {
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  const parts = content.split(urlRegex);
+  
+  return parts.map((part, index) => {
+    if (urlRegex.test(part)) {
+      urlRegex.lastIndex = 0;
+      return (
+        <a
+          key={index}
+          href={part}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 text-primary underline hover:text-primary/80 font-medium"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {part.includes('/catalog/') ? '🛍️ Открыть каталог' : part}
+          <ExternalLink className="h-3 w-3" />
+        </a>
+      );
+    }
+    return <span key={index}>{part}</span>;
+  });
+}
 
 interface AiMessage {
   id: string;
@@ -153,7 +178,7 @@ export default function AiSandboxPage() {
                               : "bg-muted"
                           )}
                         >
-                          <p className="text-sm">{msg.content}</p>
+                          <p className="text-sm whitespace-pre-wrap">{formatMessageContent(msg.content)}</p>
                           <p className="text-xs opacity-60 mt-1">
                             {new Date(msg.createdAt).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}
                           </p>
