@@ -2045,6 +2045,7 @@ export async function registerRoutes(
       // Generate AI response for user messages
       if (req.body.role === "user") {
         let aiContent: string;
+        let matchedTag: string | undefined;
         
         if (isOpenAiConfigured()) {
           // Get conversation history for context
@@ -2054,25 +2055,73 @@ export async function registerRoutes(
             content: m.content,
           }));
           
-          // Get tenant info for context
-          const tenant = await storage.getTenant(req.user!.tenantId!);
-          const products = await storage.getProducts(req.user!.tenantId!);
-          const aiSettings = await storage.getAiSettings(req.user!.tenantId!);
+          // Get all context data in parallel
+          const tenantId = req.user!.tenantId!;
+          const [tenant, products, aiSettings, salesScripts, tagRules, faqItems, knowledge, policies] = await Promise.all([
+            storage.getTenant(tenantId),
+            storage.getProducts(tenantId),
+            storage.getAiSettings(tenantId),
+            storage.getAiSalesScripts(tenantId),
+            storage.getAiTagRules(tenantId),
+            storage.getAiFaqItems(tenantId),
+            storage.getAiKnowledgeArticles(tenantId),
+            storage.getAiPolicies(tenantId),
+          ]);
           
-          // Build context for AI
+          // Get active sales script
+          const activeScript = salesScripts.find(s => s.isActive);
+          
+          // Get enabled tag rules
+          const enabledTags = tagRules.filter(t => t.isEnabled);
+          
+          // Get categories for products
+          const categories = await storage.getCategories(tenantId);
+          const categoryMap = new Map(categories.map(c => [c.id, c.name]));
+          
+          // Build full context for AI
           const context = {
             storeName: tenant?.name || "Магазин",
+            slug: tenant?.slug || "catalog",
             storeDescription: tenant?.description || undefined,
             tone: aiSettings?.tone || "friendly",
-            products: products.slice(0, 10).map(p => ({
+            products: products.slice(0, 20).map(p => ({
               name: p.name,
               price: Number(p.price),
               description: p.description || undefined,
+              category: p.categoryId ? categoryMap.get(p.categoryId) : undefined,
             })),
+            salesScript: activeScript ? {
+              stages: activeScript.stagesJson || [],
+              forbiddenPhrases: activeScript.forbiddenPhrasesJson || [],
+            } : undefined,
+            tagRules: enabledTags.map(t => ({
+              tag: t.tag,
+              displayName: t.displayName,
+              keywords: t.keywordsJson || [],
+              action: t.action,
+              responseTemplate: t.responseTemplate || undefined,
+            })),
+            faq: faqItems.filter(f => f.isPublished).map(f => ({
+              question: f.question,
+              answer: f.answer,
+            })),
+            knowledge: knowledge.filter(k => k.isPublished).map(k => ({
+              title: k.title,
+              content: k.content,
+            })),
+            policies: policies ? {
+              answerOnlyFromData: policies.answerOnlyFromData,
+              offerHandoffIfNoAnswer: policies.offerHandoffIfNoAnswer,
+              neverInventPrices: policies.neverInventPrices,
+              followSalesScript: policies.followSalesScript,
+              boundariesText: policies.boundariesText || undefined,
+            } : undefined,
           };
           
           try {
-            aiContent = await generateAiResponse(req.body.content, history, context);
+            const result = await generateAiResponse(req.body.content, history, context);
+            aiContent = result.content;
+            matchedTag = result.matchedTag;
           } catch (error) {
             console.error("AI generation error:", error);
             aiContent = "Извините, произошла ошибка. Пожалуйста, попробуйте позже.";
@@ -2085,6 +2134,7 @@ export async function registerRoutes(
           conversationId: req.params.id,
           role: "assistant",
           content: aiContent,
+          tagMatched: matchedTag,
         });
         return res.json([message, aiResponse]);
       }
