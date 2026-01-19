@@ -11,8 +11,9 @@ interface WahaSession {
 }
 
 interface WahaQRResponse {
-  mimetype: string;
-  data: string;
+  mimetype?: string;
+  data?: string;
+  value?: string; // WAHA returns raw QR code value
 }
 
 interface WahaSessionConfig {
@@ -96,12 +97,20 @@ export const wahaService = {
 
   async getQRCode(sessionName: string): Promise<string> {
     try {
+      // WAHA API format: /api/{session}/auth/qr
       const response: WahaQRResponse = await wahaRequest("GET", `/api/${sessionName}/auth/qr?format=raw`);
+      console.log(`[WAHA] QR response for ${sessionName}:`, JSON.stringify(response).substring(0, 200));
+      // Response has 'value' field with raw QR code string
+      if (response && response.value) {
+        return response.value;
+      }
+      // Fallback for base64 encoded format
       if (response && response.data) {
         return `data:${response.mimetype};base64,${response.data}`;
       }
       return "";
-    } catch (error) {
+    } catch (error: any) {
+      console.error(`[WAHA] QR error for ${sessionName}:`, error?.message || error);
       return "";
     }
   },

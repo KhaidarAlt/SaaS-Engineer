@@ -10,7 +10,8 @@ import {
 } from "lucide-react";
 import { SiWhatsapp } from "react-icons/si";
 import { z } from "zod";
-import QRCode from "qrcode";
+import QRCodeLib from "qrcode";
+import { QRCodeSVG } from "qrcode.react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -210,7 +211,7 @@ export default function SettingsPage() {
   const generateQRCode = async (slug: string) => {
     try {
       const url = `${window.location.origin}/c/${slug}`;
-      const qr = await QRCode.toDataURL(url, { 
+      const qr = await QRCodeLib.toDataURL(url, { 
         width: 256, 
         margin: 2,
         color: { dark: "#000000", light: "#ffffff" }
@@ -616,10 +617,10 @@ export default function SettingsPage() {
                             Откройте WhatsApp на телефоне → Связанные устройства → Привязка устройства
                           </p>
                           <div className="p-4 bg-white rounded-lg inline-block">
-                            <img 
-                              src={wahaQr.qrCode} 
-                              alt="WhatsApp QR Code" 
-                              className="w-48 h-48"
+                            <QRCodeSVG 
+                              value={wahaQr.qrCode} 
+                              size={192}
+                              level="M"
                               data-testid="img-whatsapp-qr"
                             />
                           </div>
