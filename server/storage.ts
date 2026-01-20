@@ -903,6 +903,19 @@ export class DatabaseStorage implements IStorage {
     return conv;
   }
 
+  async getAiConversationByPhone(tenantId: string, customerPhone: string, channel: string = "whatsapp"): Promise<AiConversation | undefined> {
+    const [conv] = await db.select().from(aiConversations)
+      .where(and(
+        eq(aiConversations.tenantId, tenantId),
+        eq(aiConversations.customerPhone, customerPhone),
+        eq(aiConversations.channel, channel),
+        eq(aiConversations.status, "open")
+      ))
+      .orderBy(desc(aiConversations.updatedAt))
+      .limit(1);
+    return conv;
+  }
+
   async createAiConversation(data: InsertAiConversation): Promise<AiConversation> {
     const [conv] = await db.insert(aiConversations).values(data).returning();
     return conv;

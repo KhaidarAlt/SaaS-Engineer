@@ -2485,12 +2485,12 @@ export async function registerRoutes(
   app.post("/api/waha/webhook", async (req, res) => {
     try {
       const { event, session, payload } = req.body;
-      console.log("WAHA Webhook received:", { event, session });
+      console.log("[WAHA Webhook]", { event, session, payloadKeys: Object.keys(payload || {}) });
       
       // Find instance by session name
       const instance = await storage.getWahaInstanceByName(session);
       if (!instance) {
-        console.log("Unknown session:", session);
+        console.log("[WAHA] Unknown session:", session);
         return res.json({ ok: true });
       }
       
@@ -2512,23 +2512,202 @@ export async function registerRoutes(
         await storage.updateWahaInstance(instance.id, instance.tenantId, { status: newStatus });
       }
       
+      // Handle incoming messages
       if (event === "message" || event === "message.any") {
-        // Handle incoming messages - store in AI conversations
         const from = payload?.from;
         const text = payload?.body;
+        const fromMe = payload?.fromMe;
         
-        if (from && text) {
-          console.log(`Message from ${from}: ${text}`);
-          // TODO: Create or continue AI conversation, process with AI, send response
+        // Only process incoming messages (not our own)
+        if (from && text && !fromMe) {
+          console.log(`[WAHA] Message from ${from}: ${text}`);
+          
+          // Process message async to not block webhook response
+          processIncomingWhatsAppMessage(instance, from, text).catch(err => {
+            console.error("[WAHA] Error processing message:", err);
+          });
         }
       }
       
       res.json({ ok: true });
     } catch (error) {
-      console.error("Webhook error:", error);
+      console.error("[WAHA] Webhook error:", error);
       res.json({ ok: true }); // Always return 200 to WAHA
     }
   });
+
+  // Process incoming WhatsApp message with AI
+  async function processIncomingWhatsAppMessage(instance: any, from: string, text: string) {
+    const { generateAiResponse, isOpenAiConfigured } = await import("./services/openai");
+    
+    const tenantId = instance.tenantId;
+    
+    // Check if tenant has AI enabled
+    const tenant = await storage.getTenant(tenantId);
+    if (!tenant || !tenant.aiEnabled) {
+      console.log(`[WAHA] AI disabled for tenant ${tenantId}`);
+      return;
+    }
+    
+    // Check if OpenAI is configured
+    if (!isOpenAiConfigured()) {
+      console.error("[WAHA] OpenAI not configured");
+      return;
+    }
+    
+    // Normalize phone number (remove @c.us suffix if present)
+    const customerPhone = from.replace("@c.us", "").replace("@s.whatsapp.net", "");
+    
+    // Find or create conversation
+    let conversation = await storage.getAiConversationByPhone(tenantId, customerPhone, "whatsapp");
+    
+    if (!conversation) {
+      conversation = await storage.createAiConversation({
+        tenantId,
+        channel: "whatsapp",
+        customerPhone,
+        status: "open",
+      });
+      console.log(`[WAHA] Created new conversation ${conversation.id} for ${customerPhone}`);
+    }
+    
+    // Save user message
+    await storage.createAiMessage({
+      conversationId: conversation.id,
+      role: "user",
+      content: text,
+    });
+    
+    // Get conversation history
+    const messages = await storage.getAiMessages(conversation.id);
+    const conversationHistory = messages.slice(-10).map(m => ({
+      role: m.role as "user" | "assistant" | "system",
+      content: m.content,
+    }));
+    
+    // Build AI context
+    const products = await storage.getProducts(tenantId);
+    const categories = await storage.getCategories(tenantId);
+    const promotions = await storage.getPromotions(tenantId);
+    const discounts = await storage.getDiscounts(tenantId);
+    const policies = await storage.getAiPolicies(tenantId);
+    const tagRules = await storage.getAiTagRules(tenantId);
+    const faqItems = await storage.getAiFaqItems(tenantId);
+    const knowledgeArticles = await storage.getAiKnowledgeArticles(tenantId);
+    
+    // Build category map
+    const categoryMap = new Map<string, string>();
+    categories.forEach(c => categoryMap.set(c.id, c.name));
+    
+    const context = {
+      storeName: tenant.name,
+      slug: tenant.slug,
+      storeDescription: tenant.description || undefined,
+      contactPhone: tenant.contactPhone || undefined,
+      products: products.slice(0, 50).map(p => ({
+        name: p.name,
+        price: Number(p.price),
+        description: p.description || undefined,
+        category: p.categoryId ? categoryMap.get(p.categoryId) : undefined,
+      })),
+      promotions: promotions.filter(p => p.isActive).map(p => ({
+        name: p.title,
+        description: p.description || undefined,
+        discountPercent: p.discountType === "percent" && p.discountValue ? Number(p.discountValue) : undefined,
+        discountAmount: p.discountType === "amount" && p.discountValue ? Number(p.discountValue) : undefined,
+        startDate: p.startsAt || undefined,
+        endDate: p.endsAt || undefined,
+      })),
+      discounts: discounts.filter(d => d.isActive).map(d => ({
+        name: d.name,
+        type: d.type,
+        value: Number(d.value),
+        scope: d.scope,
+        categoryName: d.scope === "category" && d.scopeId ? categoryMap.get(d.scopeId) : undefined,
+        productName: undefined,
+      })),
+      policies: policies ? {
+        answerOnlyFromData: policies.answerOnlyFromData || undefined,
+        offerHandoffIfNoAnswer: policies.offerHandoffIfNoAnswer || undefined,
+        neverInventPrices: policies.neverInventPrices || undefined,
+        followSalesScript: policies.followSalesScript || undefined,
+        boundariesText: policies.boundariesText || undefined,
+      } : undefined,
+      tagRules: tagRules.map(r => ({
+        tag: r.tag,
+        displayName: r.displayName,
+        keywords: r.keywordsJson || [],
+        action: r.action,
+        responseTemplate: r.responseTemplate || undefined,
+      })),
+      faq: faqItems.map(f => ({
+        question: f.question,
+        answer: f.answer,
+      })),
+      knowledge: knowledgeArticles.map((k: { title: string; content: string }) => ({
+        title: k.title,
+        content: k.content,
+      })),
+      currentStage: conversation.currentStage || undefined,
+    };
+    
+    try {
+      // Generate AI response
+      const aiResult = await generateAiResponse(text, conversationHistory, context);
+      
+      console.log(`[WAHA] AI response: ${aiResult.content.substring(0, 100)}...`);
+      
+      // Save assistant message
+      await storage.createAiMessage({
+        conversationId: conversation.id,
+        role: "assistant",
+        content: aiResult.content,
+        tagMatched: aiResult.matchedTag || null,
+      });
+      
+      // Update conversation stage if suggested
+      if (aiResult.suggestedStage) {
+        await storage.updateAiConversation(conversation.id, {
+          currentStage: aiResult.suggestedStage,
+        });
+      }
+      
+      // Handle handoff action
+      if (aiResult.action === "handoff") {
+        await storage.updateAiConversation(conversation.id, {
+          status: "handoff",
+        });
+        // Create intervention event
+        await storage.createAiInterventionEvent({
+          tenantId,
+          conversationId: conversation.id,
+          type: "handoff_requested",
+          note: `Клиент ${customerPhone} запросил менеджера`,
+        });
+      }
+      
+      // Send response via WAHA
+      const chatId = from.includes("@") ? from : `${from}@c.us`;
+      await wahaService.sendTextMessage(instance.instanceName, chatId, aiResult.content);
+      
+      console.log(`[WAHA] Sent response to ${chatId}`);
+      
+    } catch (error) {
+      console.error("[WAHA] Error generating/sending AI response:", error);
+      
+      // Try to send fallback message
+      try {
+        const chatId = from.includes("@") ? from : `${from}@c.us`;
+        await wahaService.sendTextMessage(
+          instance.instanceName, 
+          chatId, 
+          "Извините, произошла ошибка. Пожалуйста, попробуйте позже или свяжитесь с нами напрямую."
+        );
+      } catch (sendError) {
+        console.error("[WAHA] Error sending fallback message:", sendError);
+      }
+    }
+  }
 
   return httpServer;
 }
