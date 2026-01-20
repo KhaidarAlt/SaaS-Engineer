@@ -582,12 +582,12 @@ export default function LandingPage() {
               </Card>
             </motion.div>
 
-            {/* Бизнес */}
+            {/* Business */}
             <motion.div variants={staggerItem}>
               <Card className="h-full flex flex-col">
                 <CardHeader>
-                  <CardTitle>Бизнес</CardTitle>
-                  <CardDescription>С AI-ассистентом</CardDescription>
+                  <CardTitle>Business</CardTitle>
+                  <CardDescription>AI-ассистент 24/7</CardDescription>
                   <div className="pt-4">
                     <span className="text-4xl font-bold">19 990 ₸</span>
                     <span className="text-muted-foreground"> / месяц</span>
@@ -601,11 +601,19 @@ export default function LandingPage() {
                     </li>
                     <li className="flex items-start gap-2">
                       <Check className="w-5 h-5 text-primary shrink-0 mt-0.5" />
-                      <span>AI-ассистент</span>
+                      <span>AI-ассистент 24/7</span>
                     </li>
                     <li className="flex items-start gap-2">
                       <Check className="w-5 h-5 text-primary shrink-0 mt-0.5" />
-                      <span>Лимиты на диалоги</span>
+                      <span>До 300 диалогов/мес</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <Check className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+                      <span>Скрипты продаж + база знаний</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <Check className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+                      <span>Передача менеджеру по триггерам</span>
                     </li>
                   </ul>
                 </CardContent>
@@ -623,7 +631,7 @@ export default function LandingPage() {
             <motion.div variants={staggerItem}>
               <Card className="h-full flex flex-col border-primary relative overflow-hidden">
                 <div className="absolute top-0 right-0 bg-primary text-primary-foreground text-xs font-medium px-3 py-1 rounded-bl-lg">
-                  Лучший выбор
+                  Самый выгодный
                 </div>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
@@ -640,19 +648,19 @@ export default function LandingPage() {
                   <ul className="space-y-3">
                     <li className="flex items-start gap-2">
                       <Check className="w-5 h-5 text-primary shrink-0 mt-0.5" />
-                      <span>Всё из тарифа "Бизнес"</span>
+                      <span>Всё из Business</span>
                     </li>
                     <li className="flex items-start gap-2">
                       <Check className="w-5 h-5 text-primary shrink-0 mt-0.5" />
-                      <span>Почти в 3 раза больше лимитов</span>
+                      <span>До 900 диалогов/мес</span>
                     </li>
                     <li className="flex items-start gap-2">
                       <Check className="w-5 h-5 text-primary shrink-0 mt-0.5" />
-                      <span>Максимальная автоматизация</span>
+                      <span>Приоритетная обработка диалогов</span>
                     </li>
                     <li className="flex items-start gap-2">
                       <Check className="w-5 h-5 text-primary shrink-0 mt-0.5" />
-                      <span>Лучшее соотношение цена/возможности</span>
+                      <span>Максимальная автоматизация продаж</span>
                     </li>
                   </ul>
                 </CardContent>
@@ -666,6 +674,9 @@ export default function LandingPage() {
               </Card>
             </motion.div>
           </motion.div>
+          <p className="text-center mt-8 text-xs text-muted-foreground max-w-2xl mx-auto">
+            * Диалог = общение AI с одним клиентом (уникальный номер) в течение месяца.
+          </p>
         </div>
       </section>
 
