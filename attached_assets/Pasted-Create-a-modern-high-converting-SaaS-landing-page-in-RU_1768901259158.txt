@@ -1,0 +1,266 @@
+Create a modern, high-converting SaaS landing page in RUSSIAN language.
+
+PRODUCT NAME:
+AIWA
+
+TAGLINE:
+Ваш AI-интернет-магазин в WhatsApp
+
+POSITIONING:
+This is a SaaS product that turns WhatsApp into a full-featured online store.
+The landing page must sell the product without additional consultations.
+Everything must be clear, simple and business-oriented.
+
+TARGET AUDIENCE:
+Businesses that sell PHYSICAL or DIGITAL PRODUCTS:
+• розничные магазины
+• онлайн-магазины
+• оптовые компании
+• дистрибьюторы
+• бренды и производители
+• продавцы в Instagram и WhatsApp
+• любой бизнес, принимающий заказы от клиентов
+
+DO NOT target:
+• услуги
+• сервисы
+• IT-команды
+• фрилансеров
+
+LANGUAGE & TONE:
+• All content must be written in RUSSIAN
+• Simple, confident, business language
+• No technical jargon
+• Focus on result, speed and simplicity
+
+DESIGN REQUIREMENTS:
+• Modern SaaS design
+• Clean, premium, light UI
+• Smooth animations (scroll, hover, micro-interactions)
+• Clear visual hierarchy
+• Strong call-to-action buttons
+• WOW-effect without overload
+• Fully responsive (desktop + mobile)
+
+–––––––––––––––––
+HERO SECTION (VERY IMPORTANT)
+–––––––––––––––––
+Main headline (large, bold):
+“Преврати WhatsApp в интернет-магазин.
+Сам, бесплатно навсегда.”
+
+Subheadline:
+“Красивый онлайн-каталог, автоматический приём заказов
+и AI-ассистент, который продаёт за вас 24/7.”
+
+Primary CTA button:
+“Создать каталог бесплатно”
+
+Secondary CTA button:
+“Посмотреть демо”
+
+Under CTA (trust & risk remover):
+“Без карты. Без программирования.
+Бесплатно до 20 товаров навсегда.”
+
+–––––––––––––––––
+PROBLEM SECTION
+–––––––––––––––––
+Title:
+“Почему бизнес теряет заказы в WhatsApp”
+
+Pain points:
+• Клиенты теряются в переписках
+• Нет единого каталога товаров
+• Заказы принимаются хаотично
+• Менеджеры не успевают отвечать
+• Нет контроля и аналитики
+• Нет системы — только чаты
+
+Closing line:
+“WhatsApp есть у всех. Проблема — в отсутствии системы.”
+
+–––––––––––––––––
+SOLUTION SECTION
+–––––––––––––––––
+Title:
+“Готовый интернет-магазин внутри WhatsApp”
+
+Description:
+AIWA превращает WhatsApp в полноценный интернет-магазин.
+Вы создаёте каталог, клиенты оформляют заказ,
+а заявки приходят прямо в WhatsApp и встроенную CRM.
+
+No websites.
+No complex setup.
+Everything works immediately.
+
+–––––––––––––––––
+CATALOG FEATURES SECTION
+–––––––––––––––––
+Title:
+“Каталог, который реально продаёт”
+
+Features:
+• Быстрая загрузка товаров
+• Массовый импорт из Excel
+• Несколько фото для каждого товара
+• Категории и подкатегории
+• Размеры, цвета и вариации
+• Скидки и акции
+• Корзина и оформление заказа
+• Современный дизайн с анимациями
+
+Short line:
+“Ваш каталог выглядит как полноценный интернет-магазин.”
+
+–––––––––––––––––
+HOW IT WORKS SECTION
+–––––––––––––––––
+Title:
+“Как это работает”
+
+Steps (with icons or animation):
+1. Загружаете товары
+2. Делитесь ссылкой на каталог
+3. Клиент выбирает и оформляет заказ
+4. Заявка приходит в WhatsApp и CRM
+
+–––––––––––––––––
+CRM SECTION
+–––––––––––––––––
+Title:
+“Встроенная CRM — всё под контролем”
+
+Features:
+• Все заказы в одном месте
+• История клиентов
+• Статусы заявок
+• Контроль обработки заказов
+• Ничего не теряется
+
+–––––––––––––––––
+AI ASSISTANT SECTION
+–––––––––––––––––
+Title:
+“AI-ассистент, который продаёт за вас”
+
+Description:
+AI-ассистент общается с клиентами,
+помогает выбрать товар и доводит до заказа.
+
+Features:
+• Работает 24/7
+• Общается на русском, казахском и английском
+• Знает ваш каталог, цены и акции
+• Следует готовому скрипту продаж
+• Не выходит за рамки ваших данных
+• Передаёт диалог менеджеру при необходимости
+
+Highlight:
+“Вы занимаетесь бизнесом — AI ведёт продажи.”
+
+–––––––––––––––––
+ANALYTICS SECTION
+–––––––––––––––––
+Title:
+“Аналитика, которая помогает зарабатывать больше”
+
+Metrics:
+• Переходы в каталог
+• Добавления в корзину
+• Оформленные заказы
+• Брошенные корзины
+• Конверсия
+• Общая сумма заказов
+• Самые продаваемые товары
+
+–––––––––––––––––
+SALES GROWTH SECTION
+–––––––––––––––––
+Title:
+“Инструменты роста среднего чека и лояльности”
+
+Features:
+• Скидки и акции
+• Умные рекомендации товаров
+• Напоминания о брошенных корзинах
+• Повторные заказы в один клик
+• Повышение лояльности клиентов
+
+–––––––––––––––––
+PRICING SECTION
+–––––––––––––––––
+Title:
+“Простые и понятные тарифы”
+
+Tariff 1 — FREE:
+Title: “Старт”
+Price: “0 ₸ навсегда”
+Includes:
+• Каталог до 20 товаров
+• Приём заявок в WhatsApp
+• Публичная ссылка на каталог
+Limitations:
+• Без аналитики
+• Без CRM
+• Без AI
+
+Tariff 2 — STANDARD:
+Title: “Каталог”
+Price: “9 990 ₸ / месяц”
+Includes:
+• Полноценный каталог
+• Категории и вариации
+• Скидки и акции
+• Встроенная CRM
+• Полная аналитика
+
+Tariff 3 — BUSINESS:
+Title: “Бизнес”
+Price: “19 990 ₸ / месяц”
+Includes:
+• Всё из тарифа “Каталог”
+• AI-ассистент
+• Лимиты на диалоги
+
+Tariff 4 — PRO (highlight as BEST VALUE):
+Title: “PRO”
+Price: “34 990 ₸ / месяц”
+Includes:
+• Всё из тарифа “Бизнес”
+• Почти в 3 раза больше лимитов на диалоги
+• Максимальная автоматизация продаж
+• Лучшее соотношение цены и возможностей
+
+–––––––––––––––––
+FINAL CTA SECTION
+–––––––––––––––––
+Title:
+“Создайте интернет-магазин в WhatsApp уже сегодня”
+
+Primary CTA:
+“Создать каталог бесплатно”
+
+Secondary CTA:
+“Посмотреть демо”
+
+Subtext:
+“Своими силами. Без карты. С результатом.”
+
+–––––––––––––––––
+FOOTER
+–––––––––––––––––
+Minimal footer:
+• AIWA
+• Краткое описание сервиса
+• Контакты
+• Политика конфиденциальности
+
+TECHNICAL NOTES:
+• Fully responsive
+• Smooth animations
+• Modern typography
+• Clean UI
+• No placeholder text
+• Ready-to-market SaaS look
