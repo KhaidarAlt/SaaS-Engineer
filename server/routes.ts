@@ -1746,7 +1746,14 @@ export async function registerRoutes(
   <meta property="og:description" content="${escapeHtml(ogDescription)}" />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="${fullUrl}" />
-  ${ogImage ? `<meta property="og:image" content="${ogImage.startsWith('http') ? ogImage : baseUrl + ogImage}" />` : ''}
+  ${ogImage ? `<meta property="og:image" content="${ogImage.startsWith('http') ? ogImage : baseUrl + ogImage}" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:type" content="image/png" />` : ''}
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="${escapeHtml(ogTitle)}" />
+  <meta name="twitter:description" content="${escapeHtml(ogDescription)}" />
+  ${ogImage ? `<meta name="twitter:image" content="${ogImage.startsWith('http') ? ogImage : baseUrl + ogImage}" />` : ''}
   <meta name="description" content="${escapeHtml(ogDescription)}" />
 </head>
 <body>
