@@ -204,13 +204,15 @@ export default function SettingsPage() {
       });
       setLogoPreview(tenant.logoUrl || "");
       setOgImagePreview((tenant as any).ogImageUrl || "");
-      generateQRCode(tenant.slug);
+      generateQRCode(tenant.slug, tenant.updatedAt);
     }
   }, [tenant, form]);
 
-  const generateQRCode = async (slug: string) => {
+  const generateQRCode = async (slug: string, updatedAt?: string | Date) => {
     try {
-      const url = `${window.location.origin}/c/${slug}`;
+      // Add version param based on updatedAt for cache busting in messengers
+      const version = updatedAt ? new Date(updatedAt).getTime() : Date.now();
+      const url = `${window.location.origin}/c/${slug}?v=${version}`;
       const qr = await QRCodeLib.toDataURL(url, { 
         width: 256, 
         margin: 2,
@@ -232,7 +234,9 @@ export default function SettingsPage() {
 
   const copyLink = () => {
     if (!tenant) return;
-    const url = `${window.location.origin}/c/${tenant.slug}`;
+    // Add version param for cache busting in messengers
+    const version = tenant.updatedAt ? new Date(tenant.updatedAt).getTime() : Date.now();
+    const url = `${window.location.origin}/c/${tenant.slug}?v=${version}`;
     navigator.clipboard.writeText(url);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -521,7 +525,7 @@ export default function SettingsPage() {
                   <div className="space-y-3">
                     <div className="flex items-center gap-2">
                       <Input
-                        value={tenant ? `${window.location.origin}/c/${tenant.slug}` : ""}
+                        value={tenant ? `${window.location.origin}/c/${tenant.slug}?v=${tenant.updatedAt ? new Date(tenant.updatedAt).getTime() : Date.now()}` : ""}
                         readOnly
                         className="text-sm"
                       />

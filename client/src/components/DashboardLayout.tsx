@@ -64,7 +64,9 @@ export function DashboardLayout({ children, isSuperAdmin = false }: DashboardLay
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const navItems = isSuperAdmin ? superAdminNavItems : tenantNavItems;
-  const catalogUrl = user?.tenant ? `/c/${(user.tenant as any).slug}` : null;
+  // Add version param based on tenant updatedAt for cache busting in messengers
+  const tenantVersion = user?.tenant?.updatedAt ? new Date(user.tenant.updatedAt).getTime() : Date.now();
+  const catalogUrl = user?.tenant ? `/c/${(user.tenant as any).slug}?v=${tenantVersion}` : null;
 
   const handleLogout = async () => {
     await logout();
