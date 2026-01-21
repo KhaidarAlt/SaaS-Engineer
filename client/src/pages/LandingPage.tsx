@@ -60,7 +60,7 @@ export default function LandingPage() {
             <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
               <MessageSquare className="w-5 h-5 text-primary-foreground" />
             </div>
-            <span className="text-xl font-bold">AIWA</span>
+            <span className="text-xl font-bold">BotFactory</span>
           </div>
           <div className="flex items-center gap-3">
             <ThemeToggle />
@@ -181,7 +181,7 @@ export default function LandingPage() {
               Готовый интернет-магазин внутри WhatsApp
             </h2>
             <p className="text-xl text-muted-foreground mb-8">
-              AIWA превращает WhatsApp в полноценный интернет-магазин.
+              BotFactory превращает WhatsApp в полноценный интернет-магазин.
               Вы создаёте каталог, клиенты оформляют заказ,
               а заявки приходят прямо в WhatsApp и встроенную CRM.
             </p>
@@ -714,7 +714,7 @@ export default function LandingPage() {
               <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
                 <MessageSquare className="w-5 h-5 text-primary-foreground" />
               </div>
-              <span className="text-xl font-bold">AIWA</span>
+              <span className="text-xl font-bold">BotFactory</span>
             </div>
             <p className="text-sm text-muted-foreground text-center">
               AI-интернет-магазин в WhatsApp для вашего бизнеса
@@ -725,7 +725,7 @@ export default function LandingPage() {
             </div>
           </div>
           <div className="mt-8 pt-8 border-t text-center text-sm text-muted-foreground">
-            © {new Date().getFullYear()} AIWA. Все права защищены.
+            © {new Date().getFullYear()} BotFactory. Все права защищены.
           </div>
         </div>
       </footer>

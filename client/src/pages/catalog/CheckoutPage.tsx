@@ -177,10 +177,19 @@ export default function CheckoutPage() {
       lines.push(`Скидка: -${formatKzt(parseFloat(order.discountTotal))} ₸`);
     }
     lines.push(`Итого: ${formatKzt(parseFloat(order.total))} ₸`);
+    
+    if (order.deliveryAddress) {
+      lines.push("");
+      lines.push(`Адрес доставки: ${order.deliveryAddress}`);
+    }
+    if (order.comment) {
+      lines.push(`Комментарий: ${order.comment}`);
+    }
+    
     lines.push("");
-    lines.push("Это демо-заказ от AIWA.");
+    lines.push("Это демо-заказ от BotFactory.");
     lines.push("Попробуйте создать свой каталог бесплатно:");
-    lines.push("https://aiwa.kz");
+    lines.push("https://botfactory.kz");
     
     const text = lines.join("\n");
     
