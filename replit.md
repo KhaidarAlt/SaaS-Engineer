@@ -124,6 +124,19 @@ Preferred communication style: Simple, everyday language.
   - Settings page WhatsApp section: connect via QR, status display, disconnect
   - Auto-detect pending instances on page load, auto-refresh status
   - Webhook endpoint for receiving WAHA events
+  - Fixed duplicate AI messages by filtering WAHA webhook events (only "message", not "message.any")
+- AI Settings extended:
+  - aiLanguage: Language selection (ru/kz/en) for AI responses
+  - aiSystemPrompt: Custom instructions from store owner added to AI system prompt
+  - aiTypingDelay: Simulated typing delay (0-10 sec) before sending WhatsApp response
+  - Settings UI: Language Select, Typing Delay Slider, System Prompt Textarea in SettingsPage
+- Catalog Health QA scoring (CatalogHealthPage):
+  - Weighted scoring algorithm: images 30%, descriptions 20%, zero prices 25%, inactive products 15%, empty categories 10%
+  - Issue detection for products without images/descriptions/prices, empty categories
+  - Actionable recommendations displayed with affected item counts
+- Cart UX improvements:
+  - Floating cart button on mobile with pulse animation and item count badge
+  - Toast notification with direct link to checkout after adding item
 
 ## API Endpoints
 

@@ -16,6 +16,7 @@ interface CartContextType {
   subtotal: number;
   tenantSlug: string | null;
   setTenantSlug: (slug: string) => void;
+  lastAddedAt: number;
 }
 
 const CartContext = createContext<CartContextType | null>(null);
@@ -23,6 +24,7 @@ const CartContext = createContext<CartContextType | null>(null);
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
   const [tenantSlug, setTenantSlug] = useState<string | null>(null);
+  const [lastAddedAt, setLastAddedAt] = useState<number>(0);
 
   useEffect(() => {
     const stored = localStorage.getItem("smartcatalog-cart");
@@ -53,6 +55,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       }
       return [...prev, { product, quantity }];
     });
+    setLastAddedAt(Date.now());
   }, []);
 
   const removeItem = useCallback((productId: string) => {
@@ -93,6 +96,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         subtotal,
         tenantSlug,
         setTenantSlug,
+        lastAddedAt,
       }}
     >
       {children}

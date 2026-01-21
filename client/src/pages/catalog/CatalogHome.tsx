@@ -15,7 +15,7 @@ import {
   MapPin,
   Clock,
 } from "lucide-react";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -72,7 +72,17 @@ function ProductCard({ product, tenantSlug }: { product: ProductWithPrice; tenan
     addItem(product);
     toast({
       title: "Добавлено в корзину",
-      description: product.name,
+      description: (
+        <div className="flex items-center justify-between gap-4">
+          <span className="truncate">{product.name}</span>
+          <a 
+            href={`/c/${tenantSlug}/cart`}
+            className="shrink-0 text-primary font-medium hover:underline"
+          >
+            Оформить
+          </a>
+        </div>
+      ),
     });
   };
 
@@ -161,7 +171,16 @@ export default function CatalogHome() {
   const [stockFilter, setStockFilter] = useState<string>("all");
   const [sizeFilter, setSizeFilter] = useState<string>("all");
   const [colorFilter, setColorFilter] = useState<string>("all");
-  const { items, totalItems } = useCart();
+  const { items, totalItems, lastAddedAt } = useCart();
+  const [isCartPulsing, setIsCartPulsing] = useState(false);
+  
+  useEffect(() => {
+    if (lastAddedAt > 0) {
+      setIsCartPulsing(true);
+      const timer = setTimeout(() => setIsCartPulsing(false), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [lastAddedAt]);
 
   const { data, isLoading, error } = useQuery<CatalogData>({
     queryKey: ["/api/catalog", slug],
@@ -673,6 +692,31 @@ export default function CatalogHome() {
           </div>
         </div>
       </footer>
+
+      {/* Floating Cart Button for Mobile */}
+      {totalItems > 0 && (
+        <Link href={`/c/${slug}/cart`}>
+          <motion.div
+            initial={{ scale: 0, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0, opacity: 0 }}
+            className={`fixed bottom-6 right-6 z-50 md:hidden ${isCartPulsing ? 'animate-bounce' : ''}`}
+          >
+            <Button 
+              size="lg" 
+              className={`h-16 w-16 rounded-full shadow-lg ${isCartPulsing ? 'ring-4 ring-primary/50' : ''}`}
+              data-testid="button-floating-cart"
+            >
+              <div className="relative">
+                <ShoppingCart className="h-6 w-6" />
+                <span className="absolute -top-3 -right-3 h-6 w-6 rounded-full bg-red-500 text-white text-xs font-bold flex items-center justify-center">
+                  {totalItems}
+                </span>
+              </div>
+            </Button>
+          </motion.div>
+        </Link>
+      )}
     </div>
   );
 }

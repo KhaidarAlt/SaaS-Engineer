@@ -101,9 +101,9 @@ export default function LandingPage() {
               AI-powered
             </Badge>
             <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold tracking-tight mb-6 leading-tight">
-              Преврати WhatsApp в<br />
-              <span className="text-primary">интернет-магазин.</span><br />
-              Сам, бесплатно навсегда.
+              Клиенты пишут —<br />
+              <span className="text-primary">AI продаёт.</span><br />
+              Без программистов и сложных настроек.
             </h1>
             <p className="text-xl md:text-2xl text-muted-foreground mb-8 max-w-2xl mx-auto">
               Красивый онлайн-каталог, автоматический приём заказов

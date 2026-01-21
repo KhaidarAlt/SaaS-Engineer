@@ -67,6 +67,8 @@ interface TenantContext {
   tagRules?: TagRule[];
   tone?: string;
   currentStage?: string;
+  aiLanguage?: string;
+  aiSystemPrompt?: string;
 }
 
 interface AiResponseResult {
@@ -182,10 +184,20 @@ function detectSuggestedStage(response: string, stages?: SalesStage[]): string |
 }
 
 function buildSystemPrompt(context: TenantContext, catalogUrl: string, matchedTag?: TagRule): string {
+  const langInstructions: Record<string, string> = {
+    ru: "Отвечай только на русском языке.",
+    kz: "Тек қазақ тілінде жауап бер. Жауап бер тек қазақша.",
+    en: "Reply only in English.",
+  };
+  
+  const lang = context.aiLanguage || "ru";
   let prompt = `Ты — профессиональный AI-продавец-консультант магазина "${context.storeName}".`;
   
+  prompt += `\n\n## ЯЗЫК ОБЩЕНИЯ
+${langInstructions[lang] || langInstructions.ru}`;
+  
   if (context.storeDescription) {
-    prompt += ` О магазине: ${context.storeDescription}`;
+    prompt += `\n\nО магазине: ${context.storeDescription}`;
   }
   
   prompt += `\n\n## ТВОЯ ГЛАВНАЯ ЗАДАЧА
@@ -354,6 +366,11 @@ ${catalogUrl}
 5. Отвечай кратко, по делу, максимум 2-3 предложения
 6. Если клиент готов купить — направь в каталог
 7. При просьбе о менеджере — НЕ говори звонить, скажи что позовёшь менеджера`;
+
+  if (context.aiSystemPrompt) {
+    prompt += `\n\n## ДОПОЛНИТЕЛЬНЫЕ ИНСТРУКЦИИ ОТ ВЛАДЕЛЬЦА
+${context.aiSystemPrompt}`;
+  }
   
   return prompt;
 }

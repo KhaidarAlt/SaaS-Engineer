@@ -19,6 +19,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
+import { Slider } from "@/components/ui/slider";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { PageLoader } from "@/components/LoadingSpinner";
 import { useToast } from "@/hooks/use-toast";
@@ -42,6 +50,9 @@ const settingsFormSchema = z.object({
   notificationPhone: z.string().optional(),
   telegramChatId: z.string().optional(),
   aiEnabled: z.boolean(),
+  aiLanguage: z.string().optional(),
+  aiSystemPrompt: z.string().optional(),
+  aiTypingDelay: z.number().min(0).max(10).optional(),
 });
 
 type SettingsFormData = z.infer<typeof settingsFormSchema>;
@@ -193,6 +204,9 @@ export default function SettingsPage() {
       notificationPhone: "",
       telegramChatId: "",
       aiEnabled: false,
+      aiLanguage: "ru",
+      aiSystemPrompt: "",
+      aiTypingDelay: 0,
     },
   });
 
@@ -214,6 +228,9 @@ export default function SettingsPage() {
         notificationPhone: tenant.notificationPhone || "",
         telegramChatId: tenant.telegramChatId || "",
         aiEnabled: tenant.aiEnabled,
+        aiLanguage: (tenant as any).aiLanguage || "ru",
+        aiSystemPrompt: (tenant as any).aiSystemPrompt || "",
+        aiTypingDelay: (tenant as any).aiTypingDelay || 0,
       });
       setLogoPreview(tenant.logoUrl || "");
       setOgImagePreview((tenant as any).ogImageUrl || "");
@@ -791,6 +808,61 @@ export default function SettingsPage() {
                     onCheckedChange={(checked) => form.setValue("aiEnabled", checked)}
                   />
                 </div>
+
+                {form.watch("aiEnabled") && (
+                  <div className="space-y-4 pt-4 border-t">
+                    <h4 className="font-medium">Системные настройки AI</h4>
+                    
+                    <div className="space-y-2">
+                      <Label htmlFor="aiLanguage">Язык общения</Label>
+                      <Select
+                        value={form.watch("aiLanguage") || "ru"}
+                        onValueChange={(value) => form.setValue("aiLanguage", value)}
+                      >
+                        <SelectTrigger data-testid="select-ai-language">
+                          <SelectValue placeholder="Выберите язык" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="ru">Русский</SelectItem>
+                          <SelectItem value="kz">Қазақша</SelectItem>
+                          <SelectItem value="en">English</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        На каком языке AI будет отвечать клиентам
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="aiTypingDelay">Имитация печатания: {form.watch("aiTypingDelay") || 0} сек</Label>
+                      <Slider
+                        value={[form.watch("aiTypingDelay") || 0]}
+                        onValueChange={(value) => form.setValue("aiTypingDelay", value[0])}
+                        max={10}
+                        step={1}
+                        className="w-full"
+                        data-testid="slider-ai-typing-delay"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Задержка перед ответом для имитации человека (0 = мгновенно)
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="aiSystemPrompt">Дополнительные инструкции для AI</Label>
+                      <Textarea
+                        id="aiSystemPrompt"
+                        placeholder="Например: Всегда предлагай скидку 5% при покупке от 3 товаров. Обращайся к клиентам на 'Вы'..."
+                        rows={4}
+                        {...form.register("aiSystemPrompt")}
+                        data-testid="textarea-ai-system-prompt"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Дополнительные правила поведения и стиля общения AI
+                      </p>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </motion.div>

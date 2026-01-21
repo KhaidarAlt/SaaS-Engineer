@@ -959,6 +959,98 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/catalog-health", requireAuth, async (req, res) => {
+    try {
+      const products = await storage.getProducts(req.user!.tenantId!);
+      const categories = await storage.getCategories(req.user!.tenantId!);
+
+      const productsWithoutImages = products.filter(p => !p.mainImageUrl);
+      const productsWithoutDescription = products.filter(p => !p.description || p.description.trim() === "");
+      const productsWithZeroPrice = products.filter(p => parseFloat(p.price) === 0);
+      const inactiveProducts = products.filter(p => !p.isActive);
+
+      const categoryProductCounts = new Map<string, number>();
+      products.forEach(p => {
+        if (p.categoryId) {
+          categoryProductCounts.set(p.categoryId, (categoryProductCounts.get(p.categoryId) || 0) + 1);
+        }
+      });
+      const emptyCategories = categories.filter(c => !categoryProductCounts.has(c.id));
+
+      let score = 100;
+      const recommendations: string[] = [];
+
+      if (products.length === 0) {
+        score = 0;
+        recommendations.push("Добавьте товары в каталог — это основа вашего магазина");
+      } else {
+        const noImagePercent = (productsWithoutImages.length / products.length) * 100;
+        const noDescPercent = (productsWithoutDescription.length / products.length) * 100;
+        const zeroPricePercent = (productsWithZeroPrice.length / products.length) * 100;
+        const inactivePercent = (inactiveProducts.length / products.length) * 100;
+
+        score -= Math.min(30, noImagePercent * 0.5);
+        score -= Math.min(20, noDescPercent * 0.3);
+        score -= Math.min(25, zeroPricePercent * 2.5);
+        score -= Math.min(15, inactivePercent * 0.3);
+        score -= Math.min(10, emptyCategories.length * 2);
+
+        if (productsWithoutImages.length > 0) {
+          recommendations.push(`Добавьте фото к ${productsWithoutImages.length} товарам — это повышает конверсию на 30%`);
+        }
+        if (productsWithoutDescription.length > 0) {
+          recommendations.push(`Добавьте описание к ${productsWithoutDescription.length} товарам — клиенты хотят знать детали`);
+        }
+        if (productsWithZeroPrice.length > 0) {
+          recommendations.push(`Установите цену для ${productsWithZeroPrice.length} товаров — товары с ценой 0 не продаются`);
+        }
+        if (emptyCategories.length > 0) {
+          recommendations.push(`Заполните ${emptyCategories.length} пустых категорий или удалите их`);
+        }
+        if (inactiveProducts.length > 5) {
+          recommendations.push(`У вас ${inactiveProducts.length} неактивных товаров — активируйте их или удалите`);
+        }
+        if (categories.length === 0 && products.length > 5) {
+          recommendations.push("Создайте категории для удобной навигации клиентов");
+        }
+      }
+
+      score = Math.max(0, Math.min(100, Math.round(score)));
+
+      res.json({
+        score,
+        totalProducts: products.length,
+        totalCategories: categories.length,
+        issues: {
+          productsWithoutImages: {
+            count: productsWithoutImages.length,
+            items: productsWithoutImages.slice(0, 10).map(p => ({ id: p.id, name: p.name })),
+          },
+          productsWithoutDescription: {
+            count: productsWithoutDescription.length,
+            items: productsWithoutDescription.slice(0, 10).map(p => ({ id: p.id, name: p.name })),
+          },
+          productsWithZeroPrice: {
+            count: productsWithZeroPrice.length,
+            items: productsWithZeroPrice.slice(0, 10).map(p => ({ id: p.id, name: p.name })),
+          },
+          emptyCategories: {
+            count: emptyCategories.length,
+            items: emptyCategories.slice(0, 10).map(c => ({ id: c.id, name: c.name })),
+          },
+          inactiveProducts: {
+            count: inactiveProducts.length,
+            items: inactiveProducts.slice(0, 10).map(p => ({ id: p.id, name: p.name })),
+          },
+        },
+        recommendations,
+      });
+    } catch (error) {
+      console.error("Catalog health error:", error);
+      res.status(500).json({ message: "Ошибка анализа каталога" });
+    }
+  });
+
   app.get("/api/billing", requireAuth, async (req, res) => {
     try {
       const subscription = await storage.getSubscription(req.user!.tenantId!);
@@ -2169,6 +2261,8 @@ export async function registerRoutes(
               productName: d.scope === 'product' && d.scopeId ? products.find(p => p.id === d.scopeId)?.name : undefined,
             })),
             contactPhone: tenant?.contactPhone || undefined,
+            aiLanguage: (tenant as any).aiLanguage || "ru",
+            aiSystemPrompt: (tenant as any).aiSystemPrompt || undefined,
           };
           
           try {
@@ -2677,6 +2771,8 @@ export async function registerRoutes(
         content: k.content,
       })),
       currentStage: conversation.currentStage || undefined,
+      aiLanguage: (tenant as any).aiLanguage || "ru",
+      aiSystemPrompt: (tenant as any).aiSystemPrompt || undefined,
     };
     
     try {
@@ -2712,6 +2808,13 @@ export async function registerRoutes(
           type: "handoff_requested",
           note: `Клиент ${customerPhone} запросил менеджера`,
         });
+      }
+      
+      // Apply typing delay after AI generation (simulates human typing)
+      const typingDelay = (tenant as any).aiTypingDelay || 0;
+      if (typingDelay > 0) {
+        console.log(`[WAHA] Simulating typing for ${typingDelay}s...`);
+        await new Promise(resolve => setTimeout(resolve, typingDelay * 1000));
       }
       
       // Send response via WAHA
