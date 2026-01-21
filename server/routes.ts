@@ -2539,8 +2539,9 @@ export async function registerRoutes(
         await storage.updateWahaInstance(instance.id, instance.tenantId, { status: newStatus });
       }
       
-      // Handle incoming messages
-      if (event === "message" || event === "message.any") {
+      // Handle incoming messages (only process "message" event to avoid duplicates, 
+      // WAHA sends both "message" and "message.any" for the same message)
+      if (event === "message") {
         const from = payload?.from;
         const text = payload?.body;
         const fromMe = payload?.fromMe;
