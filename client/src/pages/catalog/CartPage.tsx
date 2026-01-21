@@ -1,6 +1,6 @@
 import { useRoute, Link, useLocation } from "wouter";
 import { motion } from "framer-motion";
-import { ArrowLeft, Minus, Plus, Trash2, ShoppingCart, Package } from "lucide-react";
+import { ArrowLeft, Minus, Plus, Trash2, ShoppingCart, Package, MessageCircle } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -62,6 +62,27 @@ export default function CartPage() {
       </header>
 
       <main className="max-w-3xl mx-auto px-4 md:px-6 lg:px-8 py-8">
+        {/* Demo banner */}
+        {slug === "demo" && items.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-6 bg-gradient-to-r from-primary/10 via-primary/5 to-accent/10 border border-primary/20 rounded-lg p-4"
+          >
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
+                <MessageCircle className="w-5 h-5 text-primary" />
+              </div>
+              <div>
+                <p className="font-semibold mb-1">Оформите заказ и получите его в WhatsApp</p>
+                <p className="text-sm text-muted-foreground">
+                  Введите свой номер при оформлении — заказ придёт вам в мессенджер
+                </p>
+              </div>
+            </div>
+          </motion.div>
+        )}
+        
         {items.length > 0 ? (
           <motion.div
             initial={{ opacity: 0, y: 20 }}

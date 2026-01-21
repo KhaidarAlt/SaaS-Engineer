@@ -14,6 +14,7 @@ import {
   Phone,
   MapPin,
   Clock,
+  MessageCircle,
 } from "lucide-react";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
@@ -429,6 +430,33 @@ export default function CatalogHome() {
           )}
         </div>
       </header>
+
+      {/* Demo banner for testing */}
+      {slug === "demo" && (
+        <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-accent/10 border-b">
+          <div className="max-w-7xl mx-auto px-4 md:px-6 lg:px-8 py-4">
+            <div className="flex flex-col md:flex-row items-center justify-between gap-4 flex-wrap">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
+                  <MessageCircle className="w-5 h-5 text-primary" />
+                </div>
+                <div>
+                  <p className="font-semibold">Попробуйте сами!</p>
+                  <p className="text-sm text-muted-foreground">
+                    Оформите заказ и получите его себе в WhatsApp
+                  </p>
+                </div>
+              </div>
+              <Link href={`/c/${slug}/cart`}>
+                <Button size="sm" data-testid="button-demo-cta">
+                  <ShoppingCart className="w-4 h-4 mr-2" />
+                  Перейти к оформлению
+                </Button>
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
 
       <main className="max-w-7xl mx-auto px-4 md:px-6 lg:px-8 py-8">
         {data?.promotions && data.promotions.length > 0 && (

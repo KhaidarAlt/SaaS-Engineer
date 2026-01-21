@@ -137,6 +137,14 @@ Preferred communication style: Simple, everyday language.
 - Cart UX improvements:
   - Floating cart button on mobile with pulse animation and item count badge
   - Toast notification with direct link to checkout after adding item
+- Landing page updated:
+  - Headline: "Преврати WhatsApp в интернет-магазин"
+  - Demo button: "Посмотреть пример магазина" linking to /c/demo
+- Demo catalog for testing:
+  - Demo tenant with slug="demo" created with sample products
+  - Demo banners on catalog, cart, and checkout pages
+  - After demo order, customer can send order to their own WhatsApp
+  - CTA to create their own catalog after successful demo order
 
 ## API Endpoints
 

@@ -101,9 +101,8 @@ export default function LandingPage() {
               AI-powered
             </Badge>
             <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold tracking-tight mb-6 leading-tight">
-              Клиенты пишут —<br />
-              <span className="text-primary">AI продаёт.</span><br />
-              Без программистов и сложных настроек.
+              Преврати <span className="text-primary">WhatsApp</span><br />
+              в интернет-магазин
             </h1>
             <p className="text-xl md:text-2xl text-muted-foreground mb-8 max-w-2xl mx-auto">
               Красивый онлайн-каталог, автоматический приём заказов
@@ -118,7 +117,7 @@ export default function LandingPage() {
               </Link>
               <Link href="/c/demo">
                 <Button size="lg" variant="outline" className="text-lg px-8 h-14" data-testid="button-hero-demo">
-                  Посмотреть демо
+                  Посмотреть пример магазина
                 </Button>
               </Link>
             </div>

@@ -4,7 +4,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation } from "@tanstack/react-query";
 import { useRoute, Link } from "wouter";
 import { motion } from "framer-motion";
-import { ArrowLeft, Send, CheckCircle2, Package } from "lucide-react";
+import { ArrowLeft, Send, CheckCircle2, Package, MessageCircle, Sparkles } from "lucide-react";
+import { SiWhatsapp } from "react-icons/si";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,6 +20,7 @@ import { checkoutSchema, type CheckoutInput } from "@shared/schema";
 import { WhatsAppSendButton } from "@/components/WhatsAppSendButton";
 import { trackEvent, updateCartSession, convertCartSession } from "@/lib/analytics";
 import type { OrderForWhatsApp } from "@/lib/whatsapp";
+import { normalizeKzPhoneToWhatsApp, formatKzt } from "@/lib/whatsapp";
 
 interface OrderResponse {
   orderId: string;
@@ -152,8 +154,49 @@ export default function CheckoutPage() {
     return new Intl.NumberFormat("ru-KZ").format(value) + " ₸";
   };
 
+  // Build WhatsApp URL for demo orders (send to customer's own phone)
+  const buildDemoWhatsAppUrl = () => {
+    if (!orderData) return null;
+    const order = orderData.order;
+    const customerPhone = order.customerPhone;
+    
+    // Build demo order text
+    const lines: string[] = [];
+    lines.push(`Ваш заказ №${order.orderNumber} оформлен!`);
+    lines.push(`Дата: ${new Date(order.createdAt).toLocaleString("ru-RU")}`);
+    lines.push(`------------------------------`);
+    
+    order.items.forEach((it, idx) => {
+      lines.push(
+        `${idx + 1}) ${it.productName} — ${it.quantity} шт × ${formatKzt(parseFloat(it.unitPrice))} ₸ = ${formatKzt(parseFloat(it.total))} ₸`
+      );
+    });
+    
+    lines.push(`------------------------------`);
+    if (parseFloat(order.discountTotal) > 0) {
+      lines.push(`Скидка: -${formatKzt(parseFloat(order.discountTotal))} ₸`);
+    }
+    lines.push(`Итого: ${formatKzt(parseFloat(order.total))} ₸`);
+    lines.push("");
+    lines.push("Это демо-заказ от AIWA.");
+    lines.push("Попробуйте создать свой каталог бесплатно:");
+    lines.push("https://aiwa.kz");
+    
+    const text = lines.join("\n");
+    
+    try {
+      const normalized = normalizeKzPhoneToWhatsApp(customerPhone);
+      return `https://wa.me/${normalized}?text=${encodeURIComponent(text)}`;
+    } catch {
+      return null;
+    }
+  };
+
   if (orderSuccess && orderData) {
     const whatsAppOrder = buildWhatsAppOrder();
+    const isDemo = slug === "demo";
+    const demoWhatsAppUrl = isDemo ? buildDemoWhatsAppUrl() : null;
+    
     return (
       <div className="min-h-screen bg-background flex items-center justify-center px-4 py-8">
         <motion.div
@@ -164,30 +207,78 @@ export default function CheckoutPage() {
           <div className="w-20 h-20 rounded-full bg-green-500/10 flex items-center justify-center mx-auto mb-6">
             <CheckCircle2 className="h-10 w-10 text-green-500" />
           </div>
-          <h1 className="text-2xl font-bold mb-2">Спасибо! Заказ создан.</h1>
-          <p className="text-muted-foreground mb-6">
-            Номер вашего заказа: <strong>#{orderData.orderNumber}</strong>
-          </p>
           
-          {whatsAppOrder && (
-            <div className="mb-6">
-              <WhatsAppSendButton 
-                recipientPhone={orderData.ownerWhatsAppPhone}
-                order={whatsAppOrder}
-                tenantSlug={slug}
-                orderId={orderData.orderId}
-              />
-            </div>
-          )}
+          {isDemo ? (
+            <>
+              <h1 className="text-2xl font-bold mb-2">Заказ создан!</h1>
+              <p className="text-muted-foreground mb-6">
+                Номер заказа: <strong>#{orderData.orderNumber}</strong>
+              </p>
+              
+              {demoWhatsAppUrl && (
+                <div className="mb-6 space-y-3">
+                  <div className="bg-primary/5 border border-primary/20 rounded-lg p-4">
+                    <div className="flex items-center justify-center gap-2 mb-2">
+                      <Sparkles className="w-5 h-5 text-primary" />
+                      <span className="font-semibold">Вот как это работает!</span>
+                    </div>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Нажмите кнопку ниже, чтобы получить заказ себе в WhatsApp
+                    </p>
+                    <a href={demoWhatsAppUrl} target="_blank" rel="noopener noreferrer">
+                      <Button className="w-full bg-[#25D366] text-white" data-testid="button-demo-whatsapp">
+                        <SiWhatsapp className="w-5 h-5 mr-2" />
+                        Получить заказ в WhatsApp
+                      </Button>
+                    </a>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    В реальном магазине заказ приходит владельцу автоматически
+                  </p>
+                </div>
+              )}
+              
+              <div className="space-y-3">
+                <Link href="/register">
+                  <Button className="w-full" data-testid="button-create-catalog">
+                    Создать свой каталог бесплатно
+                  </Button>
+                </Link>
+                <Link href={`/c/${slug}`}>
+                  <Button variant="outline" className="w-full" data-testid="button-continue-shopping">
+                    Вернуться к каталогу
+                  </Button>
+                </Link>
+              </div>
+            </>
+          ) : (
+            <>
+              <h1 className="text-2xl font-bold mb-2">Спасибо! Заказ создан.</h1>
+              <p className="text-muted-foreground mb-6">
+                Номер вашего заказа: <strong>#{orderData.orderNumber}</strong>
+              </p>
+              
+              {whatsAppOrder && (
+                <div className="mb-6">
+                  <WhatsAppSendButton 
+                    recipientPhone={orderData.ownerWhatsAppPhone}
+                    order={whatsAppOrder}
+                    tenantSlug={slug}
+                    orderId={orderData.orderId}
+                  />
+                </div>
+              )}
 
-          <p className="text-sm text-muted-foreground mb-6">
-            Мы свяжемся с вами для подтверждения заказа
-          </p>
-          <Link href={`/c/${slug}`}>
-            <Button variant="outline" data-testid="button-continue-shopping">
-              Вернуться к каталогу
-            </Button>
-          </Link>
+              <p className="text-sm text-muted-foreground mb-6">
+                Мы свяжемся с вами для подтверждения заказа
+              </p>
+              <Link href={`/c/${slug}`}>
+                <Button variant="outline" data-testid="button-continue-shopping">
+                  Вернуться к каталогу
+                </Button>
+              </Link>
+            </>
+          )}
         </motion.div>
       </div>
     );
@@ -229,6 +320,27 @@ export default function CheckoutPage() {
       </header>
 
       <main className="max-w-3xl mx-auto px-4 md:px-6 lg:px-8 py-8">
+        {/* Demo banner */}
+        {slug === "demo" && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-6 bg-gradient-to-r from-primary/10 via-primary/5 to-accent/10 border border-primary/20 rounded-lg p-4"
+          >
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
+                <MessageCircle className="w-5 h-5 text-primary" />
+              </div>
+              <div>
+                <p className="font-semibold mb-1">Попробуйте сами!</p>
+                <p className="text-sm text-muted-foreground">
+                  Введите свой WhatsApp номер и оформите заказ. После оформления вы получите заказ себе в мессенджер — так это работает для владельцев магазинов.
+                </p>
+              </div>
+            </div>
+          </motion.div>
+        )}
+        
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
