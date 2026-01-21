@@ -152,6 +152,20 @@ export const wahaService = {
     }
   },
 
+  async updateSessionWebhook(sessionName: string, webhookUrl: string): Promise<any> {
+    return wahaRequest("PUT", `/api/sessions/${sessionName}`, {
+      name: sessionName,
+      config: {
+        webhooks: [
+          {
+            url: webhookUrl,
+            events: ["message", "message.any", "session.status"],
+          },
+        ],
+      },
+    });
+  },
+
   generateInstanceName(tenantId: string): string {
     const shortId = tenantId.substring(0, 8);
     const timestamp = Date.now().toString(36);

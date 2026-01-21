@@ -2455,6 +2455,33 @@ export async function registerRoutes(
     }
   });
 
+  // Sync webhook URL for instance
+  app.post("/api/waha/instances/:id/sync-webhook", requireAuth, requireAiAccess, async (req, res) => {
+    try {
+      const instance = await storage.getWahaInstance(req.params.id, req.user!.tenantId!);
+      if (!instance) {
+        return res.status(404).json({ message: "Инстанс не найден" });
+      }
+      
+      const currentDomain = process.env.REPLIT_DEV_DOMAIN || process.env.REPLIT_DOMAINS?.split(",")[0];
+      if (!currentDomain) {
+        return res.status(500).json({ message: "Не удалось определить домен приложения" });
+      }
+      
+      const newWebhookUrl = `https://${currentDomain}/api/waha/webhook`;
+      
+      console.log(`[WAHA] Syncing webhook for ${instance.instanceName}: ${newWebhookUrl}`);
+      
+      await wahaService.updateSessionWebhook(instance.instanceName, newWebhookUrl);
+      await storage.updateWahaInstance(instance.id, req.user!.tenantId!, { webhookUrl: newWebhookUrl });
+      
+      res.json({ success: true, webhookUrl: newWebhookUrl });
+    } catch (error) {
+      console.error("Error syncing webhook:", error);
+      res.status(500).json({ message: "Ошибка синхронизации webhook: " + (error as Error).message });
+    }
+  });
+
   // Delete instance
   app.delete("/api/waha/instances/:id", requireAuth, requireAiAccess, async (req, res) => {
     try {
@@ -2485,7 +2512,7 @@ export async function registerRoutes(
   app.post("/api/waha/webhook", async (req, res) => {
     try {
       const { event, session, payload } = req.body;
-      console.log("[WAHA Webhook]", { event, session, payloadKeys: Object.keys(payload || {}) });
+      console.log("[WAHA Webhook] Received:", JSON.stringify({ event, session, payloadKeys: Object.keys(payload || {}), from: payload?.from, body: payload?.body?.substring?.(0, 50) }));
       
       // Find instance by session name
       const instance = await storage.getWahaInstanceByName(session);

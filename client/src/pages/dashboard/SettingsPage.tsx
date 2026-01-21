@@ -162,6 +162,19 @@ export default function SettingsPage() {
     },
   });
 
+  const syncWebhookMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return apiRequest("POST", `/api/waha/instances/${id}/sync-webhook`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/waha/instances"] });
+      toast({ title: "Webhook синхронизирован", description: "Теперь AI будет получать сообщения" });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Ошибка синхронизации", description: error.message, variant: "destructive" });
+    },
+  });
+
   const form = useForm<SettingsFormData>({
     resolver: zodResolver(settingsFormSchema),
     defaultValues: {
@@ -591,21 +604,41 @@ export default function SettingsPage() {
                         {wahaStatusLabels.running}
                       </Badge>
                     </div>
-                    <Button 
-                      type="button" 
-                      variant="outline"
-                      onClick={() => deleteWahaMutation.mutate(connectedInstance.id)}
-                      disabled={deleteWahaMutation.isPending}
-                      className="w-full text-destructive hover:text-destructive"
-                      data-testid="button-disconnect-whatsapp"
-                    >
-                      {deleteWahaMutation.isPending ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      ) : (
-                        <Trash2 className="mr-2 h-4 w-4" />
-                      )}
-                      Отключить WhatsApp
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button 
+                        type="button" 
+                        variant="outline"
+                        onClick={() => syncWebhookMutation.mutate(connectedInstance.id)}
+                        disabled={syncWebhookMutation.isPending}
+                        className="flex-1"
+                        data-testid="button-sync-webhook"
+                      >
+                        {syncWebhookMutation.isPending ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <RefreshCw className="mr-2 h-4 w-4" />
+                        )}
+                        Синхронизировать
+                      </Button>
+                      <Button 
+                        type="button" 
+                        variant="outline"
+                        onClick={() => deleteWahaMutation.mutate(connectedInstance.id)}
+                        disabled={deleteWahaMutation.isPending}
+                        className="flex-1 text-destructive hover:text-destructive"
+                        data-testid="button-disconnect-whatsapp"
+                      >
+                        {deleteWahaMutation.isPending ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="mr-2 h-4 w-4" />
+                        )}
+                        Отключить
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Если AI не отвечает на сообщения, нажмите "Синхронизировать" для обновления подключения.
+                    </p>
                   </div>
                 ) : showWhatsAppQr ? (
                   <div className="space-y-4">
