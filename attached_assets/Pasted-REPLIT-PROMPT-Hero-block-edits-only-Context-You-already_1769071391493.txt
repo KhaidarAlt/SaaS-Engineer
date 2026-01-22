@@ -1,0 +1,66 @@
+REPLIT PROMPT (Hero block edits only)
+
+Context:
+You already have the Hero section layout (badge, H1, H2, description, 2 buttons, microtext under buttons). DO NOT redesign the page. DO NOT change any existing texts except where explicitly instructed. Apply ONLY the following changes in the Hero block.
+
+GOAL:
+Keep two buttons. Make the secondary button “Посмотреть пример магазина” visually noticeable and clearly valuable (interactive demo that sends an order to WhatsApp), without competing with the primary button.
+
+CHANGES TO APPLY:
+
+1) Typography hierarchy
+- Keep H1 text exactly: "Преврати WhatsApp в интернет-магазин"
+  - Keep "WhatsApp" in accent blue.
+  - Desktop: H1 font-size = 68px, line-height = 1.12, font-weight = 700.
+- Keep H2 text exactly: "Без программистов за 1 час."
+  - Make it visually secondary to H1:
+  - Desktop: H2 font-size = 36–40px (set 38px), line-height = 1.2, font-weight = 600.
+  - Add top margin between H1 and H2: 12–16px.
+- Keep description text exactly as is, but ensure it’s smaller than H2:
+  - font-size 18–20px (set 18px), line-height 1.5, color dark gray.
+
+2) Buttons: keep both, adjust styling and spacing
+- Keep Primary button text exactly: "Создать каталог бесплатно"
+  - Keep it as the strongest CTA: filled blue, white text.
+  - Height 48–52px, horizontal padding 24–28px, border-radius 10–12px.
+- Keep Secondary button text exactly: "Посмотреть пример магазина"
+  - Make it a clear “secondary” button (outline) but more заметная than now:
+    - Border: 1.5–2px solid #D0D7E2 (or similar light-gray but visible)
+    - Background: white
+    - Text: #111 (almost black)
+    - Add left icon inside button: eye or play (e.g., "👁" or "▶") WITHOUT changing the button label text (icon + space + label).
+    - On hover: border becomes slightly darker, background becomes very light gray.
+  - Match size with primary (same height), but keep lower visual weight (outline).
+
+3) Add explanatory microcopy ONLY under the secondary button (new line)
+- Add a new small text line directly under the secondary button (not under the primary), centered under it:
+  Text (exact):
+  "Оформите тестовый заказ и получите его в WhatsApp"
+- Style:
+  - font-size 12–13px (set 12px)
+  - color #6B7280 (neutral gray)
+  - margin-top 8px
+  - max-width ~260–320px, centered alignment.
+
+4) CTA group layout
+- Keep the two buttons on one row on desktop.
+- Add gap between buttons: 14–18px (set 16px).
+- Ensure the microcopy under the secondary button does NOT shift the whole row vertically:
+  - Wrap the secondary button and its microcopy in a vertical container (flex column).
+  - Align the primary button vertically centered with the secondary button (not with the microcopy).
+  - Result: primary and secondary buttons top-align or center-align; microcopy sits below only the secondary.
+
+5) Keep existing trust line under the CTA row
+- Keep this line exactly and in the same place (under both CTAs):
+  "Без карты. Без программирования. Бесплатно до 20 товаров навсегда."
+- Style: 12–13px, light gray, centered, margin-top 16–20px.
+
+6) Mobile responsiveness (Hero only)
+- Stack buttons vertically on mobile (<= 480px):
+  - Primary first, secondary second
+  - Full width buttons
+  - Keep microcopy under the secondary button
+  - Increase vertical spacing between stacked buttons: 10–12px.
+
+DELIVERABLE:
+Implement these changes in the existing Hero component/code in Replit (React/Next/Vite — whatever is already used), editing only the Hero block styles/layout. Output the updated code for the Hero block (component + relevant CSS/Tailwind classes) with minimal changes outside this section.

@@ -21,7 +21,8 @@ import {
   Globe,
   FileSpreadsheet,
   ArrowRight,
-  Star
+  Star,
+  Eye
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
@@ -100,31 +101,42 @@ export default function LandingPage() {
               <Sparkles className="w-3 h-3 mr-1" />
               AI-powered
             </Badge>
-            <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold tracking-tight mb-4 leading-tight">
+            <h1 className="text-[40px] md:text-[56px] lg:text-[68px] font-bold tracking-tight mb-3 md:mb-4 leading-[1.12]">
               Преврати <span className="text-primary">WhatsApp</span><br />
               в интернет-магазин
             </h1>
-            <p className="text-4xl md:text-6xl lg:text-7xl font-bold tracking-tight mb-6 leading-tight">
+            <h2 className="text-[28px] md:text-[34px] lg:text-[38px] font-semibold tracking-tight mb-6 md:mb-8 leading-[1.2]">
               Без программистов за 1 час.
-            </p>
-            <p className="text-xl md:text-2xl text-muted-foreground mb-8 max-w-2xl mx-auto">
+            </h2>
+            <p className="text-lg text-muted-foreground mb-8 max-w-2xl mx-auto leading-relaxed">
               Красивый онлайн-каталог, автоматический приём заказов
               и AI-ассистент, который продаёт за вас 24/7.
             </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center mb-6">
+            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center items-center sm:items-start mb-5">
               <Link href="/register">
-                <Button size="lg" className="text-lg px-8 h-14" data-testid="button-hero-cta">
+                <Button size="lg" className="w-full sm:w-auto text-base px-6 md:px-7 h-12 md:h-[52px] rounded-xl" data-testid="button-hero-cta">
                   Создать каталог бесплатно
                   <ArrowRight className="w-5 h-5 ml-2" />
                 </Button>
               </Link>
-              <Link href="/c/demo">
-                <Button size="lg" variant="outline" className="text-lg px-8 h-14" data-testid="button-hero-demo">
-                  Посмотреть пример магазина
-                </Button>
-              </Link>
+              <div className="flex flex-col items-center">
+                <Link href="/c/demo">
+                  <Button 
+                    size="lg" 
+                    variant="outline" 
+                    className="w-full sm:w-auto text-base px-6 md:px-7 h-12 md:h-[52px] rounded-xl border-2 border-[#D0D7E2] bg-background text-foreground hover:border-[#9CA3AF] hover:bg-muted/50" 
+                    data-testid="button-hero-demo"
+                  >
+                    <Eye className="w-4 h-4 mr-2" />
+                    Посмотреть пример магазина
+                  </Button>
+                </Link>
+                <p className="text-xs text-[#6B7280] mt-2 max-w-[280px] text-center">
+                  Оформите тестовый заказ и получите его в WhatsApp
+                </p>
+              </div>
             </div>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               Без карты. Без программирования. Бесплатно до 20 товаров навсегда.
             </p>
           </motion.div>
