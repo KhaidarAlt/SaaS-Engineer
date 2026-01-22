@@ -182,6 +182,23 @@ function computeProductPrice(
 async function ensureDefaultPlans() {
   const existingPlans = await storage.getPlans();
   if (existingPlans.length === 0) {
+    // Free starter plan
+    await storage.createPlan({
+      name: "Старт",
+      price: 0,
+      currency: "KZT",
+      periodDays: 365, // 1 year for free plan
+      maxProducts: 20,
+      maxCategories: 5,
+      maxPromotions: 2,
+      maxDiscountRules: 3,
+      maxManagers: 0,
+      maxWahaInstances: 0,
+      aiMessagesLimit: 0,
+      hasAiAccess: false,
+      features: ["Онлайн-каталог", "Базовые скидки", "WhatsApp заказы (без интеграции)"],
+      isActive: true,
+    });
     // Basic catalog plan - no AI
     await storage.createPlan({
       name: "Каталог",
@@ -1081,6 +1098,73 @@ export async function registerRoutes(
       });
     } catch (error) {
       res.status(500).json({ message: "Ошибка получения биллинга" });
+    }
+  });
+
+  // Public endpoint to get plans for popup
+  app.get("/api/plans", async (req, res) => {
+    try {
+      const plans = await storage.getPlans();
+      res.json(plans.filter(p => p.isActive));
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка получения тарифов" });
+    }
+  });
+
+  // Request plan upgrade (user submits from popup)
+  const requestPlanSchema = z.object({
+    planId: z.string().uuid(),
+  });
+
+  app.post("/api/request-plan", requireAuth, async (req, res) => {
+    try {
+      const parsed = requestPlanSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Неверные данные" });
+      }
+
+      const { planId } = parsed.data;
+
+      // Verify plan exists
+      const plans = await storage.getPlans();
+      const targetPlan = plans.find(p => p.id === planId);
+      if (!targetPlan) {
+        return res.status(404).json({ message: "Тариф не найден" });
+      }
+
+      // Save request to subscription
+      const subscription = await storage.getSubscription(req.user!.tenantId!);
+      if (!subscription) {
+        return res.status(404).json({ message: "Подписка не найдена" });
+      }
+
+      // If requesting free plan (Старт), activate it immediately
+      if (targetPlan.price === 0) {
+        await storage.changeSubscriptionPlan(subscription.id, planId);
+        // Clear any pending request
+        await storage.setRequestedPlan(subscription.id, null);
+      } else {
+        // Save plan request for admin approval
+        await storage.setRequestedPlan(subscription.id, planId);
+      }
+
+      // Mark popup as shown
+      await storage.markPlanPopupShown(req.user!.id);
+
+      res.json({ success: true, planName: targetPlan.name });
+    } catch (error) {
+      console.error("Request plan error:", error);
+      res.status(500).json({ message: "Ошибка отправки запроса" });
+    }
+  });
+
+  // Dismiss plan popup without selecting
+  app.post("/api/dismiss-plan-popup", requireAuth, async (req, res) => {
+    try {
+      await storage.markPlanPopupShown(req.user!.id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка" });
     }
   });
 

@@ -73,6 +73,7 @@ export const users = pgTable("users", {
   role: text("role").notNull().default("owner"), // superadmin, owner, manager
   tenantId: varchar("tenant_id").references(() => tenants.id),
   isActive: boolean("is_active").notNull().default(true),
+  planPopupShown: boolean("plan_popup_shown").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

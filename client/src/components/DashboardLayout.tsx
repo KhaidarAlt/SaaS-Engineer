@@ -1,6 +1,7 @@
-import { ReactNode } from "react";
+import { ReactNode, useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { motion } from "framer-motion";
+import { useQuery } from "@tanstack/react-query";
 import {
   LayoutDashboard,
   Package,
@@ -13,24 +14,28 @@ import {
   CreditCard,
   ExternalLink,
   Menu,
-  X,
   Users,
-  Building2,
   Upload,
   Bot,
   Activity,
+  Lock,
+  Gift,
+  UserPlus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useAuth } from "@/contexts/AuthContext";
-import { useState } from "react";
+import { PlanSelectionPopup } from "@/components/PlanSelectionPopup";
+import { useToast } from "@/hooks/use-toast";
+import type { Plan, Subscription } from "@shared/schema";
 
 interface NavItem {
   href: string;
   label: string;
   icon: React.ElementType;
+  lockForPlans?: string[];
 }
 
 const tenantNavItems: NavItem[] = [
@@ -39,15 +44,13 @@ const tenantNavItems: NavItem[] = [
   { href: "/dashboard/categories", label: "Категории", icon: Tag },
   { href: "/dashboard/orders", label: "Заказы", icon: ShoppingCart },
   { href: "/dashboard/discounts", label: "Скидки", icon: Percent },
-  { href: "/dashboard/import", label: "Импорт", icon: Upload },
-  { href: "/dashboard/ai", label: "AI-ассистент", icon: Bot },
+  { href: "/dashboard/import", label: "Импорт", icon: Upload, lockForPlans: ["Старт"] },
+  { href: "/dashboard/ai", label: "AI-ассистент", icon: Bot, lockForPlans: ["Старт", "Каталог"] },
   { href: "/dashboard/catalog-health", label: "Здоровье каталога", icon: Activity },
-  { href: "/dashboard/analytics", label: "Аналитика", icon: BarChart3 },
+  { href: "/dashboard/analytics", label: "Аналитика", icon: BarChart3, lockForPlans: ["Старт"] },
   { href: "/dashboard/billing", label: "Биллинг", icon: CreditCard },
   { href: "/dashboard/settings", label: "Настройки", icon: Settings },
 ];
-
-import { Gift, UserPlus } from "lucide-react";
 
 const superAdminNavItems: NavItem[] = [
   { href: "/admin", label: "Обзор", icon: LayoutDashboard },
@@ -63,13 +66,39 @@ interface DashboardLayoutProps {
   isSuperAdmin?: boolean;
 }
 
+interface BillingData {
+  subscription: Subscription & { plan: Plan };
+  daysLeft: number;
+}
+
 export function DashboardLayout({ children, isSuperAdmin = false }: DashboardLayoutProps) {
   const [location] = useLocation();
   const { user, logout } = useAuth();
+  const { toast } = useToast();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [showPlanPopup, setShowPlanPopup] = useState(false);
+
+  const { data: billing } = useQuery<BillingData>({
+    queryKey: ["/api/billing"],
+    enabled: !isSuperAdmin && !!user?.tenantId,
+  });
+
+  const currentPlanName = billing?.subscription?.plan?.name || "";
+
+  useEffect(() => {
+    if (isSuperAdmin || !user) return;
+
+    const createdAt = new Date(user.createdAt);
+    const now = new Date();
+    const hoursSinceRegistration = (now.getTime() - createdAt.getTime()) / (1000 * 60 * 60);
+
+    const popupShown = (user as any).planPopupShown;
+    if (hoursSinceRegistration >= 24 && !popupShown) {
+      setShowPlanPopup(true);
+    }
+  }, [user, isSuperAdmin]);
 
   const navItems = isSuperAdmin ? superAdminNavItems : tenantNavItems;
-  // Add version param based on tenant updatedAt for cache busting in messengers
   const tenantVersion = user?.tenant?.updatedAt ? new Date(user.tenant.updatedAt).getTime() : Date.now();
   const catalogUrl = user?.tenant ? `/c/${(user.tenant as any).slug}?v=${tenantVersion}` : null;
 
@@ -77,23 +106,52 @@ export function DashboardLayout({ children, isSuperAdmin = false }: DashboardLay
     await logout();
   };
 
+  const isItemLocked = (item: NavItem): boolean => {
+    if (!item.lockForPlans || !currentPlanName) return false;
+    return item.lockForPlans.includes(currentPlanName);
+  };
+
+  const handleLockedClick = (e: React.MouseEvent, item: NavItem) => {
+    if (isItemLocked(item)) {
+      e.preventDefault();
+      e.stopPropagation();
+      toast({
+        title: "Функция недоступна",
+        description: "Вам нужно апгрейдить ваш тариф в настройках",
+      });
+    }
+  };
+
   const NavLink = ({ item }: { item: NavItem }) => {
     const isActive = location === item.href || 
       (item.href !== "/dashboard" && item.href !== "/admin" && location.startsWith(item.href));
+    const locked = isItemLocked(item);
     
-    return (
-      <Link href={item.href}>
-        <div
-          className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
-            isActive
+    const content = (
+      <div
+        onClick={(e) => handleLockedClick(e, item)}
+        className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
+          locked
+            ? "text-muted-foreground/50 cursor-not-allowed"
+            : isActive
               ? "bg-primary text-primary-foreground"
               : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-          }`}
-          data-testid={`nav-${item.label.toLowerCase()}`}
-        >
-          <item.icon className="h-5 w-5" />
-          <span>{item.label}</span>
-        </div>
+        }`}
+        data-testid={`nav-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
+      >
+        <item.icon className="h-5 w-5" />
+        <span className="flex-1">{item.label}</span>
+        {locked && <Lock className="h-4 w-4 text-muted-foreground/50" />}
+      </div>
+    );
+
+    if (locked) {
+      return content;
+    }
+
+    return (
+      <Link href={item.href}>
+        {content}
       </Link>
     );
   };
@@ -200,6 +258,11 @@ export function DashboardLayout({ children, isSuperAdmin = false }: DashboardLay
           </motion.div>
         </main>
       </div>
+
+      <PlanSelectionPopup
+        open={showPlanPopup}
+        onClose={() => setShowPlanPopup(false)}
+      />
     </div>
   );
 }

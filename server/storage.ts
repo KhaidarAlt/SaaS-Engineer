@@ -147,6 +147,9 @@ export interface IStorage {
   createLead(lead: InsertLead): Promise<Lead>;
   updateLeadStatus(id: string, status: string): Promise<void>;
   
+  setRequestedPlan(subscriptionId: string, planId: string | null): Promise<void>;
+  markPlanPopupShown(userId: string): Promise<void>;
+  
   getCartSession(tenantId: string, sessionId: string): Promise<CartSession | undefined>;
   upsertCartSession(data: InsertCartSession): Promise<CartSession>;
   updateCartSession(id: string, tenantId: string, data: Partial<InsertCartSession>): Promise<CartSession | undefined>;
@@ -1212,6 +1215,18 @@ export class DatabaseStorage implements IStorage {
     await db.update(plans)
       .set(data as any)
       .where(eq(plans.id, id));
+  }
+
+  async setRequestedPlan(subscriptionId: string, planId: string | null): Promise<void> {
+    await db.update(subscriptions)
+      .set({ requestedPlanId: planId } as any)
+      .where(eq(subscriptions.id, subscriptionId));
+  }
+
+  async markPlanPopupShown(userId: string): Promise<void> {
+    await db.update(users)
+      .set({ planPopupShown: true } as any)
+      .where(eq(users.id, userId));
   }
 
   // ============ ADMIN: USER MANAGEMENT ============

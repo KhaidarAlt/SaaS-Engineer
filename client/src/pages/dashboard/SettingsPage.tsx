@@ -2,11 +2,12 @@ import { useEffect, useState, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useLocation, Link } from "wouter";
 import { motion } from "framer-motion";
 import { 
   Save, Store, MessageCircle, Bell, ExternalLink, Upload, Image, 
   Share2, QrCode, Download, Clock, MapPin, Link2, Copy, Check, 
-  Loader2, Phone, Trash2, CheckCircle, AlertCircle, RefreshCw
+  Loader2, Phone, Trash2, CheckCircle, AlertCircle, RefreshCw, Lock
 } from "lucide-react";
 import { SiWhatsapp } from "react-icons/si";
 import { z } from "zod";
@@ -96,6 +97,13 @@ export default function SettingsPage() {
   const { data: tenant, isLoading } = useQuery<Tenant>({
     queryKey: ["/api/tenant"],
   });
+
+  const { data: billing } = useQuery<{ subscription: { plan: { name: string } } }>({
+    queryKey: ["/api/billing"],
+  });
+
+  const currentPlanName = billing?.subscription?.plan?.name || "";
+  const isWahaLocked = currentPlanName === "Старт";
 
   const { data: wahaInstances, refetch: refetchWahaInstances } = useQuery<WahaInstance[]>({
     queryKey: ["/api/waha/instances"],
@@ -589,15 +597,31 @@ export default function SettingsPage() {
             <Card data-testid="card-whatsapp-settings">
               <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2">
-                  <SiWhatsapp className="h-5 w-5 text-green-600" />
+                  <SiWhatsapp className={`h-5 w-5 ${isWahaLocked ? "text-muted-foreground" : "text-green-600"}`} />
                   WhatsApp (WAHA)
+                  {isWahaLocked && <Lock className="h-4 w-4 text-muted-foreground ml-auto" />}
                 </CardTitle>
                 <CardDescription>
-                  Подключите WhatsApp для получения заказов
+                  {isWahaLocked 
+                    ? "Доступно на платных тарифах" 
+                    : "Подключите WhatsApp для получения заказов"}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                {connectedInstance ? (
+                {isWahaLocked ? (
+                  <div className="p-6 text-center border rounded-lg bg-muted/50">
+                    <Lock className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
+                    <p className="font-medium mb-1">Функция недоступна</p>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Вам нужно апгрейдить ваш тариф в настройках
+                    </p>
+                    <Link href="/dashboard/billing">
+                      <Button variant="outline" data-testid="button-waha-upgrade">
+                        Перейти в биллинг
+                      </Button>
+                    </Link>
+                  </div>
+                ) : connectedInstance ? (
                   <div className="space-y-4">
                     <div className="flex items-center justify-between p-4 border rounded-lg bg-green-50 dark:bg-green-950">
                       <div className="flex items-center gap-3">
