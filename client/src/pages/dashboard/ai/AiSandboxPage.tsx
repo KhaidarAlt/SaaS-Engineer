@@ -24,6 +24,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
+import { DashboardLayout } from "@/components/DashboardLayout";
 
 function formatMessageContent(content: string) {
   const urlRegex = /(https?:\/\/[^\s]+)/g;
@@ -189,10 +190,11 @@ export default function AiSandboxPage() {
   };
 
   if (!status?.hasAccess) {
-    return <div className="p-6"><AiPaywall currentPlan={status?.planName} /></div>;
+    return <DashboardLayout><div className="p-6"><AiPaywall currentPlan={status?.planName} /></div></DashboardLayout>;
   }
 
   return (
+    <DashboardLayout>
     <div className="h-[calc(100vh-140px)] flex flex-col p-6 gap-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
@@ -431,5 +433,6 @@ export default function AiSandboxPage() {
         )}
       </div>
     </div>
+    </DashboardLayout>
   );
 }

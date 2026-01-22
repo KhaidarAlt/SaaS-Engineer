@@ -11,6 +11,7 @@ import { SiWhatsapp, SiTelegram } from "react-icons/si";
 import { Link } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { DashboardLayout } from "@/components/DashboardLayout";
 
 interface WahaInstance {
   id: string;
@@ -138,7 +139,7 @@ export default function AiIntegrationsPage() {
   });
 
   if (!status?.hasAccess) {
-    return <div className="p-6"><AiPaywall currentPlan={status?.planName} /></div>;
+    return <DashboardLayout><div className="p-6"><AiPaywall currentPlan={status?.planName} /></div></DashboardLayout>;
   }
 
   const otherIntegrations = [
@@ -169,6 +170,7 @@ export default function AiIntegrationsPage() {
   ];
 
   return (
+    <DashboardLayout>
     <div className="space-y-6 p-6">
       <div className="flex items-center gap-4">
         <Link href="/dashboard/ai">
@@ -384,5 +386,6 @@ export default function AiIntegrationsPage() {
         </DialogContent>
       </Dialog>
     </div>
+    </DashboardLayout>
   );
 }

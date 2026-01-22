@@ -14,6 +14,7 @@ import { Plus, HelpCircle, Trash2, Edit, GripVertical, ArrowLeft } from "lucide-
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
+import { DashboardLayout } from "@/components/DashboardLayout";
 
 interface AiFaqItem {
   id: string;
@@ -92,23 +93,26 @@ export default function AiFaqPage() {
   };
 
   if (!status?.hasAccess) {
-    return <div className="p-6"><AiPaywall currentPlan={status?.planName} /></div>;
+    return <DashboardLayout><div className="p-6"><AiPaywall currentPlan={status?.planName} /></div></DashboardLayout>;
   }
 
   if (isLoading) {
     return (
-      <div className="space-y-4 p-6">
-        <Skeleton className="h-8 w-48" />
-        <div className="space-y-4">
-          {[1, 2, 3, 4, 5].map((i) => <Skeleton key={i} className="h-24" />)}
+      <DashboardLayout>
+        <div className="space-y-4 p-6">
+          <Skeleton className="h-8 w-48" />
+          <div className="space-y-4">
+            {[1, 2, 3, 4, 5].map((i) => <Skeleton key={i} className="h-24" />)}
+          </div>
         </div>
-      </div>
+      </DashboardLayout>
     );
   }
 
   const publishedCount = items?.filter(i => i.isPublished).length || 0;
 
   return (
+    <DashboardLayout>
     <div className="space-y-6 p-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
@@ -226,5 +230,6 @@ export default function AiFaqPage() {
         </div>
       )}
     </div>
+    </DashboardLayout>
   );
 }

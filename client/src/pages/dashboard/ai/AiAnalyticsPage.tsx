@@ -6,6 +6,7 @@ import { AiPaywall } from "@/components/AiPaywall";
 import { BarChart3, MessageSquare, AlertTriangle, PhoneForwarded, XCircle, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
+import { DashboardLayout } from "@/components/DashboardLayout";
 
 interface AiAnalytics {
   totalConversations: number;
@@ -35,17 +36,19 @@ export default function AiAnalyticsPage() {
   });
 
   if (!status?.hasAccess) {
-    return <div className="p-6"><AiPaywall currentPlan={status?.planName} /></div>;
+    return <DashboardLayout><div className="p-6"><AiPaywall currentPlan={status?.planName} /></div></DashboardLayout>;
   }
 
   if (isLoading) {
     return (
-      <div className="space-y-4 p-6">
-        <Skeleton className="h-8 w-48" />
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-32" />)}
+      <DashboardLayout>
+        <div className="space-y-4 p-6">
+          <Skeleton className="h-8 w-48" />
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-32" />)}
+          </div>
         </div>
-      </div>
+      </DashboardLayout>
     );
   }
 
@@ -77,6 +80,7 @@ export default function AiAnalyticsPage() {
   ];
 
   return (
+    <DashboardLayout>
     <div className="space-y-6 p-6">
       <div className="flex items-center gap-4">
         <Link href="/dashboard/ai">
@@ -159,5 +163,6 @@ export default function AiAnalyticsPage() {
         </Card>
       )}
     </div>
+    </DashboardLayout>
   );
 }

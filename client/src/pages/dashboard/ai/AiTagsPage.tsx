@@ -14,6 +14,7 @@ import { Plus, Tags, Trash2, ArrowLeft } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
+import { DashboardLayout } from "@/components/DashboardLayout";
 
 interface AiTagRule {
   id: string;
@@ -93,21 +94,24 @@ export default function AiTagsPage() {
   };
 
   if (!status?.hasAccess) {
-    return <div className="p-6"><AiPaywall currentPlan={status?.planName} /></div>;
+    return <DashboardLayout><div className="p-6"><AiPaywall currentPlan={status?.planName} /></div></DashboardLayout>;
   }
 
   if (isLoading) {
     return (
-      <div className="space-y-4 p-6">
-        <Skeleton className="h-8 w-48" />
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-24" />)}
+      <DashboardLayout>
+        <div className="space-y-4 p-6">
+          <Skeleton className="h-8 w-48" />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-24" />)}
+          </div>
         </div>
-      </div>
+      </DashboardLayout>
     );
   }
 
   return (
+    <DashboardLayout>
     <div className="space-y-6 p-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
@@ -232,5 +236,6 @@ export default function AiTagsPage() {
         ))}
       </div>
     </div>
+    </DashboardLayout>
   );
 }

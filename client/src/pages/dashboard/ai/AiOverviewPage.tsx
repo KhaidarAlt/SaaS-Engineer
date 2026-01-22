@@ -6,6 +6,7 @@ import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AiPaywall } from "@/components/AiPaywall";
+import { DashboardLayout } from "@/components/DashboardLayout";
 import { Link } from "wouter";
 import { 
   Bot, FileText, Tags, BookOpen, HelpCircle, Shield, 
@@ -68,29 +69,32 @@ export default function AiOverviewPage() {
 
   if (isLoading) {
     return (
-      <div className="space-y-6 p-6">
-        <Skeleton className="h-8 w-48" />
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[1, 2, 3, 4, 5, 6].map((i) => (
-            <Skeleton key={i} className="h-32" />
-          ))}
+      <DashboardLayout>
+        <div className="space-y-6">
+          <Skeleton className="h-8 w-48" />
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <Skeleton key={i} className="h-32" />
+            ))}
+          </div>
         </div>
-      </div>
+      </DashboardLayout>
     );
   }
 
   if (!status?.hasAccess) {
     return (
-      <div className="p-6">
+      <DashboardLayout>
         <AiPaywall currentPlan={status?.planName} />
-      </div>
+      </DashboardLayout>
     );
   }
 
   const readiness = status.readiness;
 
   return (
-    <div className="space-y-6 p-6">
+    <DashboardLayout>
+      <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold" data-testid="text-ai-title">AI-ассистент</h1>
@@ -200,6 +204,7 @@ export default function AiOverviewPage() {
           </div>
         </CardContent>
       </Card>
-    </div>
+      </div>
+    </DashboardLayout>
   );
 }

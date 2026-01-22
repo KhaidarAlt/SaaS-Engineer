@@ -13,6 +13,7 @@ import { Plus, CheckCircle2, FileText, ArrowLeft } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
+import { DashboardLayout } from "@/components/DashboardLayout";
 
 interface AiSalesScript {
   id: string;
@@ -79,19 +80,22 @@ export default function AiSalesScriptsPage() {
   });
 
   if (!status?.hasAccess) {
-    return <div className="p-6"><AiPaywall currentPlan={status?.planName} /></div>;
+    return <DashboardLayout><div className="p-6"><AiPaywall currentPlan={status?.planName} /></div></DashboardLayout>;
   }
 
   if (isLoading) {
     return (
-      <div className="space-y-4 p-6">
-        <Skeleton className="h-8 w-48" />
-        <Skeleton className="h-32" />
-      </div>
+      <DashboardLayout>
+        <div className="space-y-4 p-6">
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-32" />
+        </div>
+      </DashboardLayout>
     );
   }
 
   return (
+    <DashboardLayout>
     <div className="space-y-6 p-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
@@ -217,5 +221,6 @@ export default function AiSalesScriptsPage() {
         </div>
       )}
     </div>
+    </DashboardLayout>
   );
 }
