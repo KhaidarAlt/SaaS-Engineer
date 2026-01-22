@@ -104,7 +104,7 @@ export default function LandingPage() {
               Преврати <span className="text-primary">WhatsApp</span><br />
               в интернет-магазин
             </h1>
-            <p className="text-xl md:text-2xl font-medium text-foreground mb-6">
+            <p className="text-4xl md:text-6xl lg:text-7xl font-bold tracking-tight mb-6 leading-tight">
               Без программистов за 1 час.
             </p>
             <p className="text-xl md:text-2xl text-muted-foreground mb-8 max-w-2xl mx-auto">
