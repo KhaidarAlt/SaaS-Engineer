@@ -100,10 +100,13 @@ export default function LandingPage() {
               <Sparkles className="w-3 h-3 mr-1" />
               AI-powered
             </Badge>
-            <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold tracking-tight mb-6 leading-tight">
+            <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold tracking-tight mb-4 leading-tight">
               Преврати <span className="text-primary">WhatsApp</span><br />
               в интернет-магазин
             </h1>
+            <p className="text-xl md:text-2xl font-medium text-foreground mb-6">
+              Без программистов за 1 час.
+            </p>
             <p className="text-xl md:text-2xl text-muted-foreground mb-8 max-w-2xl mx-auto">
               Красивый онлайн-каталог, автоматический приём заказов
               и AI-ассистент, который продаёт за вас 24/7.
