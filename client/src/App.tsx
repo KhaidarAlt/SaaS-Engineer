@@ -25,7 +25,9 @@ import SettingsPage from "@/pages/dashboard/SettingsPage";
 import ImportPage from "@/pages/dashboard/ImportPage";
 import CatalogHealthPage from "@/pages/dashboard/CatalogHealthPage";
 import AdminOverview from "@/pages/admin/AdminOverview";
-import TenantsPage from "@/pages/admin/TenantsPage";
+import UsersPage from "@/pages/admin/UsersPage";
+import UsersFreePageRoute from "@/pages/admin/UsersFreePageRoute";
+import LeadsPage from "@/pages/admin/LeadsPage";
 import PlansPage from "@/pages/admin/PlansPage";
 import AiOverviewPage from "@/pages/dashboard/ai/AiOverviewPage";
 import AiSalesScriptsPage from "@/pages/dashboard/ai/AiSalesScriptsPage";
@@ -183,11 +185,14 @@ function Router() {
       <Route path="/admin">
         <ProtectedRoute component={AdminOverview} requireSuperAdmin />
       </Route>
-      <Route path="/admin/tenants">
-        <ProtectedRoute component={TenantsPage} requireSuperAdmin />
-      </Route>
       <Route path="/admin/users">
-        <ProtectedRoute component={TenantsPage} requireSuperAdmin />
+        <ProtectedRoute component={UsersPage} requireSuperAdmin />
+      </Route>
+      <Route path="/admin/users-free">
+        <ProtectedRoute component={UsersFreePageRoute} requireSuperAdmin />
+      </Route>
+      <Route path="/admin/leads">
+        <ProtectedRoute component={LeadsPage} requireSuperAdmin />
       </Route>
       <Route path="/admin/plans">
         <ProtectedRoute component={PlansPage} requireSuperAdmin />

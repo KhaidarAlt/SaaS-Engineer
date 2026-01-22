@@ -6,7 +6,7 @@ import {
   subscriptionExtensions, knowledgeBase, auditLogs, carts, productVariants, productImages,
   aiSettings, aiSalesScripts, aiTagRules, aiKnowledgeArticles, aiFaqItems,
   aiPolicies, aiConversations, aiMessages, aiInterventionEvents, aiInboxTickets,
-  wahaInstances, aiResponseCorrections,
+  wahaInstances, aiResponseCorrections, leads,
   type User, type InsertUser, type Tenant, type InsertTenant,
   type Subscription, type InsertSubscription, type Plan, type InsertPlan,
   type Product, type InsertProduct, type Category, type InsertCategory,
@@ -28,6 +28,7 @@ import {
   type AiInterventionEvent, type InsertAiInterventionEvent,
   type AiInboxTicket, type InsertAiInboxTicket,
   type WahaInstance, type InsertWahaInstance,
+  type Lead, type InsertLead,
   type AiResponseCorrection, type InsertAiResponseCorrection,
 } from "@shared/schema";
 import bcrypt from "bcryptjs";
@@ -112,6 +113,39 @@ export interface IStorage {
     totalUsers: number;
     totalRevenue: number;
   }>;
+  
+  changeSubscriptionPlan(subscriptionId: string, planId: string): Promise<void>;
+  updatePlan(id: string, data: { price?: number; aiMessagesLimit?: number }): Promise<void>;
+  getAllUsersWithDetails(): Promise<Array<{
+    id: string;
+    name: string;
+    email: string;
+    phone?: string;
+    storeName: string;
+    slug: string;
+    status: string;
+    planName: string;
+    planId: string;
+    requestedPlanName?: string;
+    requestedPlanId?: string;
+    daysLeft: number;
+    subscriptionEndsAt?: string;
+    createdAt: string;
+    tenantId: string;
+  }>>;
+  getFreeUsers(): Promise<Array<{
+    id: string;
+    name: string;
+    email: string;
+    phone?: string;
+    storeName: string;
+    slug: string;
+    createdAt: string;
+    tenantId: string;
+  }>>;
+  getAllLeads(): Promise<Lead[]>;
+  createLead(lead: InsertLead): Promise<Lead>;
+  updateLeadStatus(id: string, status: string): Promise<void>;
   
   getCartSession(tenantId: string, sessionId: string): Promise<CartSession | undefined>;
   upsertCartSession(data: InsertCartSession): Promise<CartSession>;
@@ -1165,6 +1199,149 @@ export class DatabaseStorage implements IStorage {
     const instances = await db.select().from(wahaInstances)
       .where(and(eq(wahaInstances.tenantId, tenantId), eq(wahaInstances.isActive, true)));
     return instances.length;
+  }
+
+  // ============ ADMIN: PLAN MANAGEMENT ============
+  async changeSubscriptionPlan(subscriptionId: string, planId: string): Promise<void> {
+    await db.update(subscriptions)
+      .set({ planId, requestedPlanId: null } as any)
+      .where(eq(subscriptions.id, subscriptionId));
+  }
+
+  async updatePlan(id: string, data: { price?: number; aiMessagesLimit?: number }): Promise<void> {
+    await db.update(plans)
+      .set(data as any)
+      .where(eq(plans.id, id));
+  }
+
+  // ============ ADMIN: USER MANAGEMENT ============
+  async getAllUsersWithDetails(): Promise<Array<{
+    id: string;
+    name: string;
+    email: string;
+    phone?: string;
+    storeName: string;
+    slug: string;
+    status: string;
+    planName: string;
+    planId: string;
+    requestedPlanName?: string;
+    requestedPlanId?: string;
+    daysLeft: number;
+    subscriptionEndsAt?: string;
+    createdAt: string;
+    tenantId: string;
+  }>> {
+    const allUsers = await db.select().from(users)
+      .where(eq(users.role, "owner"))
+      .orderBy(desc(users.createdAt));
+    
+    const result = [];
+    for (const user of allUsers) {
+      if (!user.tenantId) continue;
+      
+      const tenant = await this.getTenant(user.tenantId);
+      if (!tenant) continue;
+      
+      const subscription = await this.getSubscription(user.tenantId);
+      if (!subscription) continue;
+      
+      // Skip free plan users (price = 0)
+      if (subscription.plan && subscription.plan.price === 0) continue;
+      
+      const daysLeft = subscription.endsAt 
+        ? Math.ceil((new Date(subscription.endsAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+        : 0;
+      
+      let requestedPlanName: string | undefined;
+      if ((subscription as any).requestedPlanId) {
+        const requestedPlan = await db.select().from(plans).where(eq(plans.id, (subscription as any).requestedPlanId));
+        if (requestedPlan.length > 0) {
+          requestedPlanName = requestedPlan[0].name;
+        }
+      }
+      
+      result.push({
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        phone: tenant.contactPhone || undefined,
+        storeName: tenant.name,
+        slug: tenant.slug,
+        status: tenant.status,
+        planName: subscription.plan?.name || "Без тарифа",
+        planId: subscription.planId,
+        requestedPlanName,
+        requestedPlanId: (subscription as any).requestedPlanId,
+        daysLeft,
+        subscriptionEndsAt: subscription.endsAt?.toISOString(),
+        createdAt: user.createdAt.toISOString(),
+        tenantId: user.tenantId,
+      });
+    }
+    
+    return result;
+  }
+
+  async getFreeUsers(): Promise<Array<{
+    id: string;
+    name: string;
+    email: string;
+    phone?: string;
+    storeName: string;
+    slug: string;
+    createdAt: string;
+    tenantId: string;
+  }>> {
+    // Get the free plan (price = 0)
+    const freePlans = await db.select().from(plans).where(eq(plans.price, 0));
+    if (freePlans.length === 0) return [];
+    
+    const freePlanIds = freePlans.map(p => p.id);
+    
+    const allUsers = await db.select().from(users)
+      .where(eq(users.role, "owner"))
+      .orderBy(desc(users.createdAt));
+    
+    const result = [];
+    for (const user of allUsers) {
+      if (!user.tenantId) continue;
+      
+      const tenant = await this.getTenant(user.tenantId);
+      if (!tenant) continue;
+      
+      const subscription = await this.getSubscription(user.tenantId);
+      if (!subscription || !freePlanIds.includes(subscription.planId)) continue;
+      
+      result.push({
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        phone: tenant.contactPhone || undefined,
+        storeName: tenant.name,
+        slug: tenant.slug,
+        createdAt: user.createdAt.toISOString(),
+        tenantId: user.tenantId,
+      });
+    }
+    
+    return result;
+  }
+
+  // ============ ADMIN: LEADS ============
+  async getAllLeads(): Promise<Lead[]> {
+    return db.select().from(leads).orderBy(desc(leads.createdAt));
+  }
+
+  async createLead(lead: InsertLead): Promise<Lead> {
+    const [newLead] = await db.insert(leads).values(lead as any).returning();
+    return newLead;
+  }
+
+  async updateLeadStatus(id: string, status: string): Promise<void> {
+    await db.update(leads)
+      .set({ status } as any)
+      .where(eq(leads.id, id));
   }
 }
 

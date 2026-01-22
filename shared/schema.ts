@@ -94,6 +94,7 @@ export const subscriptions = pgTable("subscriptions", {
   tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
   planId: varchar("plan_id").notNull().references(() => plans.id),
   status: text("status").notNull().default("active"), // active, expired, cancelled
+  requestedPlanId: varchar("requested_plan_id").references(() => plans.id), // Plan user requested (pending admin approval)
   startsAt: timestamp("starts_at").notNull().defaultNow(),
   endsAt: timestamp("ends_at").notNull(),
   gracePeriodDays: integer("grace_period_days").notNull().default(3),
@@ -850,6 +851,20 @@ export const aiResponseCorrectionsRelations = relations(aiResponseCorrections, (
 export const insertAiResponseCorrectionSchema = createInsertSchema(aiResponseCorrections).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertAiResponseCorrection = z.infer<typeof insertAiResponseCorrectionSchema>;
 export type AiResponseCorrection = typeof aiResponseCorrections.$inferSelect;
+
+// ============ DEMO LEADS ============
+export const leads = pgTable("leads", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  phone: text("phone").notNull(),
+  source: text("source").notNull().default("demo_catalog"), // demo_catalog, landing, etc.
+  status: text("status").notNull().default("new"), // new, contacted, converted, rejected
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertLeadSchema = createInsertSchema(leads).omit({ id: true, createdAt: true });
+export type InsertLead = z.infer<typeof insertLeadSchema>;
+export type Lead = typeof leads.$inferSelect;
 
 // ============ FORM VALIDATION SCHEMAS ============
 export const loginSchema = z.object({

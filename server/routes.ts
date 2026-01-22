@@ -8,6 +8,7 @@ import MemoryStore from "memorystore";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+import { z } from "zod";
 import { storage } from "./storage";
 import { loginSchema, registerSchema, checkoutSchema } from "@shared/schema";
 import type { User, Tenant, Subscription, Plan } from "@shared/schema";
@@ -1416,6 +1417,121 @@ export async function registerRoutes(
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ message: "Ошибка продления подписки" });
+    }
+  });
+
+  // Change subscription plan
+  const changePlanSchema = z.object({
+    tenantId: z.string().uuid(),
+    planId: z.string().uuid(),
+  });
+
+  app.post("/api/admin/subscriptions/change-plan", requireSuperAdmin, async (req, res) => {
+    try {
+      const parsed = changePlanSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Неверные данные", errors: parsed.error.errors });
+      }
+      
+      const { tenantId, planId } = parsed.data;
+      
+      // Verify plan exists
+      const allPlans = await storage.getPlans();
+      const targetPlan = allPlans.find(p => p.id === planId);
+      if (!targetPlan) {
+        return res.status(404).json({ message: "Тариф не найден" });
+      }
+      
+      const subscription = await storage.getSubscription(tenantId);
+      if (!subscription) {
+        return res.status(404).json({ message: "Подписка не найдена" });
+      }
+      
+      await storage.changeSubscriptionPlan(subscription.id, planId);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка смены тарифа" });
+    }
+  });
+
+  // Update plan (price, AI limit)
+  const updatePlanSchema = z.object({
+    price: z.number().min(0).optional(),
+    aiMessagesLimit: z.number().int().min(0).optional(),
+  });
+
+  app.patch("/api/admin/plans/:id", requireSuperAdmin, async (req, res) => {
+    try {
+      const parsed = updatePlanSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Неверные данные", errors: parsed.error.errors });
+      }
+      
+      // Reject empty updates
+      if (parsed.data.price === undefined && parsed.data.aiMessagesLimit === undefined) {
+        return res.status(400).json({ message: "Нет данных для обновления" });
+      }
+      
+      // Verify plan exists
+      const allPlans = await storage.getPlans();
+      const targetPlan = allPlans.find(p => p.id === req.params.id);
+      if (!targetPlan) {
+        return res.status(404).json({ message: "Тариф не найден" });
+      }
+      
+      await storage.updatePlan(req.params.id, parsed.data);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка обновления тарифа" });
+    }
+  });
+
+  // Get all users with details for admin
+  app.get("/api/admin/users", requireSuperAdmin, async (req, res) => {
+    try {
+      const users = await storage.getAllUsersWithDetails();
+      res.json(users);
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка получения пользователей" });
+    }
+  });
+
+  // Get FREE users only
+  app.get("/api/admin/users-free", requireSuperAdmin, async (req, res) => {
+    try {
+      const users = await storage.getFreeUsers();
+      res.json(users);
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка получения бесплатных пользователей" });
+    }
+  });
+
+  // Get leads from demo catalog
+  app.get("/api/admin/leads", requireSuperAdmin, async (req, res) => {
+    try {
+      const leads = await storage.getAllLeads();
+      res.json(leads);
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка получения лидов" });
+    }
+  });
+
+  // Update lead status
+  const updateLeadStatusSchema = z.object({
+    status: z.enum(["new", "contacted", "converted", "rejected"]),
+  });
+
+  app.patch("/api/admin/leads/:id", requireSuperAdmin, async (req, res) => {
+    try {
+      const parsed = updateLeadStatusSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Неверный статус", errors: parsed.error.errors });
+      }
+      
+      await storage.updateLeadStatus(req.params.id, parsed.data.status);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка обновления статуса лида" });
     }
   });
 

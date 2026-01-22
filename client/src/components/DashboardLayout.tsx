@@ -47,10 +47,13 @@ const tenantNavItems: NavItem[] = [
   { href: "/dashboard/settings", label: "Настройки", icon: Settings },
 ];
 
+import { Gift, UserPlus } from "lucide-react";
+
 const superAdminNavItems: NavItem[] = [
   { href: "/admin", label: "Обзор", icon: LayoutDashboard },
-  { href: "/admin/tenants", label: "Тенанты", icon: Building2 },
   { href: "/admin/users", label: "Пользователи", icon: Users },
+  { href: "/admin/users-free", label: "Пользователи FREE", icon: Gift },
+  { href: "/admin/leads", label: "Новый лид", icon: UserPlus },
   { href: "/admin/plans", label: "Тарифы", icon: CreditCard },
   { href: "/admin/settings", label: "Настройки", icon: Settings },
 ];

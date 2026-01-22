@@ -145,6 +145,15 @@ Preferred communication style: Simple, everyday language.
   - Demo banners on catalog, cart, and checkout pages
   - After demo order, customer can send order to their own WhatsApp
   - CTA to create their own catalog after successful demo order
+- Admin Panel Major Overhaul:
+  - Removed "Тенанты" tab, replaced with "Пользователи" pages
+  - UsersPage: paid users (non-free plans) with sorting by days remaining (<14 days highlighted)
+  - UsersFreePageRoute: free tier users with upgrade button
+  - LeadsPage: demo catalog leads tracking (new → contacted → converted/rejected workflow)
+  - PlansPage: inline editing for pricing and AI message limits
+  - Database schema extended with `leads` table and `requestedPlanId` field
+  - All admin endpoints protected with requireSuperAdmin and Zod validation
+  - Subscription management: change plan, extend (7d-365d options), view expiring users
 
 ## API Endpoints
 
@@ -182,7 +191,13 @@ Preferred communication style: Simple, everyday language.
 - `GET /api/admin/tenants` - List all tenants
 - `PATCH /api/admin/tenants/:id` - Update tenant
 - `GET /api/admin/plans` - List all plans
+- `PATCH /api/admin/plans/:id` - Update plan (price, AI limits) with Zod validation
 - `POST /api/admin/subscriptions/extend` - Extend subscription
+- `POST /api/admin/subscriptions/change-plan` - Change user subscription plan with validation
+- `GET /api/admin/users` - List paid users with tenant/plan details (excludes passwords)
+- `GET /api/admin/users-free` - List free tier users only
+- `GET /api/admin/leads` - Get demo catalog leads
+- `PATCH /api/admin/leads/:id` - Update lead status (new/contacted/converted/rejected)
 
 ### WAHA WhatsApp Integration
 - `GET /api/waha/health` - Check WAHA server status
