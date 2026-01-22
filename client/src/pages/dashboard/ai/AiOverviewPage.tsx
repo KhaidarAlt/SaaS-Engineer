@@ -11,7 +11,7 @@ import { Link } from "wouter";
 import { 
   Bot, FileText, Tags, BookOpen, HelpCircle, Shield, 
   Inbox, MessageSquare, BarChart3, Plug, CheckCircle2, Circle,
-  AlertCircle
+  AlertCircle, Settings
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useMutation } from "@tanstack/react-query";
@@ -39,6 +39,7 @@ const aiModules = [
   { key: "knowledgeConfigured", title: "База знаний", icon: BookOpen, path: "/dashboard/ai/knowledge", description: "Информация о товарах и услугах" },
   { key: "faqConfigured", title: "FAQ", icon: HelpCircle, path: "/dashboard/ai/faq", description: "Часто задаваемые вопросы" },
   { key: "policiesConfigured", title: "Политики", icon: Shield, path: "/dashboard/ai/policies", description: "Правила работы ассистента" },
+  { key: "settingsConfigured", title: "Настройки AI", icon: Settings, path: "/dashboard/ai/settings", description: "Языки, промт и поведение" },
 ];
 
 const aiPages = [

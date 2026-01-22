@@ -1906,10 +1906,26 @@ export async function registerRoutes(
   app.put("/api/ai/settings", requireAuth, requireAiAccess, async (req, res) => {
     try {
       const tenantId = req.user!.tenantId!;
+      const { enabled, aiLanguages, aiSystemPrompt, aiTypingDelay, ...rest } = req.body;
+      
+      // Update AI settings table
       await storage.getOrCreateAiSettings(tenantId);
-      const settings = await storage.updateAiSettings(tenantId, req.body);
+      const settings = await storage.updateAiSettings(tenantId, { enabled, ...rest });
+      
+      // Update tenant AI fields if provided
+      const tenantUpdate: any = {};
+      if (enabled !== undefined) tenantUpdate.aiEnabled = enabled;
+      if (aiLanguages !== undefined) tenantUpdate.aiLanguages = aiLanguages;
+      if (aiSystemPrompt !== undefined) tenantUpdate.aiSystemPrompt = aiSystemPrompt;
+      if (aiTypingDelay !== undefined) tenantUpdate.aiTypingDelay = aiTypingDelay;
+      
+      if (Object.keys(tenantUpdate).length > 0) {
+        await storage.updateTenant(tenantId, tenantUpdate);
+      }
+      
       res.json(settings);
     } catch (error) {
+      console.error("Error updating AI settings:", error);
       res.status(500).json({ message: "Ошибка сохранения настроек" });
     }
   });
@@ -2261,7 +2277,7 @@ export async function registerRoutes(
               productName: d.scope === 'product' && d.scopeId ? products.find(p => p.id === d.scopeId)?.name : undefined,
             })),
             contactPhone: tenant?.contactPhone || undefined,
-            aiLanguage: (tenant as any).aiLanguage || "ru",
+            aiLanguages: (tenant as any).aiLanguages || ["ru"],
             aiSystemPrompt: (tenant as any).aiSystemPrompt || undefined,
           };
           
@@ -2771,7 +2787,7 @@ export async function registerRoutes(
         content: k.content,
       })),
       currentStage: conversation.currentStage || undefined,
-      aiLanguage: (tenant as any).aiLanguage || "ru",
+      aiLanguages: (tenant as any).aiLanguages || ["ru"],
       aiSystemPrompt: (tenant as any).aiSystemPrompt || undefined,
     };
     

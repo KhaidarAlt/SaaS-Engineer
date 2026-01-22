@@ -53,7 +53,7 @@ export const tenants = pgTable("tenants", {
   telegramChatId: text("telegram_chat_id"),
   notificationPhone: text("notification_phone"),
   aiEnabled: boolean("ai_enabled").notNull().default(false),
-  aiLanguage: text("ai_language").default("ru"),
+  aiLanguages: text("ai_languages").array().default(sql`ARRAY['ru']::text[]`),
   aiSystemPrompt: text("ai_system_prompt"),
   aiTypingDelay: integer("ai_typing_delay").default(0),
   createdAt: timestamp("created_at").notNull().defaultNow(),

@@ -67,7 +67,7 @@ interface TenantContext {
   tagRules?: TagRule[];
   tone?: string;
   currentStage?: string;
-  aiLanguage?: string;
+  aiLanguages?: string[];
   aiSystemPrompt?: string;
 }
 
@@ -190,11 +190,18 @@ function buildSystemPrompt(context: TenantContext, catalogUrl: string, matchedTa
     en: "Reply only in English.",
   };
   
-  const lang = context.aiLanguage || "ru";
+  const languages = context.aiLanguages || ["ru"];
   let prompt = `Ты — профессиональный AI-продавец-консультант магазина "${context.storeName}".`;
   
+  // Build language instructions based on selected languages
+  const selectedLangInstructions = languages
+    .map(lang => langInstructions[lang])
+    .filter(Boolean)
+    .join("\n");
+  
   prompt += `\n\n## ЯЗЫК ОБЩЕНИЯ
-${langInstructions[lang] || langInstructions.ru}`;
+${selectedLangInstructions || langInstructions.ru}
+Определяй язык клиента по его сообщениям и отвечай на том же языке (если он в списке разрешённых).`;
   
   if (context.storeDescription) {
     prompt += `\n\nО магазине: ${context.storeDescription}`;

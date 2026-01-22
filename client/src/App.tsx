@@ -37,6 +37,7 @@ import AiInboxPage from "@/pages/dashboard/ai/AiInboxPage";
 import AiSandboxPage from "@/pages/dashboard/ai/AiSandboxPage";
 import AiAnalyticsPage from "@/pages/dashboard/ai/AiAnalyticsPage";
 import AiIntegrationsPage from "@/pages/dashboard/ai/AiIntegrationsPage";
+import AiSettingsPage from "@/pages/dashboard/ai/AiSettingsPage";
 import CatalogHome from "@/pages/catalog/CatalogHome";
 import ProductDetailPage from "@/pages/catalog/ProductDetailPage";
 import CartPage from "@/pages/catalog/CartPage";
@@ -174,6 +175,9 @@ function Router() {
       </Route>
       <Route path="/dashboard/ai/integrations">
         <ProtectedRoute component={AiIntegrationsPage} />
+      </Route>
+      <Route path="/dashboard/ai/settings">
+        <ProtectedRoute component={AiSettingsPage} />
       </Route>
 
       <Route path="/admin">
