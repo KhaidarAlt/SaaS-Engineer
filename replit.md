@@ -154,6 +154,27 @@ Preferred communication style: Simple, everyday language.
   - Database schema extended with `leads` table and `requestedPlanId` field
   - All admin endpoints protected with requireSuperAdmin and Zod validation
   - Subscription management: change plan, extend (7d-365d options), view expiring users
+- Plan Selection Popup System:
+  - PlanSelectionPopup component shows 24h after registration
+  - Displays comparison table for Каталог, Каталог + AI, Про plans
+  - Старт (free) plan activation option at bottom
+  - Success message: "Спасибо, ваш запрос отправлен!"
+  - Dismiss popup marks planPopupShown=true via API
+  - Loading state while fetching plans
+- Feature Restrictions by Plan:
+  - DashboardLayout locks sidebar items based on subscription:
+    * Старт: Import, AI-assistant, Analytics locked (lock icons shown)
+    * Каталог: AI-assistant locked
+    * Каталог + AI, Про, Бизнес: All features unlocked
+  - Clicking locked items shows toast with upgrade message
+  - WAHA WhatsApp section in Settings locked for Старт plan
+  - planPopupShown field added to users table for popup tracking
+- Default Pricing Plans (seed):
+  - Старт (0₸) - 20 products, 5 categories, no AI, no WAHA
+  - Каталог (9,990₸) - 300 products, no AI
+  - Каталог + AI (19,990₸) - 1000 products, AI access
+  - Про (49,900₸) - 3000 products, advanced AI
+  - Бизнес (99,900₸) - 20000 products, full features
 
 ## API Endpoints
 
@@ -198,6 +219,11 @@ Preferred communication style: Simple, everyday language.
 - `GET /api/admin/users-free` - List free tier users only
 - `GET /api/admin/leads` - Get demo catalog leads
 - `PATCH /api/admin/leads/:id` - Update lead status (new/contacted/converted/rejected)
+
+### Plan Selection
+- `GET /api/plans` - Get all available plans (public)
+- `POST /api/request-plan` - Request a plan (saves requestedPlanId for paid plans, activates immediately for free)
+- `POST /api/dismiss-plan-popup` - Mark plan popup as shown (sets planPopupShown=true)
 
 ### WAHA WhatsApp Integration
 - `GET /api/waha/health` - Check WAHA server status
