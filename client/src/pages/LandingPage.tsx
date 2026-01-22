@@ -136,8 +136,8 @@ export default function LandingPage() {
                 </p>
               </div>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Без карты. Без программирования. Бесплатно до 20 товаров навсегда.
+            <p className="text-sm text-muted-foreground leading-[1.4]">
+              Без карты. Сможет каждый. Бесплатно до 20 товаров навсегда.
             </p>
           </motion.div>
         </div>
