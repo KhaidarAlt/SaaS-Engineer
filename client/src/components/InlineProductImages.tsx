@@ -1,8 +1,25 @@
-import { useState, useCallback, useImperativeHandle, forwardRef } from "react";
+import { useState, useCallback, useImperativeHandle, forwardRef, useRef, useEffect } from "react";
 import { Plus, X, Upload, AlertCircle, ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
+
+async function uploadWithAuth(url: string, formData: FormData): Promise<Response> {
+  const response = await fetch(url, {
+    method: "POST",
+    body: formData,
+    credentials: "include",
+  });
+  
+  if (response.status === 401) {
+    if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
+      window.location.href = "/login";
+    }
+    throw new Error("Unauthorized");
+  }
+  
+  return response;
+}
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const MAX_IMAGE_DIMENSION = 1920;
@@ -22,6 +39,10 @@ export interface InlineProductImagesRef {
   getImageCount: () => number;
   isCompressing: () => boolean;
   waitForCompression: () => Promise<void>;
+}
+
+interface InlineProductImagesProps {
+  onCompressionChange?: (isCompressing: boolean) => void;
 }
 
 async function compressImage(file: File): Promise<Blob> {
@@ -85,14 +106,34 @@ function formatFileSize(bytes: number): string {
   return (bytes / (1024 * 1024)).toFixed(1) + " МБ";
 }
 
-export const InlineProductImages = forwardRef<InlineProductImagesRef>((_, ref) => {
+export const InlineProductImages = forwardRef<InlineProductImagesRef, InlineProductImagesProps>(
+  ({ onCompressionChange }, ref) => {
   const [isDragging, setIsDragging] = useState(false);
   const [previewImages, setPreviewImages] = useState<PreviewImage[]>([]);
   const { toast } = useToast();
+  
+  const previewImagesRef = useRef<PreviewImage[]>([]);
+  const compressionResolversRef = useRef<(() => void)[]>([]);
+  const prevCompressionStateRef = useRef<boolean>(false);
+  
+  useEffect(() => {
+    previewImagesRef.current = previewImages;
+    const isCompressing = previewImages.some(img => img.compressing);
+    
+    if (prevCompressionStateRef.current !== isCompressing) {
+      prevCompressionStateRef.current = isCompressing;
+      onCompressionChange?.(isCompressing);
+    }
+    
+    if (!isCompressing && compressionResolversRef.current.length > 0) {
+      compressionResolversRef.current.forEach(resolve => resolve());
+      compressionResolversRef.current = [];
+    }
+  }, [previewImages, onCompressionChange]);
 
   useImperativeHandle(ref, () => ({
     uploadImages: async (productId: string) => {
-      const readyImages = previewImages.filter(img => img.compressed && !img.error);
+      const readyImages = previewImagesRef.current.filter(img => img.compressed && !img.error);
       if (readyImages.length === 0) return;
 
       const formData = new FormData();
@@ -100,11 +141,7 @@ export const InlineProductImages = forwardRef<InlineProductImagesRef>((_, ref) =
         formData.append("images", img.compressed!, `image_${index}.jpg`);
       });
 
-      const response = await fetch(`/api/products/${productId}/images`, {
-        method: "POST",
-        body: formData,
-        credentials: "include",
-      });
+      const response = await uploadWithAuth(`/api/products/${productId}/images`, formData);
 
       if (!response.ok) {
         throw new Error("Upload failed");
@@ -115,20 +152,16 @@ export const InlineProductImages = forwardRef<InlineProductImagesRef>((_, ref) =
         return [];
       });
     },
-    hasImages: () => previewImages.filter(img => img.compressed && !img.error).length > 0,
-    getImageCount: () => previewImages.filter(img => img.compressed && !img.error).length,
-    isCompressing: () => previewImages.some(img => img.compressing),
-    waitForCompression: async () => {
+    hasImages: () => previewImagesRef.current.filter(img => img.compressed && !img.error).length > 0,
+    getImageCount: () => previewImagesRef.current.filter(img => img.compressed && !img.error).length,
+    isCompressing: () => previewImagesRef.current.some(img => img.compressing),
+    waitForCompression: () => {
       return new Promise<void>((resolve) => {
-        const checkCompression = () => {
-          const stillCompressing = previewImages.some(img => img.compressing);
-          if (!stillCompressing) {
-            resolve();
-          } else {
-            setTimeout(checkCompression, 100);
-          }
-        };
-        checkCompression();
+        if (!previewImagesRef.current.some(img => img.compressing)) {
+          resolve();
+          return;
+        }
+        compressionResolversRef.current.push(resolve);
       });
     },
   }));
@@ -212,7 +245,8 @@ export const InlineProductImages = forwardRef<InlineProductImagesRef>((_, ref) =
     setPreviewImages(prev => {
       const removed = prev[index];
       URL.revokeObjectURL(removed.preview);
-      return prev.filter((_, i) => i !== index);
+      const newImages = prev.filter((_, i) => i !== index);
+      return newImages;
     });
   }, []);
 

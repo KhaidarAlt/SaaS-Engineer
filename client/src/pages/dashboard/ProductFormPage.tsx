@@ -105,6 +105,7 @@ export default function ProductFormPage() {
   const productId = isEdit ? params?.id : null;
   const { toast } = useToast();
   const inlineImagesRef = useRef<InlineProductImagesRef>(null);
+  const [isCompressingImages, setIsCompressingImages] = useState(false);
 
   const [selectedSizes, setSelectedSizes] = useState<SizeWithQty[]>([]);
   const [selectedColors, setSelectedColors] = useState<{name: string; hex: string}[]>([]);
@@ -172,8 +173,6 @@ export default function ProductFormPage() {
     }
   }, [product, form]);
 
-  const [createdProductId, setCreatedProductId] = useState<string | null>(null);
-
   const mutation = useMutation({
     mutationFn: async (data: ProductFormData) => {
       const payload = {
@@ -194,13 +193,13 @@ export default function ProductFormPage() {
       
       const response = await apiRequest("POST", "/api/products", payload);
       const newProduct = await response.json();
-      setCreatedProductId(newProduct.id);
       
       if (inlineImagesRef.current?.hasImages()) {
         try {
           await inlineImagesRef.current.uploadImages(newProduct.id);
         } catch {
-          throw new Error("IMAGE_UPLOAD_FAILED");
+          // Throw error with product ID so we can redirect to edit page
+          throw new Error(`IMAGE_UPLOAD_FAILED:${newProduct.id}`);
         }
       }
       
@@ -214,7 +213,8 @@ export default function ProductFormPage() {
       setLocation("/dashboard/products");
     },
     onError: (error) => {
-      if (error instanceof Error && error.message === "IMAGE_UPLOAD_FAILED") {
+      if (error instanceof Error && error.message.startsWith("IMAGE_UPLOAD_FAILED:")) {
+        const newProductId = error.message.split(":")[1];
         queryClient.invalidateQueries({ queryKey: ["/api/products"] });
         toast({
           title: "Товар создан, но изображения не загружены",
@@ -222,9 +222,7 @@ export default function ProductFormPage() {
           variant: "destructive",
         });
         // Redirect to edit page so user can retry adding images
-        if (createdProductId) {
-          setLocation(`/dashboard/products/${createdProductId}`);
-        }
+        setLocation(`/dashboard/products/${newProductId}`);
         return;
       }
       toast({
@@ -827,11 +825,16 @@ export default function ProductFormPage() {
             >
               Отмена
             </Button>
-            <Button type="submit" disabled={mutation.isPending} data-testid="button-save">
+            <Button type="submit" disabled={mutation.isPending || isCompressingImages} data-testid="button-save">
               {mutation.isPending ? (
                 <span className="flex items-center gap-2">
                   <span className="animate-spin rounded-full h-4 w-4 border-2 border-primary-foreground border-t-transparent" />
                   Сохранение...
+                </span>
+              ) : isCompressingImages ? (
+                <span className="flex items-center gap-2">
+                  <span className="animate-spin rounded-full h-4 w-4 border-2 border-primary-foreground border-t-transparent" />
+                  Сжатие изображений...
                 </span>
               ) : (
                 <span className="flex items-center gap-2">
@@ -846,7 +849,10 @@ export default function ProductFormPage() {
         {!isEdit && (
           <Card>
             <CardContent className="pt-6">
-              <InlineProductImages ref={inlineImagesRef} />
+              <InlineProductImages 
+                ref={inlineImagesRef} 
+                onCompressionChange={setIsCompressingImages}
+              />
             </CardContent>
           </Card>
         )}
