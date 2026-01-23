@@ -4,11 +4,50 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 
-async function uploadWithAuth(url: string, formData: FormData): Promise<Response> {
-  const response = await fetch(url, {
+async function requestPresignedUrl(blobSize: number): Promise<{ uploadURL: string; objectPath: string }> {
+  const response = await fetch("/api/uploads/request-url", {
     method: "POST",
-    body: formData,
+    headers: { "Content-Type": "application/json" },
     credentials: "include",
+    body: JSON.stringify({
+      name: `image_${Date.now()}.jpg`,
+      size: blobSize,
+      contentType: "image/jpeg",
+    }),
+  });
+  
+  if (response.status === 401) {
+    if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
+      window.location.href = "/login";
+    }
+    throw new Error("Unauthorized");
+  }
+  
+  if (!response.ok) {
+    throw new Error("Failed to get upload URL");
+  }
+  
+  return response.json();
+}
+
+async function uploadToPresignedUrl(uploadURL: string, blob: Blob): Promise<void> {
+  const response = await fetch(uploadURL, {
+    method: "PUT",
+    body: blob,
+    headers: { "Content-Type": "image/jpeg" },
+  });
+  
+  if (!response.ok) {
+    throw new Error("Upload failed");
+  }
+}
+
+async function saveImageRecords(productId: string, objectPaths: string[]): Promise<Response> {
+  const response = await fetch(`/api/products/${productId}/images`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ objectPaths }),
   });
   
   if (response.status === 401) {
@@ -136,12 +175,15 @@ export const InlineProductImages = forwardRef<InlineProductImagesRef, InlineProd
       const readyImages = previewImagesRef.current.filter(img => img.compressed && !img.error);
       if (readyImages.length === 0) return;
 
-      const formData = new FormData();
-      readyImages.forEach((img, index) => {
-        formData.append("images", img.compressed!, `image_${index}.jpg`);
-      });
+      const objectPaths: string[] = [];
+      
+      for (const img of readyImages) {
+        const { uploadURL, objectPath } = await requestPresignedUrl(img.compressed!.size);
+        await uploadToPresignedUrl(uploadURL, img.compressed!);
+        objectPaths.push(objectPath);
+      }
 
-      const response = await uploadWithAuth(`/api/products/${productId}/images`, formData);
+      const response = await saveImageRecords(productId, objectPaths);
 
       if (!response.ok) {
         throw new Error("Upload failed");

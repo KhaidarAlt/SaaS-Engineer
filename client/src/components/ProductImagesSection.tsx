@@ -105,19 +105,48 @@ export function ProductImagesSection({ productId }: ProductImagesSectionProps) {
   const uploadMutation = useMutation({
     mutationFn: async (blobs: Blob[]) => {
       setUploading(true);
-      const formData = new FormData();
-      blobs.forEach((blob, index) => {
-        formData.append("images", blob, `image_${index}.jpg`);
-      });
+      const objectPaths: string[] = [];
+      
+      for (const blob of blobs) {
+        const urlResponse = await fetch("/api/uploads/request-url", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            name: `image_${Date.now()}.jpg`,
+            size: blob.size,
+            contentType: "image/jpeg",
+          }),
+        });
+        
+        if (!urlResponse.ok) {
+          throw new Error("Failed to get upload URL");
+        }
+        
+        const { uploadURL, objectPath } = await urlResponse.json();
+        
+        const uploadResponse = await fetch(uploadURL, {
+          method: "PUT",
+          body: blob,
+          headers: { "Content-Type": "image/jpeg" },
+        });
+        
+        if (!uploadResponse.ok) {
+          throw new Error("Upload failed");
+        }
+        
+        objectPaths.push(objectPath);
+      }
       
       const response = await fetch(`/api/products/${productId}/images`, {
         method: "POST",
-        body: formData,
+        headers: { "Content-Type": "application/json" },
         credentials: "include",
+        body: JSON.stringify({ objectPaths }),
       });
       
       if (!response.ok) {
-        throw new Error("Upload failed");
+        throw new Error("Save failed");
       }
       
       return response.json();

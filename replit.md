@@ -67,7 +67,10 @@ Preferred communication style: Simple, everyday language.
 - Knowledge base system for RAG-style responses
 
 ### File Storage
-- Local filesystem for development with abstraction layer for S3-compatible storage migration
+- Replit Object Storage (Google Cloud Storage) for persistent file storage
+- Presigned URL upload flow for direct browser-to-storage uploads
+- Images served via `/objects/` route with automatic ACL policy support
+- Public images for product photos, accessible without authentication
 
 ### Payment Processing (Prepared)
 - Stripe integration scaffolded for subscription billing

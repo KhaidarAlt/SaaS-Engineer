@@ -5,44 +5,11 @@ import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
 import bcrypt from "bcryptjs";
 import MemoryStore from "memorystore";
-import multer from "multer";
-import path from "path";
-import fs from "fs";
 import { z } from "zod";
 import { storage } from "./storage";
 import { loginSchema, registerSchema, checkoutSchema } from "@shared/schema";
 import type { User, Tenant, Subscription, Plan } from "@shared/schema";
-
-const uploadsDir = path.join(process.cwd(), "uploads");
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
-
-const uploadStorage = multer.diskStorage({
-  destination: (_req, _file, cb) => {
-    cb(null, uploadsDir);
-  },
-  filename: (_req, file, cb) => {
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    const ext = path.extname(file.originalname);
-    cb(null, `${uniqueSuffix}${ext}`);
-  },
-});
-
-const upload = multer({
-  storage: uploadStorage,
-  limits: { fileSize: 10 * 1024 * 1024 },
-  fileFilter: (_req, file, cb) => {
-    const allowedTypes = /jpeg|jpg|png|gif|webp/;
-    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-    const mimetype = allowedTypes.test(file.mimetype);
-    if (extname && mimetype) {
-      cb(null, true);
-    } else {
-      cb(new Error("Only image files are allowed"));
-    }
-  },
-});
+import { ObjectStorageService, registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 
 const SessionStore = MemoryStore(session);
 
@@ -380,6 +347,8 @@ export async function registerRoutes(
 
   app.use(passport.initialize());
   app.use(passport.session());
+  
+  registerObjectStorageRoutes(app);
 
   passport.use(
     new LocalStrategy(
@@ -707,23 +676,35 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/products/:productId/images", requireAuth, upload.array("images", 10), async (req, res) => {
+  app.post("/api/products/:productId/images", requireAuth, async (req, res) => {
     try {
-      const files = req.files as Express.Multer.File[];
-      if (!files || files.length === 0) {
-        return res.status(400).json({ message: "Файлы не загружены" });
+      const { objectPaths } = req.body;
+      if (!objectPaths || !Array.isArray(objectPaths) || objectPaths.length === 0) {
+        return res.status(400).json({ message: "Не указаны пути к изображениям" });
       }
 
       const existingImages = await storage.getProductImages(req.params.productId, req.user!.tenantId!);
       const hasMainImage = existingImages.some(img => img.isMain);
 
+      const objectStorageService = new ObjectStorageService();
       const createdImages = [];
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
+      
+      for (let i = 0; i < objectPaths.length; i++) {
+        const objectPath = objectPaths[i];
+        
+        try {
+          await objectStorageService.trySetObjectEntityAclPolicy(objectPath, {
+            owner: req.user!.id,
+            visibility: "public",
+          });
+        } catch (e) {
+          console.error("Error setting ACL policy:", e);
+        }
+
         const image = await storage.createProductImage({
           productId: req.params.productId,
           tenantId: req.user!.tenantId!,
-          url: `/uploads/${file.filename}`,
+          url: objectPath,
           isMain: !hasMainImage && i === 0,
           sortOrder: existingImages.length + i,
         });
@@ -732,8 +713,8 @@ export async function registerRoutes(
 
       res.status(201).json(createdImages);
     } catch (error) {
-      console.error("Error uploading images:", error);
-      res.status(500).json({ message: "Ошибка загрузки изображений" });
+      console.error("Error saving images:", error);
+      res.status(500).json({ message: "Ошибка сохранения изображений" });
     }
   });
 
@@ -748,31 +729,10 @@ export async function registerRoutes(
 
   app.delete("/api/products/:productId/images/:imageId", requireAuth, async (req, res) => {
     try {
-      const images = await storage.getProductImages(req.params.productId, req.user!.tenantId!);
-      const imageToDelete = images.find(img => img.id === req.params.imageId);
-      
-      if (imageToDelete) {
-        const filePath = path.join(uploadsDir, path.basename(imageToDelete.url));
-        if (fs.existsSync(filePath)) {
-          fs.unlinkSync(filePath);
-        }
-      }
-
       await storage.deleteProductImage(req.params.imageId, req.user!.tenantId!);
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ message: "Ошибка удаления изображения" });
-    }
-  });
-
-  app.post("/api/upload", requireAuth, upload.single("image"), async (req, res) => {
-    try {
-      if (!req.file) {
-        return res.status(400).json({ message: "Файл не загружен" });
-      }
-      res.json({ url: `/uploads/${req.file.filename}` });
-    } catch (error) {
-      res.status(500).json({ message: "Ошибка загрузки файла" });
     }
   });
 
@@ -1659,8 +1619,9 @@ export async function registerRoutes(
       // Clean old entries every 1000 calls
       if (eventRateLimit.size > 1000) {
         const oneMinuteAgo = now - 60000;
-        for (const [key, time] of eventRateLimit.entries()) {
-          if (time < oneMinuteAgo) eventRateLimit.delete(key);
+        const entries = Array.from(eventRateLimit.entries());
+        for (const entry of entries) {
+          if (entry[1] < oneMinuteAgo) eventRateLimit.delete(entry[0]);
         }
       }
       
