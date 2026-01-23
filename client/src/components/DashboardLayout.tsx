@@ -86,7 +86,8 @@ export function DashboardLayout({ children, isSuperAdmin = false }: DashboardLay
   const currentPlanName = billing?.subscription?.plan?.name || "";
 
   useEffect(() => {
-    if (isSuperAdmin || !user) return;
+    // Never show popup for superadmin (check both prop and user role)
+    if (isSuperAdmin || !user || user.role === "superadmin") return;
 
     const createdAt = new Date(user.createdAt);
     const now = new Date();

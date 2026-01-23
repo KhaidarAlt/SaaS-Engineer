@@ -51,10 +51,11 @@ export function PlanSelectionPopup({ open, onClose }: PlanSelectionPopupProps) {
     },
   });
 
-  // Match plans by name - order: Каталог (no AI), Каталог + AI (with AI), Про (advanced)
+  // Match plans by name - order: Каталог (no AI), Каталог + AI (with AI), Про, Бизнес
   const catalogPlan = plans?.find((p) => p.name === "Каталог" && !p.hasAiAccess);
   const catalogAiPlan = plans?.find((p) => p.name === "Каталог + AI" || (p.name.includes("Каталог") && p.hasAiAccess));
   const proPlan = plans?.find((p) => p.name === "Про" || p.name === "PRO");
+  const businessPlan = plans?.find((p) => p.name === "Бизнес" || p.name === "Business");
   const startPlan = plans?.find((p) => p.name === "Старт" || p.price === 0);
 
   const formatPrice = (price: number) => {
@@ -132,6 +133,22 @@ export function PlanSelectionPopup({ open, onClose }: PlanSelectionPopupProps) {
       ],
       noFeatures: [],
     },
+    {
+      plan: businessPlan,
+      icon: Crown,
+      color: "text-emerald-500",
+      bgColor: "bg-emerald-500/10",
+      features: [
+        "До 20000 товаров",
+        "500 категорий",
+        "WhatsApp интеграция",
+        "AI-ассистент PRO",
+        "20000 диалогов/мес",
+        "VIP поддержка",
+        "Менеджеры магазина",
+      ],
+      noFeatures: [],
+    },
   ];
 
   // Loading state
@@ -176,14 +193,14 @@ export function PlanSelectionPopup({ open, onClose }: PlanSelectionPopupProps) {
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-5xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-2xl text-center">
             Выберите тариф для вашего магазина
           </DialogTitle>
         </DialogHeader>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
           {mainPlans.map(({ plan, icon: Icon, color, bgColor, popular, features, noFeatures }) => {
             if (!plan) return null;
             const isSelected = selectedPlanId === plan.id;

@@ -1,7 +1,18 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
+function handleUnauthorized() {
+  // Only redirect if we're not already on the login page
+  if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
+    window.location.href = "/login";
+  }
+}
+
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
+    // Handle session expiry - redirect to login on 401
+    if (res.status === 401) {
+      handleUnauthorized();
+    }
     const text = (await res.text()) || res.statusText;
     throw new Error(`${res.status}: ${text}`);
   }
@@ -23,18 +34,26 @@ export async function apiRequest(
   return res;
 }
 
-type UnauthorizedBehavior = "returnNull" | "throw";
+type UnauthorizedBehavior = "returnNull" | "throw" | "redirect";
 export const getQueryFn: <T>(options: {
   on401: UnauthorizedBehavior;
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
-    const res = await fetch(queryKey.join("/") as string, {
+    const url = queryKey.join("/") as string;
+    const res = await fetch(url, {
       credentials: "include",
     });
 
-    if (unauthorizedBehavior === "returnNull" && res.status === 401) {
-      return null;
+    if (res.status === 401) {
+      if (unauthorizedBehavior === "returnNull") {
+        return null;
+      }
+      // Redirect to login on 401 for dashboard requests (except auth/me)
+      if (unauthorizedBehavior === "redirect" || 
+          (unauthorizedBehavior === "throw" && !url.includes("/api/auth/me"))) {
+        handleUnauthorized();
+      }
     }
 
     await throwIfResNotOk(res);
