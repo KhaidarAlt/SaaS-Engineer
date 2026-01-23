@@ -356,6 +356,11 @@ export async function registerRoutes(
 ): Promise<Server> {
   await ensureDefaultPlans();
 
+  // Trust proxy in production (required for secure cookies behind reverse proxy)
+  if (process.env.NODE_ENV === "production") {
+    app.set("trust proxy", 1);
+  }
+
   app.use(
     session({
       secret: process.env.SESSION_SECRET || "smartcatalog-secret-key",
@@ -368,6 +373,7 @@ export async function registerRoutes(
         maxAge: 7 * 24 * 60 * 60 * 1000,
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
+        sameSite: process.env.NODE_ENV === "production" ? "lax" : "lax",
       },
     })
   );
