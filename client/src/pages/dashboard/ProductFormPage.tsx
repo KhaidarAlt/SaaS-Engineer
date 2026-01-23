@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -29,6 +29,7 @@ import { DashboardLayout } from "@/components/DashboardLayout";
 import { PageLoader } from "@/components/LoadingSpinner";
 import { ProductVariantsSection } from "@/components/ProductVariantsSection";
 import { ProductImagesSection } from "@/components/ProductImagesSection";
+import { InlineProductImages, InlineProductImagesRef } from "@/components/InlineProductImages";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Product, Category } from "@shared/schema";
@@ -103,6 +104,7 @@ export default function ProductFormPage() {
   const isEdit = match && params?.id !== "new";
   const productId = isEdit ? params?.id : null;
   const { toast } = useToast();
+  const inlineImagesRef = useRef<InlineProductImagesRef>(null);
 
   const [selectedSizes, setSelectedSizes] = useState<SizeWithQty[]>([]);
   const [selectedColors, setSelectedColors] = useState<{name: string; hex: string}[]>([]);
@@ -170,6 +172,8 @@ export default function ProductFormPage() {
     }
   }, [product, form]);
 
+  const [createdProductId, setCreatedProductId] = useState<string | null>(null);
+
   const mutation = useMutation({
     mutationFn: async (data: ProductFormData) => {
       const payload = {
@@ -182,7 +186,25 @@ export default function ProductFormPage() {
       if (isEdit && productId) {
         return apiRequest("PUT", `/api/products/${productId}`, payload);
       }
-      return apiRequest("POST", "/api/products", payload);
+      
+      // Wait for image compression to complete before creating product
+      if (inlineImagesRef.current?.isCompressing()) {
+        await inlineImagesRef.current.waitForCompression();
+      }
+      
+      const response = await apiRequest("POST", "/api/products", payload);
+      const newProduct = await response.json();
+      setCreatedProductId(newProduct.id);
+      
+      if (inlineImagesRef.current?.hasImages()) {
+        try {
+          await inlineImagesRef.current.uploadImages(newProduct.id);
+        } catch {
+          throw new Error("IMAGE_UPLOAD_FAILED");
+        }
+      }
+      
+      return newProduct;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/products"] });
@@ -192,6 +214,19 @@ export default function ProductFormPage() {
       setLocation("/dashboard/products");
     },
     onError: (error) => {
+      if (error instanceof Error && error.message === "IMAGE_UPLOAD_FAILED") {
+        queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+        toast({
+          title: "Товар создан, но изображения не загружены",
+          description: "Вы можете добавить изображения на странице редактирования товара",
+          variant: "destructive",
+        });
+        // Redirect to edit page so user can retry adding images
+        if (createdProductId) {
+          setLocation(`/dashboard/products/${createdProductId}`);
+        }
+        return;
+      }
       toast({
         title: "Ошибка",
         description: error instanceof Error ? error.message : "Попробуйте позже",
@@ -807,6 +842,14 @@ export default function ProductFormPage() {
             </Button>
           </div>
         </form>
+
+        {!isEdit && (
+          <Card>
+            <CardContent className="pt-6">
+              <InlineProductImages ref={inlineImagesRef} />
+            </CardContent>
+          </Card>
+        )}
 
         {isEdit && productId && (
           <>
