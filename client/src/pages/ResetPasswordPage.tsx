@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { Link, useLocation } from "wouter";
+import { useState, useMemo } from "react";
+import { Link, useSearch } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -10,22 +10,17 @@ import { ArrowLeft, Lock, Loader2, CheckCircle, XCircle, Eye, EyeOff } from "luc
 import { apiRequest } from "@/lib/queryClient";
 
 export default function ResetPasswordPage() {
-  const [, setLocation] = useLocation();
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [success, setSuccess] = useState(false);
   const { toast } = useToast();
 
-  const searchParams = new URLSearchParams(window.location.search);
-  const token = searchParams.get("token");
+  const searchString = useSearch();
+  const token = useMemo(() => new URLSearchParams(searchString).get("token"), [searchString]);
 
   const { data: tokenStatus, isLoading: isValidating } = useQuery<{ valid: boolean; email?: string; message?: string }>({
-    queryKey: ["/api/auth/validate-reset-token", token],
-    queryFn: async () => {
-      const res = await fetch(`/api/auth/validate-reset-token?token=${token}`);
-      return res.json();
-    },
+    queryKey: [`/api/auth/validate-reset-token?token=${token}`],
     enabled: !!token,
   });
 
