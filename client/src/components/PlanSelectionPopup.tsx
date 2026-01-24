@@ -30,7 +30,8 @@ export function PlanSelectionPopup({ open, onClose }: PlanSelectionPopupProps) {
 
   const requestPlanMutation = useMutation({
     mutationFn: async (planId: string) => {
-      return apiRequest("POST", `/api/request-plan`, { planId });
+      await apiRequest("POST", `/api/request-plan`, { planId });
+      await apiRequest("POST", `/api/dismiss-plan-popup`);
     },
     onSuccess: () => {
       setShowSuccess(true);
