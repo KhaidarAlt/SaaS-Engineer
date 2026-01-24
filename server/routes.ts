@@ -234,10 +234,14 @@ async function ensureDefaultPlans() {
   await migratePlansToNewStructure();
   
   const existingPlans = await storage.getPlans();
-  const activePlans = existingPlans.filter(p => p.isActive);
   
-  if (activePlans.length === 0) {
-    // Free starter plan
+  // Check each required plan and create if missing
+  const hasStart = existingPlans.some(p => p.name === "Старт");
+  const hasCatalog = existingPlans.some(p => p.name === "Каталог");
+  const hasBusiness = existingPlans.some(p => p.name === "Business");
+  const hasPro = existingPlans.some(p => p.name === "PRO");
+  
+  if (!hasStart) {
     await storage.createPlan({
       name: "Старт",
       price: 0,
@@ -254,7 +258,10 @@ async function ensureDefaultPlans() {
       features: ["Каталог до 20 товаров", "Приём заявок в WhatsApp", "Публичная ссылка"],
       isActive: true,
     });
-    // Каталог plan - full catalog, CRM, analytics, no AI
+    console.log("Created plan: Старт");
+  }
+  
+  if (!hasCatalog) {
     await storage.createPlan({
       name: "Каталог",
       price: 9990,
@@ -271,7 +278,10 @@ async function ensureDefaultPlans() {
       features: ["Полноценный каталог", "Категории и вариации", "Скидки и акции", "Встроенная CRM", "Полная аналитика"],
       isActive: true,
     });
-    // Business plan - AI assistant with 300 dialogs/month
+    console.log("Created plan: Каталог");
+  }
+  
+  if (!hasBusiness) {
     await storage.createPlan({
       name: "Business",
       price: 19990,
@@ -288,7 +298,10 @@ async function ensureDefaultPlans() {
       features: ["Всё из Каталог", "AI-ассистент 24/7", "300 диалогов/мес", "Скрипты продаж + база знаний", "Передача менеджеру по триггерам"],
       isActive: true,
     });
-    // PRO plan - maximum features, 900 dialogs/month
+    console.log("Created plan: Business");
+  }
+  
+  if (!hasPro) {
     await storage.createPlan({
       name: "PRO",
       price: 34990,
@@ -305,7 +318,7 @@ async function ensureDefaultPlans() {
       features: ["Всё из Business", "900 диалогов/мес", "Приоритетная обработка диалогов", "Максимальная автоматизация продаж"],
       isActive: true,
     });
-    console.log("Default plans created");
+    console.log("Created plan: PRO");
   }
 }
 
