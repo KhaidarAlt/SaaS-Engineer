@@ -1,11 +1,13 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import session from "express-session";
+import express from "express";
 import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
 import bcrypt from "bcryptjs";
 import MemoryStore from "memorystore";
 import { z } from "zod";
+import path from "path";
 import { storage } from "./storage";
 import { loginSchema, registerSchema, checkoutSchema } from "@shared/schema";
 import type { User, Tenant, Subscription, Plan } from "@shared/schema";
@@ -433,6 +435,9 @@ export async function registerRoutes(
   app.use(passport.session());
   
   registerObjectStorageRoutes(app);
+  
+  // Serve legacy local uploads (for backward compatibility)
+  app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
   passport.use(
     new LocalStrategy(
