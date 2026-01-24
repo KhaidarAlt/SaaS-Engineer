@@ -662,12 +662,11 @@ export async function registerRoutes(
         expiresAt,
       });
 
-      // Build reset link
-      const baseUrl = process.env.REPLIT_DEV_DOMAIN 
-        ? `https://${process.env.REPLIT_DEV_DOMAIN}` 
-        : process.env.REPLIT_DOMAINS 
-        ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}`
-        : "http://localhost:5000";
+      // Build reset link - prioritize APP_URL for production
+      const baseUrl = process.env.APP_URL 
+        || (process.env.REPLIT_DOMAINS 
+          ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}`
+          : "http://localhost:5000");
       const resetLink = `${baseUrl}/reset-password?token=${token}`;
 
       // Send email
