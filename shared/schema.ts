@@ -89,6 +89,20 @@ export const insertUserSchema = createInsertSchema(users).omit({ id: true, creat
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 
+// ============ PASSWORD RESET TOKENS ============
+export const passwordResetTokens = pgTable("password_reset_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  email: text("email").notNull(),
+  token: text("token").notNull().unique(),
+  expiresAt: timestamp("expires_at").notNull(),
+  usedAt: timestamp("used_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertPasswordResetTokenSchema = createInsertSchema(passwordResetTokens).omit({ id: true, createdAt: true });
+export type InsertPasswordResetToken = z.infer<typeof insertPasswordResetTokenSchema>;
+export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
+
 // ============ SUBSCRIPTIONS ============
 export const subscriptions = pgTable("subscriptions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
