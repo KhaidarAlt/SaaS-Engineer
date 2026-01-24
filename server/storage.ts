@@ -6,7 +6,7 @@ import {
   subscriptionExtensions, knowledgeBase, auditLogs, carts, productVariants, productImages,
   aiSettings, aiSalesScripts, aiTagRules, aiKnowledgeArticles, aiFaqItems,
   aiPolicies, aiConversations, aiMessages, aiInterventionEvents, aiInboxTickets,
-  wahaInstances, aiResponseCorrections, leads,
+  wahaInstances, aiResponseCorrections, leads, passwordResetTokens,
   type User, type InsertUser, type Tenant, type InsertTenant,
   type Subscription, type InsertSubscription, type Plan, type InsertPlan,
   type Product, type InsertProduct, type Category, type InsertCategory,
@@ -197,6 +197,12 @@ export interface IStorage {
     revenue: number;
     conversion: number;
   }>>;
+  
+  // Password reset
+  createPasswordResetToken(data: { email: string; token: string; expiresAt: Date }): Promise<void>;
+  getPasswordResetToken(token: string): Promise<{ email: string; token: string; expiresAt: Date; usedAt: Date | null } | undefined>;
+  markPasswordResetTokenUsed(token: string): Promise<void>;
+  updateUserPassword(userId: string, hashedPassword: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1398,6 +1404,38 @@ export class DatabaseStorage implements IStorage {
     await db.update(leads)
       .set({ status } as any)
       .where(eq(leads.id, id));
+  }
+
+  // ============ PASSWORD RESET ============
+  async createPasswordResetToken(data: { email: string; token: string; expiresAt: Date }): Promise<void> {
+    await db.insert(passwordResetTokens).values({
+      email: data.email.toLowerCase(),
+      token: data.token,
+      expiresAt: data.expiresAt,
+    } as any);
+  }
+
+  async getPasswordResetToken(token: string): Promise<{ email: string; token: string; expiresAt: Date; usedAt: Date | null } | undefined> {
+    const [result] = await db.select().from(passwordResetTokens).where(eq(passwordResetTokens.token, token));
+    if (!result) return undefined;
+    return {
+      email: result.email,
+      token: result.token,
+      expiresAt: result.expiresAt,
+      usedAt: result.usedAt,
+    };
+  }
+
+  async markPasswordResetTokenUsed(token: string): Promise<void> {
+    await db.update(passwordResetTokens)
+      .set({ usedAt: new Date() } as any)
+      .where(eq(passwordResetTokens.token, token));
+  }
+
+  async updateUserPassword(userId: string, hashedPassword: string): Promise<void> {
+    await db.update(users)
+      .set({ password: hashedPassword, updatedAt: new Date() })
+      .where(eq(users.id, userId));
   }
 }
 

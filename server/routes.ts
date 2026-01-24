@@ -13,6 +13,8 @@ import { storage } from "./storage";
 import { loginSchema, registerSchema, checkoutSchema } from "@shared/schema";
 import type { User, Tenant, Subscription, Plan } from "@shared/schema";
 import { ObjectStorageService, registerObjectStorageRoutes } from "./replit_integrations/object_storage";
+import { sendPasswordResetEmail } from "./services/resend";
+import { randomBytes } from "crypto";
 
 const SessionStore = MemoryStore(session);
 
@@ -633,6 +635,122 @@ export async function registerRoutes(
       return res.status(401).json({ message: "Не авторизован" });
     }
     res.json({ user: { ...req.user, password: undefined } });
+  });
+
+  // Password reset - request email
+  app.post("/api/auth/forgot-password", async (req, res) => {
+    try {
+      const { email } = req.body;
+      if (!email) {
+        return res.status(400).json({ message: "Email обязателен" });
+      }
+
+      const user = await storage.getUserByEmail(email);
+      // Always return success to prevent email enumeration
+      if (!user) {
+        return res.json({ message: "Если аккаунт с таким email существует, мы отправили инструкции по сбросу пароля" });
+      }
+
+      // Generate token
+      const token = randomBytes(32).toString("hex");
+      const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+      // Save token to database
+      await storage.createPasswordResetToken({
+        email,
+        token,
+        expiresAt,
+      });
+
+      // Build reset link
+      const baseUrl = process.env.REPLIT_DEV_DOMAIN 
+        ? `https://${process.env.REPLIT_DEV_DOMAIN}` 
+        : process.env.REPLIT_DOMAINS 
+        ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}`
+        : "http://localhost:5000";
+      const resetLink = `${baseUrl}/reset-password?token=${token}`;
+
+      // Send email
+      await sendPasswordResetEmail(email, resetLink);
+
+      res.json({ message: "Если аккаунт с таким email существует, мы отправили инструкции по сбросу пароля" });
+    } catch (error) {
+      console.error("Error sending password reset email:", error);
+      res.status(500).json({ message: "Ошибка отправки письма. Попробуйте позже." });
+    }
+  });
+
+  // Password reset - set new password
+  app.post("/api/auth/reset-password", async (req, res) => {
+    try {
+      const { token, password } = req.body;
+      if (!token || !password) {
+        return res.status(400).json({ message: "Токен и пароль обязательны" });
+      }
+
+      if (password.length < 6) {
+        return res.status(400).json({ message: "Пароль должен быть не менее 6 символов" });
+      }
+
+      // Find valid token
+      const resetToken = await storage.getPasswordResetToken(token);
+      if (!resetToken) {
+        return res.status(400).json({ message: "Недействительная или просроченная ссылка" });
+      }
+
+      if (resetToken.usedAt) {
+        return res.status(400).json({ message: "Ссылка уже использована" });
+      }
+
+      if (new Date() > resetToken.expiresAt) {
+        return res.status(400).json({ message: "Ссылка просрочена. Запросите новую." });
+      }
+
+      // Find user and update password
+      const user = await storage.getUserByEmail(resetToken.email);
+      if (!user) {
+        return res.status(400).json({ message: "Пользователь не найден" });
+      }
+
+      const hashedPassword = await bcrypt.hash(password, 10);
+      await storage.updateUserPassword(user.id, hashedPassword);
+
+      // Mark token as used
+      await storage.markPasswordResetTokenUsed(token);
+
+      res.json({ message: "Пароль успешно изменён. Теперь вы можете войти." });
+    } catch (error) {
+      console.error("Error resetting password:", error);
+      res.status(500).json({ message: "Ошибка сброса пароля" });
+    }
+  });
+
+  // Validate reset token
+  app.get("/api/auth/validate-reset-token", async (req, res) => {
+    try {
+      const { token } = req.query;
+      if (!token || typeof token !== "string") {
+        return res.status(400).json({ valid: false, message: "Токен обязателен" });
+      }
+
+      const resetToken = await storage.getPasswordResetToken(token);
+      if (!resetToken) {
+        return res.json({ valid: false, message: "Недействительная ссылка" });
+      }
+
+      if (resetToken.usedAt) {
+        return res.json({ valid: false, message: "Ссылка уже использована" });
+      }
+
+      if (new Date() > resetToken.expiresAt) {
+        return res.json({ valid: false, message: "Ссылка просрочена" });
+      }
+
+      res.json({ valid: true, email: resetToken.email });
+    } catch (error) {
+      console.error("Error validating reset token:", error);
+      res.status(500).json({ valid: false, message: "Ошибка проверки токена" });
+    }
   });
 
   app.get("/api/tenant", requireAuth, async (req, res) => {
