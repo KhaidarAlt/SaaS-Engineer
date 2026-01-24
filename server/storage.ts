@@ -67,8 +67,10 @@ export interface IStorage {
   deleteProductVariant(id: string, tenantId: string): Promise<boolean>;
   
   getProductImages(productId: string, tenantId: string): Promise<ProductImage[]>;
+  getAllProductImages(): Promise<ProductImage[]>;
   createProductImage(image: InsertProductImage): Promise<ProductImage>;
   updateProductImage(id: string, tenantId: string, data: Partial<InsertProductImage>): Promise<ProductImage | undefined>;
+  updateProductImageUrl(id: string, newUrl: string): Promise<void>;
   deleteProductImage(id: string, tenantId: string): Promise<boolean>;
   setMainImage(productId: string, imageId: string, tenantId: string): Promise<void>;
   
@@ -373,6 +375,14 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(productImages)
       .where(and(eq(productImages.productId, productId), eq(productImages.tenantId, tenantId)))
       .orderBy(productImages.sortOrder);
+  }
+
+  async getAllProductImages(): Promise<ProductImage[]> {
+    return db.select().from(productImages);
+  }
+
+  async updateProductImageUrl(id: string, newUrl: string): Promise<void> {
+    await db.update(productImages).set({ url: newUrl }).where(eq(productImages.id, id));
   }
 
   async createProductImage(image: InsertProductImage): Promise<ProductImage> {

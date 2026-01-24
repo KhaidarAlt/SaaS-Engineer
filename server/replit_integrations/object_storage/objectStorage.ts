@@ -1,6 +1,8 @@
 import { Storage, File } from "@google-cloud/storage";
 import { Response } from "express";
 import { randomUUID } from "crypto";
+import * as fs from "fs";
+import * as nodePath from "path";
 import {
   ObjectAclPolicy,
   ObjectPermission,
@@ -236,6 +238,33 @@ export class ObjectStorageService {
       objectFile,
       requestedPermission: requestedPermission ?? ObjectPermission.READ,
     });
+  }
+
+  // Upload a local file to object storage and return the normalized object path
+  async uploadLocalFile(localFilePath: string, contentType: string = "image/jpeg"): Promise<string> {
+    const privateObjectDir = this.getPrivateObjectDir();
+    if (!privateObjectDir) {
+      throw new Error("PRIVATE_OBJECT_DIR not set");
+    }
+
+    const objectId = randomUUID();
+    const fullPath = `${privateObjectDir}/uploads/${objectId}`;
+    const { bucketName, objectName } = parseObjectPath(fullPath);
+
+    const bucket = objectStorageClient.bucket(bucketName);
+    const file = bucket.file(objectName);
+
+    // Read local file and upload
+    const fileContent = fs.readFileSync(localFilePath);
+    await file.save(fileContent, {
+      contentType,
+      resumable: false,
+    });
+
+    // Set public ACL
+    await setObjectAclPolicy(file, { visibility: "public", owner: "system" });
+
+    return `/objects/uploads/${objectId}`;
   }
 }
 

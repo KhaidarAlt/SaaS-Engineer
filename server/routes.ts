@@ -8,6 +8,7 @@ import bcrypt from "bcryptjs";
 import MemoryStore from "memorystore";
 import { z } from "zod";
 import path from "path";
+import fs from "fs";
 import { storage } from "./storage";
 import { loginSchema, registerSchema, checkoutSchema } from "@shared/schema";
 import type { User, Tenant, Subscription, Plan } from "@shared/schema";
@@ -324,6 +325,52 @@ async function ensureDefaultPlans() {
   }
 }
 
+// Migrate legacy local uploads to object storage
+async function migrateLegacyUploads() {
+  const objectStorageService = new ObjectStorageService();
+  
+  // Get all product images with /uploads/ prefix
+  const allImages = await storage.getAllProductImages();
+  const legacyImages = allImages.filter(img => img.url.startsWith('/uploads/'));
+  
+  if (legacyImages.length === 0) {
+    return;
+  }
+  
+  console.log(`Found ${legacyImages.length} legacy images to migrate`);
+  
+  for (const image of legacyImages) {
+    const filename = image.url.replace('/uploads/', '');
+    const localPath = path.join(process.cwd(), 'uploads', filename);
+    
+    try {
+      // Check if local file exists
+      if (!fs.existsSync(localPath)) {
+        console.log(`Local file not found, skipping: ${localPath}`);
+        continue;
+      }
+      
+      // Determine content type from extension
+      const ext = path.extname(filename).toLowerCase();
+      const contentType = ext === '.png' ? 'image/png' : 
+                          ext === '.gif' ? 'image/gif' : 
+                          ext === '.webp' ? 'image/webp' : 'image/jpeg';
+      
+      // Upload to object storage
+      const newUrl = await objectStorageService.uploadLocalFile(localPath, contentType);
+      
+      // Update database record
+      await storage.updateProductImageUrl(image.id, newUrl);
+      
+      console.log(`Migrated image: ${image.url} → ${newUrl}`);
+    } catch (error) {
+      console.error(`Failed to migrate image ${image.id}:`, error);
+    }
+  }
+  
+  console.log('Legacy image migration completed');
+}
+
 const requireAuth = (req: Request, res: Response, next: NextFunction) => {
   if (!req.isAuthenticated()) {
     return res.status(401).json({ message: "Требуется авторизация" });
@@ -408,6 +455,9 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   await ensureDefaultPlans();
+  
+  // Migrate legacy local uploads to object storage
+  await migrateLegacyUploads();
 
   // Trust proxy in production (required for secure cookies behind reverse proxy)
   if (process.env.NODE_ENV === "production") {
