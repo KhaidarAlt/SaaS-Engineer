@@ -12,6 +12,8 @@ import NotFound from "@/pages/not-found";
 import LandingPage from "@/pages/LandingPage";
 import LoginPage from "@/pages/LoginPage";
 import RegisterPage from "@/pages/RegisterPage";
+import ForgotPasswordPage from "@/pages/ForgotPasswordPage";
+import ResetPasswordPage from "@/pages/ResetPasswordPage";
 import DashboardOverview from "@/pages/dashboard/DashboardOverview";
 import ProductsPage from "@/pages/dashboard/ProductsPage";
 import ProductFormPage from "@/pages/dashboard/ProductFormPage";
@@ -100,6 +102,12 @@ function Router() {
       </Route>
       <Route path="/register">
         <PublicRoute component={RegisterPage} />
+      </Route>
+      <Route path="/forgot-password">
+        <PublicRoute component={ForgotPasswordPage} />
+      </Route>
+      <Route path="/reset-password">
+        <PublicRoute component={ResetPasswordPage} />
       </Route>
 
       <Route path="/dashboard">
