@@ -46,6 +46,7 @@ export interface IStorage {
   
   getPlan(id: string): Promise<Plan | undefined>;
   getPlans(): Promise<Plan[]>;
+  getAllPlans(): Promise<Plan[]>;
   getDefaultPlan(): Promise<Plan | undefined>;
   createPlan(plan: InsertPlan): Promise<Plan>;
   
@@ -115,7 +116,20 @@ export interface IStorage {
   }>;
   
   changeSubscriptionPlan(subscriptionId: string, planId: string): Promise<void>;
-  updatePlan(id: string, data: { price?: number; aiMessagesLimit?: number }): Promise<void>;
+  updatePlan(id: string, data: Partial<{
+    name: string;
+    price: number;
+    maxProducts: number;
+    maxCategories: number;
+    maxPromotions: number;
+    maxDiscountRules: number;
+    maxManagers: number;
+    maxWahaInstances: number;
+    aiMessagesLimit: number;
+    hasAiAccess: boolean;
+    features: string[];
+    isActive: boolean;
+  }>): Promise<void>;
   getAllUsersWithDetails(): Promise<Array<{
     id: string;
     name: string;
@@ -245,6 +259,10 @@ export class DatabaseStorage implements IStorage {
 
   async getPlans(): Promise<Plan[]> {
     return db.select().from(plans).where(eq(plans.isActive, true));
+  }
+
+  async getAllPlans(): Promise<Plan[]> {
+    return db.select().from(plans);
   }
 
   async getDefaultPlan(): Promise<Plan | undefined> {
@@ -1211,7 +1229,20 @@ export class DatabaseStorage implements IStorage {
       .where(eq(subscriptions.id, subscriptionId));
   }
 
-  async updatePlan(id: string, data: { price?: number; aiMessagesLimit?: number }): Promise<void> {
+  async updatePlan(id: string, data: Partial<{
+    name: string;
+    price: number;
+    maxProducts: number;
+    maxCategories: number;
+    maxPromotions: number;
+    maxDiscountRules: number;
+    maxManagers: number;
+    maxWahaInstances: number;
+    aiMessagesLimit: number;
+    hasAiAccess: boolean;
+    features: string[];
+    isActive: boolean;
+  }>): Promise<void> {
     await db.update(plans)
       .set(data as any)
       .where(eq(plans.id, id));

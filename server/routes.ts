@@ -146,9 +146,97 @@ function computeProductPrice(
   };
 }
 
+async function migratePlansToNewStructure() {
+  const existingPlans = await storage.getAllPlans();
+  
+  for (const plan of existingPlans) {
+    // Migrate "Каталог + AI" to "Business"
+    if (plan.name === "Каталог + AI") {
+      await storage.updatePlan(plan.id, {
+        name: "Business",
+        price: 19990,
+        maxProducts: 2000,
+        maxCategories: 100,
+        maxPromotions: 50,
+        maxDiscountRules: 100,
+        maxManagers: 3,
+        maxWahaInstances: 1,
+        aiMessagesLimit: 300,
+        hasAiAccess: true,
+        features: ["Всё из Каталог", "AI-ассистент 24/7", "300 диалогов/мес", "Скрипты продаж + база знаний", "Передача менеджеру по триггерам"],
+      });
+      console.log("Migrated plan: Каталог + AI → Business");
+    }
+    
+    // Migrate "Про" to "PRO"
+    if (plan.name === "Про") {
+      await storage.updatePlan(plan.id, {
+        name: "PRO",
+        price: 34990,
+        maxProducts: 5000,
+        maxCategories: 200,
+        maxPromotions: 100,
+        maxDiscountRules: 200,
+        maxManagers: 10,
+        maxWahaInstances: 3,
+        aiMessagesLimit: 900,
+        hasAiAccess: true,
+        features: ["Всё из Business", "900 диалогов/мес", "Приоритетная обработка диалогов", "Максимальная автоматизация продаж"],
+      });
+      console.log("Migrated plan: Про → PRO");
+    }
+    
+    // Deactivate old "Бизнес" plan (99900₸)
+    if (plan.name === "Бизнес" && plan.price === 99900) {
+      await storage.updatePlan(plan.id, { isActive: false });
+      console.log("Deactivated old plan: Бизнес (99900₸)");
+    }
+    
+    // Update "Каталог" to correct structure
+    if (plan.name === "Каталог" && !plan.hasAiAccess) {
+      await storage.updatePlan(plan.id, {
+        price: 9990,
+        maxProducts: 1000,
+        maxCategories: 50,
+        maxPromotions: 20,
+        maxDiscountRules: 50,
+        maxManagers: 2,
+        maxWahaInstances: 0,
+        aiMessagesLimit: 0,
+        hasAiAccess: false,
+        features: ["Полноценный каталог", "Категории и вариации", "Скидки и акции", "Встроенная CRM", "Полная аналитика"],
+      });
+      console.log("Updated plan: Каталог");
+    }
+    
+    // Update "Старт" to correct structure
+    if (plan.name === "Старт" || plan.price === 0) {
+      await storage.updatePlan(plan.id, {
+        name: "Старт",
+        price: 0,
+        maxProducts: 20,
+        maxCategories: 5,
+        maxPromotions: 2,
+        maxDiscountRules: 3,
+        maxManagers: 0,
+        maxWahaInstances: 0,
+        aiMessagesLimit: 0,
+        hasAiAccess: false,
+        features: ["Каталог до 20 товаров", "Приём заявок в WhatsApp", "Публичная ссылка"],
+      });
+      console.log("Updated plan: Старт");
+    }
+  }
+}
+
 async function ensureDefaultPlans() {
+  // First migrate any old plans to new structure
+  await migratePlansToNewStructure();
+  
   const existingPlans = await storage.getPlans();
-  if (existingPlans.length === 0) {
+  const activePlans = existingPlans.filter(p => p.isActive);
+  
+  if (activePlans.length === 0) {
     // Free starter plan
     await storage.createPlan({
       name: "Старт",
