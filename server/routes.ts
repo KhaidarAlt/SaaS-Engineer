@@ -473,6 +473,29 @@ export async function registerRoutes(
     }
   });
   
+  // Temporary endpoint to test sending email
+  app.get("/api/debug/gmail-test", async (req, res) => {
+    try {
+      const result = await sendPasswordResetEmail(
+        process.env.GMAIL_USER || "",
+        "https://botfactory.kz/test-link",
+        "Test Email"
+      );
+      res.json({ 
+        success: true, 
+        messageId: result.messageId,
+        response: result.response 
+      });
+    } catch (error: any) {
+      res.status(500).json({ 
+        success: false, 
+        error: error.message,
+        code: error.code,
+        command: error.command
+      });
+    }
+  });
+  
   // Migrate legacy local uploads to object storage
   await migrateLegacyUploads();
 
