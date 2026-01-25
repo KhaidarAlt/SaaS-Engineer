@@ -1203,8 +1203,19 @@ export async function registerRoutes(
     try {
       const products = await storage.getProducts(req.user!.tenantId!);
       const categories = await storage.getCategories(req.user!.tenantId!);
+      
+      // Get all product images to check which products have images in product_images table
+      const allProductImages = await storage.getAllProductImages();
+      const productsWithImagesInTable = new Set(
+        allProductImages
+          .filter(img => products.some(p => p.id === img.productId))
+          .map(img => img.productId)
+      );
 
-      const productsWithoutImages = products.filter(p => !p.mainImageUrl);
+      // Product has images if it has mainImageUrl OR has entries in product_images table
+      const productsWithoutImages = products.filter(p => 
+        !p.mainImageUrl && !productsWithImagesInTable.has(p.id)
+      );
       const productsWithoutDescription = products.filter(p => !p.description || p.description.trim() === "");
       const productsWithZeroPrice = products.filter(p => parseFloat(p.price) === 0);
       const inactiveProducts = products.filter(p => !p.isActive);
