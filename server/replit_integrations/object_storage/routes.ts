@@ -52,6 +52,26 @@ export function registerObjectStorageRoutes(app: Express): void {
     }
   });
 
+  app.post("/api/uploads/set-public", requireAuthForUpload, async (req, res) => {
+    try {
+      const { objectPath } = req.body;
+      
+      if (!objectPath) {
+        return res.status(400).json({ error: "Missing objectPath" });
+      }
+      
+      await objectStorageService.trySetObjectEntityAclPolicy(objectPath, {
+        owner: (req.user as any).id,
+        visibility: "public",
+      });
+      
+      res.json({ success: true, objectPath });
+    } catch (error) {
+      console.error("Error setting public ACL:", error);
+      res.status(500).json({ error: "Failed to set public access" });
+    }
+  });
+
   app.get("/objects/:objectPath(*)", async (req, res) => {
     try {
       const objectFile = await objectStorageService.getObjectEntityFile(req.path);

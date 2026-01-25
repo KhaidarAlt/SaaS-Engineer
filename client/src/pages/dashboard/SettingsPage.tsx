@@ -306,6 +306,13 @@ export default function SettingsPage() {
         throw new Error("Upload failed");
       }
       
+      await fetch("/api/uploads/set-public", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ objectPath }),
+      });
+      
       const imageUrl = objectPath;
       
       if (type === "logo") {
