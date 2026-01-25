@@ -29,7 +29,7 @@ function getTransporter() {
 export async function sendPasswordResetEmail(
   toEmail: string, 
   resetLink: string,
-  storeName: string = 'SmartCatalog'
+  storeName: string = 'BotFactory.kz'
 ) {
   console.log(`[Gmail] Attempting to send password reset email to ${toEmail}`);
   

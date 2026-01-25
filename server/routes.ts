@@ -458,59 +458,6 @@ export async function registerRoutes(
 ): Promise<Server> {
   await ensureDefaultPlans();
   
-  // Temporary diagnostic endpoint to check Gmail config
-  app.get("/api/debug/gmail-check", async (req, res) => {
-    try {
-      const user = process.env.GMAIL_USER;
-      const pass = process.env.GMAIL_APP_PASSWORD;
-      res.json({
-        gmail_user_configured: !!user,
-        gmail_pass_configured: !!pass,
-        gmail_user_preview: user ? user.substring(0, 3) + "***" : null,
-      });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-  
-  // Temporary endpoint to test sending email
-  app.get("/api/debug/gmail-test", async (req, res) => {
-    try {
-      const result = await sendPasswordResetEmail(
-        process.env.GMAIL_USER || "",
-        "https://botfactory.kz/test-link",
-        "Test Email"
-      );
-      res.json({ 
-        success: true, 
-        messageId: result.messageId,
-        response: result.response 
-      });
-    } catch (error: any) {
-      res.status(500).json({ 
-        success: false, 
-        error: error.message,
-        code: error.code,
-        command: error.command
-      });
-    }
-  });
-  
-  // Check if user exists
-  app.get("/api/debug/user-check", async (req, res) => {
-    const email = req.query.email as string;
-    if (!email) {
-      return res.status(400).json({ error: "email parameter required" });
-    }
-    const user = await storage.getUserByEmail(email);
-    res.json({ 
-      email,
-      exists: !!user,
-      userId: user?.id,
-      username: user?.username
-    });
-  });
-  
   // Migrate legacy local uploads to object storage
   await migrateLegacyUploads();
 
