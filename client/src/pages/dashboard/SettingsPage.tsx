@@ -278,26 +278,47 @@ export default function SettingsPage() {
   };
 
   const handleImageUpload = async (file: File, type: "logo" | "og") => {
-    const formData = new FormData();
-    formData.append("image", file);
-    
     try {
-      const res = await fetch("/api/upload", {
+      const urlResponse = await fetch("/api/uploads/request-url", {
         method: "POST",
-        body: formData,
+        headers: { "Content-Type": "application/json" },
         credentials: "include",
+        body: JSON.stringify({
+          name: `${type}_${Date.now()}.${file.name.split('.').pop() || 'jpg'}`,
+          size: file.size,
+          contentType: file.type || "image/jpeg",
+        }),
       });
-      if (res.ok) {
-        const data = await res.json();
-        if (type === "logo") {
-          form.setValue("logoUrl", data.url);
-          setLogoPreview(data.url);
-        } else {
-          form.setValue("ogImageUrl", data.url);
-          setOgImagePreview(data.url);
-        }
+      
+      if (!urlResponse.ok) {
+        throw new Error("Failed to get upload URL");
       }
+      
+      const { uploadURL, objectPath } = await urlResponse.json();
+      
+      const uploadResponse = await fetch(uploadURL, {
+        method: "PUT",
+        body: file,
+        headers: { "Content-Type": file.type || "image/jpeg" },
+      });
+      
+      if (!uploadResponse.ok) {
+        throw new Error("Upload failed");
+      }
+      
+      const imageUrl = objectPath;
+      
+      if (type === "logo") {
+        form.setValue("logoUrl", imageUrl);
+        setLogoPreview(imageUrl);
+      } else {
+        form.setValue("ogImageUrl", imageUrl);
+        setOgImagePreview(imageUrl);
+      }
+      
+      toast({ title: "Изображение загружено" });
     } catch (err) {
+      console.error("Image upload error:", err);
       toast({ title: "Ошибка загрузки изображения", variant: "destructive" });
     }
   };

@@ -30,6 +30,7 @@ import AdminOverview from "@/pages/admin/AdminOverview";
 import UsersPage from "@/pages/admin/UsersPage";
 import UsersFreePageRoute from "@/pages/admin/UsersFreePageRoute";
 import LeadsPage from "@/pages/admin/LeadsPage";
+import PlanRequestsPage from "@/pages/admin/PlanRequestsPage";
 import PlansPage from "@/pages/admin/PlansPage";
 import AiOverviewPage from "@/pages/dashboard/ai/AiOverviewPage";
 import AiSalesScriptsPage from "@/pages/dashboard/ai/AiSalesScriptsPage";
@@ -201,6 +202,9 @@ function Router() {
       </Route>
       <Route path="/admin/leads">
         <ProtectedRoute component={LeadsPage} requireSuperAdmin />
+      </Route>
+      <Route path="/admin/plan-requests">
+        <ProtectedRoute component={PlanRequestsPage} requireSuperAdmin />
       </Route>
       <Route path="/admin/plans">
         <ProtectedRoute component={PlansPage} requireSuperAdmin />

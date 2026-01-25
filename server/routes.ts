@@ -1841,6 +1841,53 @@ export async function registerRoutes(
     }
   });
 
+  // ============ PLAN REQUESTS ============
+  app.get("/api/admin/plan-requests", requireSuperAdmin, async (req, res) => {
+    try {
+      const requests = await storage.getPlanRequests();
+      res.json(requests);
+    } catch (error) {
+      console.error("Error getting plan requests:", error);
+      res.status(500).json({ message: "Ошибка получения заявок на тариф" });
+    }
+  });
+
+  const approvePlanRequestSchema = z.object({
+    subscriptionId: z.string(),
+    planId: z.string(),
+    durationDays: z.number().min(1).max(365),
+  });
+
+  app.post("/api/admin/plan-requests/approve", requireSuperAdmin, async (req, res) => {
+    try {
+      const parsed = approvePlanRequestSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Неверные данные", errors: parsed.error.errors });
+      }
+
+      const { subscriptionId, planId, durationDays } = parsed.data;
+      await storage.approvePlanRequest(subscriptionId, planId, durationDays);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error approving plan request:", error);
+      res.status(500).json({ message: "Ошибка одобрения заявки" });
+    }
+  });
+
+  app.post("/api/admin/plan-requests/reject", requireSuperAdmin, async (req, res) => {
+    try {
+      const { subscriptionId } = req.body;
+      if (!subscriptionId) {
+        return res.status(400).json({ message: "subscriptionId обязателен" });
+      }
+      await storage.setRequestedPlan(subscriptionId, null);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error rejecting plan request:", error);
+      res.status(500).json({ message: "Ошибка отклонения заявки" });
+    }
+  });
+
   // ============ PUBLIC EVENT TRACKING ============
   const ALLOWED_EVENT_TYPES = [
     'catalog_view', 'product_view', 'add_to_cart', 'remove_from_cart',

@@ -21,6 +21,7 @@ import {
   Lock,
   Gift,
   UserPlus,
+  FileText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -57,6 +58,7 @@ const superAdminNavItems: NavItem[] = [
   { href: "/admin/users", label: "Пользователи", icon: Users },
   { href: "/admin/users-free", label: "Пользователи FREE", icon: Gift },
   { href: "/admin/leads", label: "Новый лид", icon: UserPlus },
+  { href: "/admin/plan-requests", label: "Заявки на тариф", icon: FileText },
   { href: "/admin/plans", label: "Тарифы", icon: CreditCard },
   { href: "/admin/settings", label: "Настройки", icon: Settings },
 ];

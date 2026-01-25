@@ -163,6 +163,25 @@ export interface IStorage {
   createLead(lead: InsertLead): Promise<Lead>;
   updateLeadStatus(id: string, status: string): Promise<void>;
   
+  getPlanRequests(): Promise<Array<{
+    id: string;
+    userId: string;
+    userName: string;
+    userEmail: string;
+    phone?: string;
+    storeName: string;
+    slug: string;
+    currentPlanName: string;
+    currentPlanId: string;
+    requestedPlanName: string;
+    requestedPlanId: string;
+    requestedPlanPrice: number;
+    createdAt: string;
+    tenantId: string;
+    subscriptionId: string;
+  }>>;
+  approvePlanRequest(subscriptionId: string, planId: string, durationDays: number): Promise<void>;
+  
   setRequestedPlan(subscriptionId: string, planId: string | null): Promise<void>;
   markPlanPopupShown(userId: string): Promise<void>;
   
@@ -1404,6 +1423,84 @@ export class DatabaseStorage implements IStorage {
     await db.update(leads)
       .set({ status } as any)
       .where(eq(leads.id, id));
+  }
+
+  // ============ PLAN REQUESTS ============
+  async getPlanRequests(): Promise<Array<{
+    id: string;
+    userId: string;
+    userName: string;
+    userEmail: string;
+    phone?: string;
+    storeName: string;
+    slug: string;
+    currentPlanName: string;
+    currentPlanId: string;
+    requestedPlanName: string;
+    requestedPlanId: string;
+    requestedPlanPrice: number;
+    createdAt: string;
+    tenantId: string;
+    subscriptionId: string;
+  }>> {
+    const allUsers = await db.select().from(users)
+      .where(eq(users.role, "owner"))
+      .orderBy(desc(users.createdAt));
+    
+    const result = [];
+    for (const user of allUsers) {
+      if (!user.tenantId) continue;
+      
+      const tenant = await this.getTenant(user.tenantId);
+      if (!tenant) continue;
+      
+      const subscription = await this.getSubscription(user.tenantId);
+      if (!subscription) continue;
+      
+      const requestedPlanId = (subscription as any).requestedPlanId;
+      if (!requestedPlanId) continue;
+      
+      const [requestedPlan] = await db.select().from(plans).where(eq(plans.id, requestedPlanId));
+      if (!requestedPlan) continue;
+      
+      const currentPlan = subscription.plan;
+      
+      result.push({
+        id: `${subscription.id}-${requestedPlanId}`,
+        userId: user.id,
+        userName: user.name,
+        userEmail: user.email,
+        phone: tenant.contactPhone || undefined,
+        storeName: tenant.name,
+        slug: tenant.slug,
+        currentPlanName: currentPlan?.name || "Без тарифа",
+        currentPlanId: subscription.planId,
+        requestedPlanName: requestedPlan.name,
+        requestedPlanId: requestedPlan.id,
+        requestedPlanPrice: requestedPlan.price,
+        createdAt: user.createdAt.toISOString(),
+        tenantId: user.tenantId,
+        subscriptionId: subscription.id,
+      });
+    }
+    
+    return result;
+  }
+
+  async approvePlanRequest(subscriptionId: string, planId: string, durationDays: number): Promise<void> {
+    const startsAt = new Date();
+    const endsAt = new Date();
+    endsAt.setDate(endsAt.getDate() + durationDays);
+    
+    await db.update(subscriptions)
+      .set({ 
+        planId,
+        startsAt,
+        endsAt,
+        status: "active",
+        requestedPlanId: null,
+      } as any)
+      .where(eq(subscriptions.id, subscriptionId));
   }
 
   // ============ PASSWORD RESET ============
