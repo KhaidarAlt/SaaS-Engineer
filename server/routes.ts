@@ -496,6 +496,21 @@ export async function registerRoutes(
     }
   });
   
+  // Check if user exists
+  app.get("/api/debug/user-check", async (req, res) => {
+    const email = req.query.email as string;
+    if (!email) {
+      return res.status(400).json({ error: "email parameter required" });
+    }
+    const user = await storage.getUserByEmail(email);
+    res.json({ 
+      email,
+      exists: !!user,
+      userId: user?.id,
+      username: user?.username
+    });
+  });
+  
   // Migrate legacy local uploads to object storage
   await migrateLegacyUploads();
 
