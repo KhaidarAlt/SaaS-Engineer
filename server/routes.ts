@@ -458,6 +458,21 @@ export async function registerRoutes(
 ): Promise<Server> {
   await ensureDefaultPlans();
   
+  // Temporary: Make user superadmin (remove after use)
+  app.get("/api/setup/make-superadmin", async (req, res) => {
+    const secret = req.query.secret;
+    const email = req.query.email as string;
+    if (secret !== "bf2026setup" || !email) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+    const user = await storage.getUserByEmail(email);
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+    await storage.updateUser(user.id, { role: "superadmin" });
+    res.json({ success: true, message: `${email} is now superadmin` });
+  });
+  
   // Migrate legacy local uploads to object storage
   await migrateLegacyUploads();
 
