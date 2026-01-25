@@ -13,7 +13,7 @@ import { storage } from "./storage";
 import { loginSchema, registerSchema, checkoutSchema } from "@shared/schema";
 import type { User, Tenant, Subscription, Plan } from "@shared/schema";
 import { ObjectStorageService, registerObjectStorageRoutes } from "./replit_integrations/object_storage";
-import { sendPasswordResetEmail } from "./services/resend";
+import { sendPasswordResetEmail } from "./services/gmail";
 import { randomBytes } from "crypto";
 
 const SessionStore = MemoryStore(session);
