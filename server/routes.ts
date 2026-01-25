@@ -2279,12 +2279,15 @@ export async function registerRoutes(
     
     const isBot = botPatterns.some(bot => userAgent.toLowerCase().includes(bot.toLowerCase()));
     
+    console.log(`[OG] Request to /c/${req.params.slug}, User-Agent: ${userAgent.substring(0, 100)}, isBot: ${isBot}`);
+    
     if (!isBot) {
       return next(); // Let Vite handle regular browser requests
     }
     
     try {
       const tenant = await storage.getTenantBySlug(req.params.slug);
+      console.log(`[OG] Tenant found: ${tenant ? tenant.name : 'NOT FOUND'}`);
       if (!tenant) {
         return next(); // Let Vite handle 404
       }
@@ -2293,6 +2296,7 @@ export async function registerRoutes(
       const ogTitle = tenantData.ogTitle || tenant.name || "Каталог";
       const ogDescription = tenantData.ogDescription || tenant.description || "Онлайн-каталог товаров";
       const ogImage = tenantData.ogImageUrl || tenant.logoUrl || "";
+      console.log(`[OG] Title: ${ogTitle}, Description: ${ogDescription}, Image: ${ogImage}`);
       // Use https for production (Replit proxy uses x-forwarded-proto)
       const protocol = req.get('x-forwarded-proto') || req.protocol;
       const baseUrl = `${protocol}://${req.get('host')}`;
