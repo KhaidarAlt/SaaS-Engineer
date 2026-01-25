@@ -458,6 +458,21 @@ export async function registerRoutes(
 ): Promise<Server> {
   await ensureDefaultPlans();
   
+  // Temporary diagnostic endpoint to check Gmail config
+  app.get("/api/debug/gmail-check", async (req, res) => {
+    try {
+      const user = process.env.GMAIL_USER;
+      const pass = process.env.GMAIL_APP_PASSWORD;
+      res.json({
+        gmail_user_configured: !!user,
+        gmail_pass_configured: !!pass,
+        gmail_user_preview: user ? user.substring(0, 3) + "***" : null,
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+  
   // Migrate legacy local uploads to object storage
   await migrateLegacyUploads();
 
