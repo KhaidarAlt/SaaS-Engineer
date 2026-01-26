@@ -217,6 +217,12 @@ export interface IStorage {
     conversion: number;
   }>>;
   
+  getTrafficSources(tenantId: string, from: Date, to: Date): Promise<{
+    referrers: Array<{ source: string; visitors: number; percentage: number }>;
+    utmSources: Array<{ source: string; medium: string; campaign: string; visitors: number; percentage: number }>;
+    totalVisitors: number;
+  }>;
+  
   // Password reset
   createPasswordResetToken(data: { email: string; token: string; expiresAt: Date }): Promise<void>;
   getPasswordResetToken(token: string): Promise<{ email: string; token: string; expiresAt: Date; usedAt: Date | null } | undefined>;
@@ -803,6 +809,75 @@ export class DatabaseStorage implements IStorage {
         };
       })
       .sort((a, b) => b.revenue - a.revenue);
+  }
+
+  async getTrafficSources(tenantId: string, from: Date, to: Date): Promise<{
+    referrers: Array<{ source: string; visitors: number; percentage: number }>;
+    utmSources: Array<{ source: string; medium: string; campaign: string; visitors: number; percentage: number }>;
+    totalVisitors: number;
+  }> {
+    const events = await this.getAnalyticsEvents(tenantId, from, to);
+    
+    // Count unique visitors
+    const uniqueVisitorIds = new Set(events.map(e => e.visitorId).filter(Boolean));
+    const totalVisitors = uniqueVisitorIds.size;
+    
+    // Group by referrer
+    const referrerMap = new Map<string, Set<string>>();
+    events.forEach(e => {
+      if (e.visitorId) {
+        const referrer = e.referrer || 'Прямой переход';
+        // Parse domain from referrer URL
+        let source = referrer;
+        try {
+          if (referrer !== 'Прямой переход' && referrer.startsWith('http')) {
+            source = new URL(referrer).hostname;
+          }
+        } catch {}
+        
+        if (!referrerMap.has(source)) {
+          referrerMap.set(source, new Set());
+        }
+        referrerMap.get(source)!.add(e.visitorId);
+      }
+    });
+    
+    const referrers = Array.from(referrerMap.entries())
+      .map(([source, visitors]) => ({
+        source,
+        visitors: visitors.size,
+        percentage: totalVisitors > 0 ? Math.round((visitors.size / totalVisitors) * 100) : 0,
+      }))
+      .sort((a, b) => b.visitors - a.visitors)
+      .slice(0, 10);
+    
+    // Group by UTM parameters
+    const utmMap = new Map<string, Set<string>>();
+    events.forEach(e => {
+      if (e.visitorId && (e.utmSource || e.utmMedium || e.utmCampaign)) {
+        const key = `${e.utmSource || '-'}|${e.utmMedium || '-'}|${e.utmCampaign || '-'}`;
+        if (!utmMap.has(key)) {
+          utmMap.set(key, new Set());
+        }
+        utmMap.get(key)!.add(e.visitorId);
+      }
+    });
+    
+    const utmSources = Array.from(utmMap.entries())
+      .map(([key, visitors]) => {
+        const [source, medium, campaign] = key.split('|');
+        return {
+          source,
+          medium,
+          campaign,
+          visitors: visitors.size,
+          percentage: totalVisitors > 0 ? Math.round((visitors.size / totalVisitors) * 100) : 0,
+        };
+      })
+      .sort((a, b) => b.visitors - a.visitors)
+      .slice(0, 10);
+    
+    return { referrers, utmSources, totalVisitors };
   }
 
   // ============ AI SETTINGS ============

@@ -1179,6 +1179,20 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/analytics/traffic-sources", requireAuth, async (req, res) => {
+    try {
+      const { from, to } = req.query;
+      const fromDate = from ? new Date(from as string) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      const toDate = to ? new Date(to as string) : new Date();
+      
+      const trafficData = await storage.getTrafficSources(req.user!.tenantId!, fromDate, toDate);
+      res.json(trafficData);
+    } catch (error) {
+      console.error("Error getting traffic sources:", error);
+      res.status(500).json({ message: "Ошибка получения источников трафика" });
+    }
+  });
+
   app.get("/api/dashboard/stats", requireAuth, async (req, res) => {
     try {
       const products = await storage.getProducts(req.user!.tenantId!);
