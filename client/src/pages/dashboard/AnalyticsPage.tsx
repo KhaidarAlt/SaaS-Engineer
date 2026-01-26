@@ -24,6 +24,7 @@ import {
   BarChart3,
   Target,
   Tag,
+  Globe,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -160,6 +161,12 @@ interface PromotionAnalytics {
   uses: number;
   revenue: number;
   isActive: boolean;
+}
+
+interface TrafficSourcesData {
+  referrers: Array<{ source: string; visitors: number; percentage: number }>;
+  utmSources: Array<{ source: string; medium: string; campaign: string; visitors: number; percentage: number }>;
+  totalVisitors: number;
 }
 
 const dateRanges: { value: DateRange; label: string }[] = [
@@ -1102,6 +1109,129 @@ function PromotionsTab({ dateRange }: { dateRange: DateRange }) {
   );
 }
 
+function TrafficSourcesTab({ dateRange }: { dateRange: DateRange }) {
+  const url = useMemo(() => {
+    const { fromStr, toStr } = getDateRangeStrings(dateRange);
+    return `/api/analytics/traffic-sources?from=${fromStr}&to=${toStr}`;
+  }, [dateRange]);
+
+  const { data, isLoading } = useQuery<TrafficSourcesData>({
+    queryKey: [url],
+  });
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        {[...Array(3)].map((_, i) => (
+          <CardSkeleton key={i} />
+        ))}
+      </div>
+    );
+  }
+
+  const referrers = data?.referrers || [];
+  const utmSources = data?.utmSources || [];
+  const totalVisitors = data?.totalVisitors || 0;
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Globe className="h-5 w-5" />
+            Источники трафика
+          </CardTitle>
+          <CardDescription>
+            Откуда приходят посетители ({totalVisitors} уникальных)
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {referrers.length > 0 ? (
+            <div className="space-y-3">
+              {referrers.map((ref, index) => (
+                <motion.div
+                  key={ref.source}
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: index * 0.05 }}
+                  className="flex items-center justify-between py-2 border-b last:border-0"
+                >
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <span className="text-sm font-medium text-muted-foreground w-5 shrink-0">
+                      {index + 1}
+                    </span>
+                    <span className="truncate">{ref.source}</span>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Badge variant="secondary">{ref.visitors}</Badge>
+                    <span className="text-sm text-muted-foreground w-12 text-right">
+                      {ref.percentage}%
+                    </span>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              <Globe className="h-12 w-12 mx-auto mb-3 opacity-50" />
+              <p>Нет данных об источниках</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Target className="h-5 w-5" />
+            UTM-метки
+          </CardTitle>
+          <CardDescription>
+            Рекламные кампании и источники
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {utmSources.length > 0 ? (
+            <div className="space-y-3">
+              {utmSources.map((utm, index) => (
+                <motion.div
+                  key={`${utm.source}-${utm.medium}-${utm.campaign}`}
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: index * 0.05 }}
+                  className="py-2 border-b last:border-0"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium truncate">{utm.source}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {utm.medium !== '-' && <span>{utm.medium}</span>}
+                        {utm.campaign !== '-' && <span> / {utm.campaign}</span>}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Badge variant="secondary">{utm.visitors}</Badge>
+                      <span className="text-sm text-muted-foreground w-12 text-right">
+                        {utm.percentage}%
+                      </span>
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              <Target className="h-12 w-12 mx-auto mb-3 opacity-50" />
+              <p>Нет UTM-меток</p>
+              <p className="text-sm">Добавляйте ?utm_source=... к ссылкам</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 export default function AnalyticsPage() {
   const [dateRange, setDateRange] = useState<DateRange>("30d");
   const [activeTab, setActiveTab] = useState("overview");
@@ -1134,9 +1264,10 @@ export default function AnalyticsPage() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid grid-cols-3 sm:grid-cols-6 w-full">
+          <TabsList className="grid grid-cols-4 sm:grid-cols-7 w-full">
             <TabsTrigger value="overview" data-testid="tab-overview">Обзор</TabsTrigger>
             <TabsTrigger value="funnel" data-testid="tab-funnel">Воронка</TabsTrigger>
+            <TabsTrigger value="traffic" data-testid="tab-traffic">Источники</TabsTrigger>
             <TabsTrigger value="orders" data-testid="tab-orders">Заказы</TabsTrigger>
             <TabsTrigger value="abandoned" data-testid="tab-abandoned">Корзины</TabsTrigger>
             <TabsTrigger value="products" data-testid="tab-products">Товары</TabsTrigger>
@@ -1149,6 +1280,9 @@ export default function AnalyticsPage() {
             </TabsContent>
             <TabsContent value="funnel" className="m-0">
               <FunnelTab dateRange={dateRange} />
+            </TabsContent>
+            <TabsContent value="traffic" className="m-0">
+              <TrafficSourcesTab dateRange={dateRange} />
             </TabsContent>
             <TabsContent value="orders" className="m-0">
               <OrdersTab dateRange={dateRange} />
