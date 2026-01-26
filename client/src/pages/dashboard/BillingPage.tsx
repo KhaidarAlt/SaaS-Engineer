@@ -64,8 +64,19 @@ export default function BillingPage() {
     queryKey: ["/api/billing"],
   });
 
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat("ru-KZ").format(price) + " ₸";
+  const { data: allPlans } = useQuery<Plan[]>({
+    queryKey: ["/api/plans"],
+  });
+
+  // Filter to show only paid plans (price > 0)
+  const paidPlans = allPlans?.filter(p => {
+    const priceNum = typeof p.price === "string" ? parseFloat(p.price) : p.price;
+    return priceNum > 0;
+  }) || [];
+
+  const formatPrice = (price: string | number) => {
+    const numPrice = typeof price === "string" ? parseFloat(price) : price;
+    return new Intl.NumberFormat("ru-KZ").format(numPrice) + " ₸";
   };
 
   const formatDate = (date: string | Date) => {
@@ -226,66 +237,56 @@ export default function BillingPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    {[
-                      {
-                        name: "Старт",
-                        price: 19900,
-                        features: ["300 товаров", "30 категорий", "500 AI-сообщ."],
-                      },
-                      {
-                        name: "Про",
-                        price: 49900,
-                        features: ["3 000 товаров", "200 категорий", "5 000 AI-сообщ."],
-                        popular: true,
-                      },
-                      {
-                        name: "Бизнес",
-                        price: 99900,
-                        features: [
-                          "20 000 товаров",
-                          "1 000 категорий",
-                          "20 000 AI-сообщ.",
-                        ],
-                      },
-                    ].map((plan) => (
-                      <div
-                        key={plan.name}
-                        className={`p-4 rounded-lg border ${
-                          plan.popular ? "ring-2 ring-primary" : ""
-                        } ${
-                          billing.subscription.plan.name === plan.name
-                            ? "bg-primary/5"
-                            : ""
-                        }`}
-                      >
-                        <div className="flex items-center justify-between mb-2">
-                          <h4 className="font-semibold">{plan.name}</h4>
-                          {plan.popular && (
-                            <Badge variant="secondary">Популярный</Badge>
+                    {paidPlans.map((plan, index) => {
+                      const isPopular = index === Math.floor(paidPlans.length / 2);
+                      const features = [
+                        `${new Intl.NumberFormat("ru-RU").format(plan.maxProducts)} товаров`,
+                        `${new Intl.NumberFormat("ru-RU").format(plan.maxCategories)} категорий`,
+                        plan.aiMessagesLimit > 0 
+                          ? `${new Intl.NumberFormat("ru-RU").format(plan.aiMessagesLimit)} AI-сообщ.`
+                          : null,
+                      ].filter(Boolean) as string[];
+
+                      return (
+                        <div
+                          key={plan.id}
+                          className={`p-4 rounded-lg border ${
+                            isPopular ? "ring-2 ring-primary" : ""
+                          } ${
+                            billing.subscription.plan.id === plan.id
+                              ? "bg-primary/5"
+                              : ""
+                          }`}
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <h4 className="font-semibold">{plan.name}</h4>
+                            {isPopular && (
+                              <Badge variant="secondary">Популярный</Badge>
+                            )}
+                          </div>
+                          <p className="text-xl font-bold mb-3">
+                            {formatPrice(plan.price)}
+                            <span className="text-sm text-muted-foreground font-normal">
+                              {" "}
+                              / мес
+                            </span>
+                          </p>
+                          <ul className="text-sm space-y-1 text-muted-foreground">
+                            {features.map((f) => (
+                              <li key={f} className="flex items-center gap-2">
+                                <CheckCircle2 className="h-4 w-4 text-primary" />
+                                {f}
+                              </li>
+                            ))}
+                          </ul>
+                          {billing.subscription.plan.id !== plan.id && (
+                            <Button variant="outline" className="w-full mt-4" size="sm">
+                              Выбрать
+                            </Button>
                           )}
                         </div>
-                        <p className="text-xl font-bold mb-3">
-                          {formatPrice(plan.price)}
-                          <span className="text-sm text-muted-foreground font-normal">
-                            {" "}
-                            / мес
-                          </span>
-                        </p>
-                        <ul className="text-sm space-y-1 text-muted-foreground">
-                          {plan.features.map((f) => (
-                            <li key={f} className="flex items-center gap-2">
-                              <CheckCircle2 className="h-4 w-4 text-primary" />
-                              {f}
-                            </li>
-                          ))}
-                        </ul>
-                        {billing.subscription.plan.name !== plan.name && (
-                          <Button variant="outline" className="w-full mt-4" size="sm">
-                            Выбрать
-                          </Button>
-                        )}
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </CardContent>
               </Card>
