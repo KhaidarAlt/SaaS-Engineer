@@ -3702,11 +3702,12 @@ export async function registerRoutes(
       }
       
       // Determine which index.html to use
+      // Use process.cwd() for reliable path resolution in both dev and production
       let indexPath: string;
       if (process.env.NODE_ENV === "production") {
-        indexPath = path.resolve(import.meta.dirname, "public", "index.html");
+        indexPath = path.resolve(process.cwd(), "dist", "public", "index.html");
       } else {
-        indexPath = path.resolve(import.meta.dirname, "..", "client", "index.html");
+        indexPath = path.resolve(process.cwd(), "client", "index.html");
       }
       
       if (!fs.existsSync(indexPath)) {
