@@ -1163,9 +1163,32 @@ export async function registerRoutes(
 
   app.patch("/api/orders/:id", requireAuth, async (req, res) => {
     try {
-      const order = await storage.updateOrderStatus(req.params.id, req.user!.tenantId!, req.body.status);
+      const newStatus = req.body.status;
+      const tenantId = req.user!.tenantId!;
+      
+      // Get current order to check if status is changing to completed
+      const currentOrder = await storage.getOrder(req.params.id, tenantId);
+      if (!currentOrder) {
+        return res.status(404).json({ message: "Заказ не найден" });
+      }
+      
+      // If changing to completed, deduct stock for each item
+      if (newStatus === "completed" && currentOrder.status !== "completed") {
+        const items = currentOrder.items || [];
+        for (const item of items) {
+          const product = await storage.getProduct(item.productId, tenantId);
+          if (product) {
+            const newStock = Math.max(0, (product.stockQty || 0) - item.quantity);
+            await storage.updateProduct(item.productId, tenantId, { stockQty: newStock });
+            console.log(`[Order ${req.params.id}] Deducted ${item.quantity} from product ${item.productId}, new stock: ${newStock}`);
+          }
+        }
+      }
+      
+      const order = await storage.updateOrderStatus(req.params.id, tenantId, newStatus);
       res.json(order);
     } catch (error) {
+      console.error("Error updating order:", error);
       res.status(500).json({ message: "Ошибка обновления заказа" });
     }
   });

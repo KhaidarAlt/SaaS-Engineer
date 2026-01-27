@@ -38,6 +38,8 @@ const CLOTHING_SIZES = ["XXS", "XS", "S", "M", "L", "XL", "XXL", "3XL", "4XL", "
 const SHOE_SIZES = ["35", "36", "37", "38", "39", "40", "41", "42", "43", "44", "45", "46", "47", "48"];
 const KIDS_CLOTHING_SIZES = ["56", "62", "68", "74", "80", "86", "92", "98", "104", "110", "116", "122", "128", "134", "140", "146", "152", "158", "164"];
 const KIDS_SHOE_SIZES = ["16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32", "33", "34"];
+const BABY_SIZES = ["0-3м", "3-6м", "6-9м", "9-12м", "12-18м", "18-24м"];
+const KIDS_HEIGHT_SIZES = ["50", "56", "62", "68", "74", "80", "86", "92", "98", "104", "110", "116", "122", "128", "134", "140", "146", "152", "158", "164", "170"];
 
 const GENDER_OPTIONS = [
   { value: "male", label: "Мужской" },
@@ -113,7 +115,7 @@ export default function ProductFormPage() {
   const [selectedGender, setSelectedGender] = useState<string>("");
   const [customColorName, setCustomColorName] = useState("");
   const [customColorHex, setCustomColorHex] = useState("#000000");
-  const [sizeType, setSizeType] = useState<"clothing" | "shoes" | "kids_clothing" | "kids_shoes">("clothing");
+  const [sizeType, setSizeType] = useState<"clothing" | "shoes" | "kids_clothing" | "kids_shoes" | "baby" | "kids_height">("clothing");
 
   const { data: product, isLoading: productLoading } = useQuery<Product>({
     queryKey: ["/api/products", productId],
@@ -310,6 +312,8 @@ export default function ProductFormPage() {
       case "shoes": return SHOE_SIZES;
       case "kids_clothing": return KIDS_CLOTHING_SIZES;
       case "kids_shoes": return KIDS_SHOE_SIZES;
+      case "baby": return BABY_SIZES;
+      case "kids_height": return KIDS_HEIGHT_SIZES;
       default: return CLOTHING_SIZES;
     }
   };
@@ -524,6 +528,24 @@ export default function ProductFormPage() {
                   data-testid="button-size-kids-shoes"
                 >
                   Детская обувь
+                </Button>
+                <Button
+                  type="button"
+                  variant={sizeType === "baby" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setSizeType("baby")}
+                  data-testid="button-size-baby"
+                >
+                  Младенцы (0-24м)
+                </Button>
+                <Button
+                  type="button"
+                  variant={sizeType === "kids_height" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setSizeType("kids_height")}
+                  data-testid="button-size-kids-height"
+                >
+                  Ростовки
                 </Button>
               </div>
               
