@@ -462,8 +462,22 @@ const DEMO_IMAGES: Record<string, string> = {
 async function ensureDemoTenant() {
   const existingDemo = await storage.getTenantBySlug("demo");
   
+  // OG image for demo catalog preview in messengers
+  const DEMO_OG_IMAGE = "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=1200&h=630&fit=crop";
+  const DEMO_LOGO = "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=200&h=200&fit=crop";
+  
   if (existingDemo) {
     console.log("Demo tenant already exists, checking for missing images...");
+    
+    // Update tenant OG image if missing
+    if (!existingDemo.ogImageUrl || !existingDemo.logoUrl) {
+      await storage.updateTenant(existingDemo.id, {
+        ogImageUrl: existingDemo.ogImageUrl || DEMO_OG_IMAGE,
+        logoUrl: existingDemo.logoUrl || DEMO_LOGO,
+      });
+      console.log("Updated demo tenant with OG image and logo");
+    }
+    
     // Update existing demo products with images if they don't have any
     const products = await storage.getProducts(existingDemo.id);
     for (const product of products) {
