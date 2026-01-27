@@ -3402,6 +3402,102 @@ export async function registerRoutes(
     }
   }
 
+  // ============ TENANT LINKS (Link-in-Bio) ============
+  app.get("/api/links", requireAuth, async (req, res) => {
+    try {
+      const links = await storage.getTenantLinks(req.user!.tenantId!);
+      res.json(links);
+    } catch (error) {
+      console.error("Error getting links:", error);
+      res.status(500).json({ message: "Ошибка получения ссылок" });
+    }
+  });
+
+  app.post("/api/links", requireAuth, async (req, res) => {
+    try {
+      const { title, url, icon } = req.body;
+      if (!title || !url) {
+        return res.status(400).json({ message: "Название и URL обязательны" });
+      }
+      const link = await storage.createTenantLink({
+        tenantId: req.user!.tenantId!,
+        title,
+        url,
+        icon: icon || null,
+      });
+      res.json(link);
+    } catch (error) {
+      console.error("Error creating link:", error);
+      res.status(500).json({ message: "Ошибка создания ссылки" });
+    }
+  });
+
+  app.put("/api/links/:id", requireAuth, async (req, res) => {
+    try {
+      const { title, url, icon, isActive } = req.body;
+      const updated = await storage.updateTenantLink(req.params.id, req.user!.tenantId!, {
+        title,
+        url,
+        icon,
+        isActive,
+      });
+      if (!updated) {
+        return res.status(404).json({ message: "Ссылка не найдена" });
+      }
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating link:", error);
+      res.status(500).json({ message: "Ошибка обновления ссылки" });
+    }
+  });
+
+  app.delete("/api/links/:id", requireAuth, async (req, res) => {
+    try {
+      await storage.deleteTenantLink(req.params.id, req.user!.tenantId!);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting link:", error);
+      res.status(500).json({ message: "Ошибка удаления ссылки" });
+    }
+  });
+
+  app.post("/api/links/reorder", requireAuth, async (req, res) => {
+    try {
+      const { linkIds } = req.body;
+      if (!Array.isArray(linkIds)) {
+        return res.status(400).json({ message: "linkIds должен быть массивом" });
+      }
+      await storage.reorderTenantLinks(req.user!.tenantId!, linkIds);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error reordering links:", error);
+      res.status(500).json({ message: "Ошибка сортировки ссылок" });
+    }
+  });
+
+  // Public links page API
+  app.get("/api/public/links/:slug", async (req, res) => {
+    try {
+      const tenant = await storage.getTenantBySlug(req.params.slug);
+      if (!tenant) {
+        return res.status(404).json({ message: "Страница не найдена" });
+      }
+      const links = await storage.getTenantLinksBySlug(req.params.slug);
+      res.json({
+        tenant: {
+          name: tenant.name,
+          slug: tenant.slug,
+          logoUrl: tenant.logoUrl,
+          description: tenant.description,
+        },
+        links,
+      });
+    } catch (error) {
+      console.error("Error getting public links:", error);
+      res.status(500).json({ message: "Ошибка загрузки страницы" });
+    }
+  });
+
   // ============ TELEGRAM NOTIFICATIONS ============
   const { sendTelegramMessage, verifyTelegramBot } = await import("./services/telegram");
 

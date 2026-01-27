@@ -48,6 +48,7 @@ const tenantNavItems: NavItem[] = [
   { href: "/dashboard/import", label: "Импорт", icon: Upload, lockForPlans: ["Старт"] },
   { href: "/dashboard/ai", label: "AI-ассистент", icon: Bot, lockForPlans: ["Старт", "Каталог"] },
   { href: "/dashboard/catalog-health", label: "Здоровье каталога", icon: Activity },
+  { href: "/dashboard/links", label: "Мои ссылки", icon: ExternalLink },
   { href: "/dashboard/analytics", label: "Аналитика", icon: BarChart3, lockForPlans: ["Старт"] },
   { href: "/dashboard/billing", label: "Биллинг", icon: CreditCard },
   { href: "/dashboard/settings", label: "Настройки", icon: Settings },

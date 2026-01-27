@@ -47,6 +47,8 @@ import CatalogHome from "@/pages/catalog/CatalogHome";
 import ProductDetailPage from "@/pages/catalog/ProductDetailPage";
 import CartPage from "@/pages/catalog/CartPage";
 import CheckoutPage from "@/pages/catalog/CheckoutPage";
+import LinksPage from "@/pages/dashboard/LinksPage";
+import LinksPublicPage from "@/pages/public/LinksPublicPage";
 
 function ProtectedRoute({ 
   component: Component,
@@ -212,6 +214,12 @@ function Router() {
       <Route path="/admin/settings">
         <ProtectedRoute component={SettingsPage} requireSuperAdmin />
       </Route>
+
+      <Route path="/dashboard/links">
+        <ProtectedRoute component={LinksPage} />
+      </Route>
+
+      <Route path="/l/:slug" component={LinksPublicPage} />
 
       <Route path="/c/:slug" component={CatalogHome} />
       <Route path="/c/:slug/cart" component={CartPage} />
