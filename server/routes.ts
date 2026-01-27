@@ -452,10 +452,28 @@ async function checkPlanLimit(tenantId: string, limitType: LimitType): Promise<{
   return { allowed: true };
 }
 
+// Demo product images
+const DEMO_IMAGES: Record<string, string> = {
+  "DEMO-001": "https://tgrad.kz/upload/iblock/cc4/cc4124979151f57411aec9f094eb2a9b.png", // Беспроводные наушники
+  "DEMO-002": "https://ir.ozone.ru/s3/multimedia-h/c1000/6439990289.jpg", // Смарт-часы
+  "DEMO-003": "https://hopestar.com.ua/image/cache/catalog/category/2848-800x800.png", // Портативная колонка
+};
+
 async function ensureDemoTenant() {
   const existingDemo = await storage.getTenantBySlug("demo");
+  
   if (existingDemo) {
-    console.log("Demo tenant already exists");
+    console.log("Demo tenant already exists, checking for missing images...");
+    // Update existing demo products with images if they don't have any
+    const products = await storage.getProducts(existingDemo.id);
+    for (const product of products) {
+      if (!product.mainImageUrl && product.sku && DEMO_IMAGES[product.sku]) {
+        await storage.updateProduct(product.id, existingDemo.id, {
+          mainImageUrl: DEMO_IMAGES[product.sku],
+        });
+        console.log(`Updated demo product ${product.sku} with image`);
+      }
+    }
     return;
   }
   
@@ -489,7 +507,7 @@ async function ensureDemoTenant() {
     isActive: true,
   });
   
-  // Create demo products
+  // Create demo products with images
   const demoProducts = [
     {
       name: "Беспроводные наушники",
@@ -498,6 +516,7 @@ async function ensureDemoTenant() {
       sku: "DEMO-001",
       stockQty: 50,
       categoryId: category.id,
+      mainImageUrl: DEMO_IMAGES["DEMO-001"],
     },
     {
       name: "Смарт-часы",
@@ -505,6 +524,7 @@ async function ensureDemoTenant() {
       price: "29990",
       sku: "DEMO-002",
       stockQty: 30,
+      mainImageUrl: DEMO_IMAGES["DEMO-002"],
     },
     {
       name: "Портативная колонка",
@@ -513,6 +533,7 @@ async function ensureDemoTenant() {
       sku: "DEMO-003",
       stockQty: 100,
       categoryId: category.id,
+      mainImageUrl: DEMO_IMAGES["DEMO-003"],
     },
   ];
   
