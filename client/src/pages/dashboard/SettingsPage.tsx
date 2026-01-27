@@ -7,9 +7,9 @@ import { motion } from "framer-motion";
 import { 
   Save, Store, MessageCircle, Bell, ExternalLink, Upload, Image, 
   Share2, QrCode, Download, Clock, MapPin, Link2, Copy, Check, 
-  Loader2, Phone, Trash2, CheckCircle, AlertCircle, RefreshCw, Lock
+  Loader2, Phone, Trash2, CheckCircle, AlertCircle, RefreshCw, Lock, Send
 } from "lucide-react";
-import { SiWhatsapp } from "react-icons/si";
+import { SiWhatsapp, SiTelegram } from "react-icons/si";
 import { z } from "zod";
 import QRCodeLib from "qrcode";
 import { QRCodeSVG } from "qrcode.react";
@@ -49,6 +49,7 @@ const settingsFormSchema = z.object({
   ogDescription: z.string().optional(),
   ogImageUrl: z.string().optional(),
   notificationPhone: z.string().optional(),
+  telegramBotToken: z.string().optional(),
   telegramChatId: z.string().optional(),
 });
 
@@ -190,6 +191,18 @@ export default function SettingsPage() {
     },
   });
 
+  const testTelegramMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", "/api/telegram/test");
+    },
+    onSuccess: () => {
+      toast({ title: "Тестовое сообщение отправлено", description: "Проверьте ваш Telegram" });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Ошибка отправки", description: error.message, variant: "destructive" });
+    },
+  });
+
   const form = useForm<SettingsFormData>({
     resolver: zodResolver(settingsFormSchema),
     defaultValues: {
@@ -206,11 +219,8 @@ export default function SettingsPage() {
       ogDescription: "",
       ogImageUrl: "",
       notificationPhone: "",
+      telegramBotToken: "",
       telegramChatId: "",
-      aiEnabled: false,
-      aiLanguage: "ru",
-      aiSystemPrompt: "",
-      aiTypingDelay: 0,
     },
   });
 
@@ -230,11 +240,8 @@ export default function SettingsPage() {
         ogDescription: (tenant as any).ogDescription || "",
         ogImageUrl: (tenant as any).ogImageUrl || "",
         notificationPhone: tenant.notificationPhone || "",
+        telegramBotToken: tenant.telegramBotToken || "",
         telegramChatId: tenant.telegramChatId || "",
-        aiEnabled: tenant.aiEnabled,
-        aiLanguage: (tenant as any).aiLanguage || "ru",
-        aiSystemPrompt: (tenant as any).aiSystemPrompt || "",
-        aiTypingDelay: (tenant as any).aiTypingDelay || 0,
       });
       setLogoPreview(tenant.logoUrl || "");
       setOgImagePreview((tenant as any).ogImageUrl || "");
@@ -813,36 +820,72 @@ export default function SettingsPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.2 }}
           >
-            <Card>
+            <Card data-testid="card-telegram-settings">
               <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2">
-                  <Bell className="h-5 w-5" />
-                  Уведомления
+                  <SiTelegram className="h-5 w-5 text-blue-500" />
+                  Telegram-уведомления
                 </CardTitle>
                 <CardDescription>
-                  Настройте каналы получения уведомлений
+                  Получайте уведомления о заказах и запросах клиентов
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="notificationPhone">Телефон для WhatsApp</Label>
+                    <Label htmlFor="telegramBotToken">Токен бота</Label>
                     <Input
-                      id="notificationPhone"
-                      placeholder="+77771234567"
-                      {...form.register("notificationPhone")}
+                      id="telegramBotToken"
+                      type="password"
+                      placeholder="123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
+                      {...form.register("telegramBotToken")}
+                      data-testid="input-telegram-token"
                     />
+                    <p className="text-xs text-muted-foreground">
+                      Создайте бота через @BotFather в Telegram
+                    </p>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="telegramChatId">Telegram Chat ID</Label>
+                    <Label htmlFor="telegramChatId">Chat ID</Label>
                     <Input
                       id="telegramChatId"
-                      placeholder="123456789"
+                      placeholder="-1001234567890 или ваш личный ID"
                       {...form.register("telegramChatId")}
+                      data-testid="input-telegram-chat-id"
                     />
+                    <p className="text-xs text-muted-foreground">
+                      Узнайте ваш Chat ID через @userinfobot
+                    </p>
                   </div>
                 </div>
+                
+                {form.watch("telegramBotToken") && form.watch("telegramChatId") && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => testTelegramMutation.mutate()}
+                    disabled={testTelegramMutation.isPending}
+                    className="w-full"
+                    data-testid="button-test-telegram"
+                  >
+                    {testTelegramMutation.isPending ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Send className="mr-2 h-4 w-4" />
+                    )}
+                    Отправить тестовое сообщение
+                  </Button>
+                )}
 
+                <div className="rounded-lg bg-muted/50 p-4 text-sm space-y-2">
+                  <p className="font-medium">Вы будете получать уведомления о:</p>
+                  <ul className="list-disc list-inside text-muted-foreground space-y-1">
+                    <li>Новых заказах с деталями</li>
+                    <li>Запросах клиентов на менеджера</li>
+                    <li>Случаях, когда AI не знает ответ</li>
+                    <li>Жалобах клиентов</li>
+                  </ul>
+                </div>
               </CardContent>
             </Card>
           </motion.div>
