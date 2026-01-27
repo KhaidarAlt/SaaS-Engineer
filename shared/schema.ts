@@ -881,6 +881,29 @@ export const insertLeadSchema = createInsertSchema(leads).omit({ id: true, creat
 export type InsertLead = z.infer<typeof insertLeadSchema>;
 export type Lead = typeof leads.$inferSelect;
 
+// ============ TENANT LINKS (Link-in-Bio) ============
+export const tenantLinks = pgTable("tenant_links", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  title: text("title").notNull(),
+  url: text("url").notNull(),
+  icon: text("icon"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const tenantLinksRelations = relations(tenantLinks, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [tenantLinks.tenantId],
+    references: [tenants.id],
+  }),
+}));
+
+export const insertTenantLinkSchema = createInsertSchema(tenantLinks).omit({ id: true, createdAt: true });
+export type InsertTenantLink = z.infer<typeof insertTenantLinkSchema>;
+export type TenantLink = typeof tenantLinks.$inferSelect;
+
 // ============ FORM VALIDATION SCHEMAS ============
 export const loginSchema = z.object({
   email: z.string().email("Введите корректный email"),

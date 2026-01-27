@@ -6,7 +6,7 @@ import {
   subscriptionExtensions, knowledgeBase, auditLogs, carts, productVariants, productImages,
   aiSettings, aiSalesScripts, aiTagRules, aiKnowledgeArticles, aiFaqItems,
   aiPolicies, aiConversations, aiMessages, aiInterventionEvents, aiInboxTickets,
-  wahaInstances, aiResponseCorrections, leads, passwordResetTokens,
+  wahaInstances, aiResponseCorrections, leads, passwordResetTokens, tenantLinks,
   type User, type InsertUser, type Tenant, type InsertTenant,
   type Subscription, type InsertSubscription, type Plan, type InsertPlan,
   type Product, type InsertProduct, type Category, type InsertCategory,
@@ -30,6 +30,7 @@ import {
   type WahaInstance, type InsertWahaInstance,
   type Lead, type InsertLead,
   type AiResponseCorrection, type InsertAiResponseCorrection,
+  type TenantLink, type InsertTenantLink,
 } from "@shared/schema";
 import bcrypt from "bcryptjs";
 
@@ -162,6 +163,14 @@ export interface IStorage {
   getAllLeads(): Promise<Lead[]>;
   createLead(lead: InsertLead): Promise<Lead>;
   updateLeadStatus(id: string, status: string): Promise<void>;
+  
+  // Tenant Links (Link-in-Bio)
+  getTenantLinks(tenantId: string): Promise<TenantLink[]>;
+  getTenantLinksBySlug(slug: string): Promise<TenantLink[]>;
+  createTenantLink(link: InsertTenantLink): Promise<TenantLink>;
+  updateTenantLink(id: string, tenantId: string, data: Partial<InsertTenantLink>): Promise<TenantLink | undefined>;
+  deleteTenantLink(id: string, tenantId: string): Promise<boolean>;
+  reorderTenantLinks(tenantId: string, linkIds: string[]): Promise<void>;
   
   getPlanRequests(): Promise<Array<{
     id: string;
@@ -1498,6 +1507,57 @@ export class DatabaseStorage implements IStorage {
     await db.update(leads)
       .set({ status } as any)
       .where(eq(leads.id, id));
+  }
+
+  // ============ TENANT LINKS (Link-in-Bio) ============
+  async getTenantLinks(tenantId: string): Promise<TenantLink[]> {
+    return await db.select().from(tenantLinks)
+      .where(eq(tenantLinks.tenantId, tenantId))
+      .orderBy(tenantLinks.sortOrder);
+  }
+
+  async getTenantLinksBySlug(slug: string): Promise<TenantLink[]> {
+    const tenant = await this.getTenantBySlug(slug);
+    if (!tenant) return [];
+    return await db.select().from(tenantLinks)
+      .where(and(
+        eq(tenantLinks.tenantId, tenant.id),
+        eq(tenantLinks.isActive, true)
+      ))
+      .orderBy(tenantLinks.sortOrder);
+  }
+
+  async createTenantLink(link: InsertTenantLink): Promise<TenantLink> {
+    const existingLinks = await this.getTenantLinks(link.tenantId);
+    const maxOrder = existingLinks.length > 0 
+      ? Math.max(...existingLinks.map(l => l.sortOrder)) + 1 
+      : 0;
+    const [newLink] = await db.insert(tenantLinks)
+      .values({ ...link, sortOrder: link.sortOrder ?? maxOrder } as any)
+      .returning();
+    return newLink;
+  }
+
+  async updateTenantLink(id: string, tenantId: string, data: Partial<InsertTenantLink>): Promise<TenantLink | undefined> {
+    const [updated] = await db.update(tenantLinks)
+      .set(data as any)
+      .where(and(eq(tenantLinks.id, id), eq(tenantLinks.tenantId, tenantId)))
+      .returning();
+    return updated;
+  }
+
+  async deleteTenantLink(id: string, tenantId: string): Promise<boolean> {
+    const result = await db.delete(tenantLinks)
+      .where(and(eq(tenantLinks.id, id), eq(tenantLinks.tenantId, tenantId)));
+    return true;
+  }
+
+  async reorderTenantLinks(tenantId: string, linkIds: string[]): Promise<void> {
+    for (let i = 0; i < linkIds.length; i++) {
+      await db.update(tenantLinks)
+        .set({ sortOrder: i } as any)
+        .where(and(eq(tenantLinks.id, linkIds[i]), eq(tenantLinks.tenantId, tenantId)));
+    }
   }
 
   // ============ PLAN REQUESTS ============
