@@ -3690,6 +3690,62 @@ export async function registerRoutes(
     }
   });
 
+  // Dynamic OG tags for catalog pages - serves HTML with proper meta tags for messengers
+  app.get("/c/:slug", async (req, res, next) => {
+    try {
+      const slug = req.params.slug;
+      const tenant = await storage.getTenantBySlug(slug);
+      
+      if (!tenant) {
+        // Let static/vite handle 404
+        return next();
+      }
+      
+      // Determine which index.html to use
+      let indexPath: string;
+      if (process.env.NODE_ENV === "production") {
+        indexPath = path.resolve(import.meta.dirname, "public", "index.html");
+      } else {
+        indexPath = path.resolve(import.meta.dirname, "..", "client", "index.html");
+      }
+      
+      if (!fs.existsSync(indexPath)) {
+        return next();
+      }
+      
+      let html = fs.readFileSync(indexPath, "utf-8");
+      
+      // Prepare OG meta tags
+      const ogTitle = tenant.ogTitle || tenant.name || "SmartCatalog";
+      const ogDescription = tenant.ogDescription || tenant.description || "Онлайн-каталог товаров";
+      const ogImage = tenant.ogImageUrl || tenant.logoUrl || "";
+      const canonicalUrl = `${req.protocol}://${req.get("host")}/c/${encodeURIComponent(slug)}`;
+      
+      // Build meta tags string
+      const metaTags = `
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="${escapeHtml(ogTitle)}" />
+    <meta property="og:description" content="${escapeHtml(ogDescription)}" />
+    <meta property="og:url" content="${escapeHtml(canonicalUrl)}" />
+    ${ogImage ? `<meta property="og:image" content="${escapeHtml(ogImage)}" />` : ""}
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="${escapeHtml(ogTitle)}" />
+    <meta name="twitter:description" content="${escapeHtml(ogDescription)}" />
+    ${ogImage ? `<meta name="twitter:image" content="${escapeHtml(ogImage)}" />` : ""}
+    <meta name="description" content="${escapeHtml(ogDescription)}" />
+    <title>${escapeHtml(ogTitle)}</title>`;
+      
+      // Insert meta tags before </head>
+      html = html.replace("</head>", `${metaTags}\n  </head>`);
+      
+      res.set("Content-Type", "text/html");
+      res.send(html);
+    } catch (error) {
+      console.error("Error serving catalog page with OG tags:", error);
+      next();
+    }
+  });
+
   return httpServer;
 }
 
