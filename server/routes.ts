@@ -452,11 +452,87 @@ async function checkPlanLimit(tenantId: string, limitType: LimitType): Promise<{
   return { allowed: true };
 }
 
+async function ensureDemoTenant() {
+  const existingDemo = await storage.getTenantBySlug("demo");
+  if (existingDemo) {
+    console.log("Demo tenant already exists");
+    return;
+  }
+  
+  // Get the free plan
+  const plans = await storage.getPlans();
+  const startPlan = plans.find(p => p.name === "Старт");
+  if (!startPlan) {
+    console.log("Cannot create demo tenant: no Старт plan found");
+    return;
+  }
+  
+  // Create demo tenant
+  const demoTenant = await storage.createTenant({
+    name: "Демо магазин",
+    slug: "demo",
+    status: "active",
+    planId: startPlan.id,
+    email: "demo@smartcatalog.kz",
+    phone: "+77001234567",
+    address: "Алматы, демо-адрес",
+    description: "Это демонстрационный каталог для ознакомления с возможностями SmartCatalog",
+  });
+  
+  console.log("Created demo tenant:", demoTenant.id);
+  
+  // Create demo category
+  const category = await storage.createCategory({
+    tenantId: demoTenant.id,
+    name: "Электроника",
+    slug: "electronics",
+    isActive: true,
+  });
+  
+  // Create demo products
+  const demoProducts = [
+    {
+      name: "Беспроводные наушники",
+      description: "Качественные беспроводные наушники с шумоподавлением. Время работы до 24 часов.",
+      price: "15990",
+      sku: "DEMO-001",
+      stockQty: 50,
+      categoryId: category.id,
+    },
+    {
+      name: "Смарт-часы",
+      description: "Умные часы с пульсометром, GPS и водозащитой IP68.",
+      price: "29990",
+      sku: "DEMO-002",
+      stockQty: 30,
+    },
+    {
+      name: "Портативная колонка",
+      description: "Мощная портативная колонка с отличным звуком и защитой от воды.",
+      price: "12500",
+      sku: "DEMO-003",
+      stockQty: 100,
+      categoryId: category.id,
+    },
+  ];
+  
+  for (const product of demoProducts) {
+    await storage.createProduct({
+      ...product,
+      tenantId: demoTenant.id,
+      isActive: true,
+    });
+  }
+  
+  console.log("Created demo products");
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
   await ensureDefaultPlans();
+  await ensureDemoTenant();
   
   // Migrate legacy local uploads to object storage
   await migrateLegacyUploads();
