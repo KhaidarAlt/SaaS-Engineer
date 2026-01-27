@@ -1684,6 +1684,23 @@ export async function registerRoutes(
         orderId: order.id,
       });
 
+      // Send Telegram notification for new order
+      if (tenant.telegramBotToken && tenant.telegramChatId) {
+        const { sendTelegramMessage, formatNewOrderNotification } = await import("./services/telegram");
+        const message = formatNewOrderNotification({
+          orderNumber: order.orderNumber,
+          customerName: orderData.customerName,
+          customerPhone: orderData.customerPhone,
+          total: subtotal.toFixed(2),
+          itemsCount: orderItems.length,
+        });
+        sendTelegramMessage({
+          botToken: tenant.telegramBotToken,
+          chatId: tenant.telegramChatId,
+          message,
+        }).catch(err => console.error("Failed to send Telegram notification:", err));
+      }
+
       res.json({ 
         orderId: order.id, 
         orderNumber: order.orderNumber,
@@ -3323,6 +3340,36 @@ export async function registerRoutes(
           type: "handoff_requested",
           note: `Клиент ${customerPhone} запросил менеджера`,
         });
+        
+        // Send Telegram notification for handoff request
+        if (tenant.telegramBotToken && tenant.telegramChatId) {
+          const { sendTelegramMessage, formatHumanRequestNotification } = await import("./services/telegram");
+          const message = formatHumanRequestNotification({
+            customerPhone,
+            message: text,
+          });
+          sendTelegramMessage({
+            botToken: tenant.telegramBotToken,
+            chatId: tenant.telegramChatId,
+            message,
+          }).catch(err => console.error("Failed to send Telegram handoff notification:", err));
+        }
+      }
+      
+      // Handle AI unknown answer notification
+      if (aiResult.action === "unknown_answer" || aiResult.matchedTag === "unknown") {
+        if (tenant.telegramBotToken && tenant.telegramChatId) {
+          const { sendTelegramMessage, formatAiUnknownNotification } = await import("./services/telegram");
+          const message = formatAiUnknownNotification({
+            customerPhone,
+            question: text,
+          });
+          sendTelegramMessage({
+            botToken: tenant.telegramBotToken,
+            chatId: tenant.telegramChatId,
+            message,
+          }).catch(err => console.error("Failed to send Telegram unknown notification:", err));
+        }
       }
       
       // Apply typing delay after AI generation (simulates human typing)
