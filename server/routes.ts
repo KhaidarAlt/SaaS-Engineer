@@ -2441,76 +2441,6 @@ export async function registerRoutes(
     }
   });
 
-  // Serve OG meta tags for catalog pages (for messenger/social media previews)
-  // Only intercept requests from bots/crawlers, let regular browsers go through Vite
-  app.get("/c/:slug", async (req, res, next) => {
-    const userAgent = req.get('user-agent') || '';
-    
-    // List of bot/crawler user agents that need OG meta tags
-    const botPatterns = [
-      'WhatsApp', 'TelegramBot', 'facebookexternalhit', 'Facebot',
-      'LinkedInBot', 'Twitterbot', 'Slackbot', 'Discordbot',
-      'vkShare', 'Googlebot', 'bingbot', 'yandex'
-    ];
-    
-    const isBot = botPatterns.some(bot => userAgent.toLowerCase().includes(bot.toLowerCase()));
-    
-    console.log(`[OG] Request to /c/${req.params.slug}, User-Agent: ${userAgent.substring(0, 100)}, isBot: ${isBot}`);
-    
-    if (!isBot) {
-      return next(); // Let Vite handle regular browser requests
-    }
-    
-    try {
-      const tenant = await storage.getTenantBySlug(req.params.slug);
-      console.log(`[OG] Tenant found: ${tenant ? tenant.name : 'NOT FOUND'}`);
-      if (!tenant) {
-        return next(); // Let Vite handle 404
-      }
-      
-      const tenantData = tenant as any;
-      const ogTitle = tenantData.ogTitle || tenant.name || "Каталог";
-      const ogDescription = tenantData.ogDescription || tenant.description || "Онлайн-каталог товаров";
-      const ogImage = tenantData.ogImageUrl || tenant.logoUrl || "";
-      console.log(`[OG] Title: ${ogTitle}, Description: ${ogDescription}, Image: ${ogImage}`);
-      // Use https for production (Replit proxy uses x-forwarded-proto)
-      const protocol = req.get('x-forwarded-proto') || req.protocol;
-      const baseUrl = `${protocol}://${req.get('host')}`;
-      const fullUrl = `${baseUrl}/c/${tenant.slug}`;
-      
-      // Serve a minimal HTML page with OG meta tags for bots
-      const html = `<!DOCTYPE html>
-<html lang="ru">
-<head>
-  <meta charset="UTF-8" />
-  <title>${escapeHtml(ogTitle)}</title>
-  <meta property="og:title" content="${escapeHtml(ogTitle)}" />
-  <meta property="og:description" content="${escapeHtml(ogDescription)}" />
-  <meta property="og:type" content="website" />
-  <meta property="og:url" content="${fullUrl}" />
-  ${ogImage ? `<meta property="og:image" content="${ogImage.startsWith('http') ? ogImage : baseUrl + ogImage}" />
-  <meta property="og:image:width" content="1200" />
-  <meta property="og:image:height" content="630" />
-  <meta property="og:image:type" content="image/png" />` : ''}
-  <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="${escapeHtml(ogTitle)}" />
-  <meta name="twitter:description" content="${escapeHtml(ogDescription)}" />
-  ${ogImage ? `<meta name="twitter:image" content="${ogImage.startsWith('http') ? ogImage : baseUrl + ogImage}" />` : ''}
-  <meta name="description" content="${escapeHtml(ogDescription)}" />
-</head>
-<body>
-  <h1>${escapeHtml(ogTitle)}</h1>
-  <p>${escapeHtml(ogDescription)}</p>
-</body>
-</html>`;
-      
-      res.setHeader('Content-Type', 'text/html');
-      res.send(html);
-    } catch (error) {
-      next(); // Let Vite handle errors
-    }
-  });
-
   // ============ AI API ROUTES ============
   
   // Get AI access status (available even without AI access for paywall check)
@@ -3733,8 +3663,17 @@ export async function registerRoutes(
       // Prepare OG meta tags
       const ogTitle = tenant.ogTitle || tenant.name || "SmartCatalog";
       const ogDescription = tenant.ogDescription || tenant.description || "Онлайн-каталог товаров";
-      const ogImage = tenant.ogImageUrl || tenant.logoUrl || "";
-      const canonicalUrl = `${req.protocol}://${req.get("host")}/c/${encodeURIComponent(slug)}`;
+      const ogImageRaw = tenant.ogImageUrl || tenant.logoUrl || "";
+      
+      // Use https for production (Replit proxy uses x-forwarded-proto)
+      const protocol = req.get("x-forwarded-proto") || req.protocol;
+      const baseUrl = `${protocol}://${req.get("host")}`;
+      const canonicalUrl = `${baseUrl}/c/${encodeURIComponent(slug)}`;
+      
+      // Ensure og:image is a full URL
+      const ogImage = ogImageRaw ? (ogImageRaw.startsWith("http") ? ogImageRaw : `${baseUrl}${ogImageRaw}`) : "";
+      
+      console.log(`[OG] Serving /c/${slug} - Title: ${ogTitle}, Image: ${ogImage || "none"}`);
       
       // Build meta tags string
       const metaTags = `
@@ -3742,7 +3681,9 @@ export async function registerRoutes(
     <meta property="og:title" content="${escapeHtml(ogTitle)}" />
     <meta property="og:description" content="${escapeHtml(ogDescription)}" />
     <meta property="og:url" content="${escapeHtml(canonicalUrl)}" />
-    ${ogImage ? `<meta property="og:image" content="${escapeHtml(ogImage)}" />` : ""}
+    ${ogImage ? `<meta property="og:image" content="${escapeHtml(ogImage)}" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />` : ""}
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="${escapeHtml(ogTitle)}" />
     <meta name="twitter:description" content="${escapeHtml(ogDescription)}" />
