@@ -3355,6 +3355,78 @@ export async function registerRoutes(
     }
   }
 
+  // ============ TELEGRAM NOTIFICATIONS ============
+  const { sendTelegramMessage, verifyTelegramBot } = await import("./services/telegram");
+
+  // Save Telegram settings
+  app.post("/api/telegram/settings", requireAuth, async (req, res) => {
+    try {
+      const { botToken, chatId } = req.body;
+      const tenantId = req.user!.tenantId!;
+      
+      if (botToken) {
+        // Verify the bot token
+        const verify = await verifyTelegramBot(botToken);
+        if (!verify.success) {
+          return res.status(400).json({ message: verify.error });
+        }
+      }
+      
+      await storage.updateTenant(tenantId, {
+        telegramBotToken: botToken || null,
+        telegramChatId: chatId || null,
+      });
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error saving Telegram settings:", error);
+      res.status(500).json({ message: "Ошибка сохранения настроек" });
+    }
+  });
+
+  // Get Telegram settings
+  app.get("/api/telegram/settings", requireAuth, async (req, res) => {
+    try {
+      const tenant = await storage.getTenant(req.user!.tenantId!);
+      if (!tenant) {
+        return res.status(404).json({ message: "Тенант не найден" });
+      }
+      
+      res.json({
+        botToken: tenant.telegramBotToken || "",
+        chatId: tenant.telegramChatId || "",
+        isConfigured: !!(tenant.telegramBotToken && tenant.telegramChatId),
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка получения настроек" });
+    }
+  });
+
+  // Test Telegram notification
+  app.post("/api/telegram/test", requireAuth, async (req, res) => {
+    try {
+      const tenant = await storage.getTenant(req.user!.tenantId!);
+      if (!tenant?.telegramBotToken || !tenant?.telegramChatId) {
+        return res.status(400).json({ message: "Telegram не настроен" });
+      }
+      
+      const result = await sendTelegramMessage({
+        botToken: tenant.telegramBotToken,
+        chatId: tenant.telegramChatId,
+        message: `✅ <b>Тестовое уведомление</b>\n\nУведомления для магазина "${tenant.name}" успешно настроены!`,
+      });
+      
+      if (!result.success) {
+        return res.status(400).json({ message: result.error });
+      }
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error sending test notification:", error);
+      res.status(500).json({ message: "Ошибка отправки тестового сообщения" });
+    }
+  });
+
   return httpServer;
 }
 
