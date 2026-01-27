@@ -1,7 +1,8 @@
 import { useState } from "react";
+import { Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { Link2, Plus, Trash2, GripVertical, ExternalLink, Copy, Check, Loader2 } from "lucide-react";
+import { Link2, Plus, Trash2, GripVertical, ExternalLink, Copy, Check, Loader2, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -113,11 +114,18 @@ export default function LinksPage() {
         transition={{ duration: 0.4 }}
       >
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold">Мои ссылки</h1>
-            <p className="text-muted-foreground">
-              Создайте страницу с ссылками для Instagram и других соцсетей
-            </p>
+          <div className="flex items-center gap-4">
+            <Link href="/dashboard">
+              <Button variant="ghost" size="icon" data-testid="button-back">
+                <ArrowLeft className="h-5 w-5" />
+              </Button>
+            </Link>
+            <div>
+              <h1 className="text-2xl font-bold">Мои ссылки</h1>
+              <p className="text-muted-foreground">
+                Создайте страницу с ссылками для Instagram и других соцсетей
+              </p>
+            </div>
           </div>
         </div>
       </motion.div>
