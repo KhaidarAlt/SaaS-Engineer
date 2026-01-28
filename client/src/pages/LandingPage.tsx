@@ -1,4 +1,5 @@
 import { motion } from "framer-motion";
+import { createPortal } from "react-dom";
 import { Link } from "wouter";
 import { 
   MessageSquare, 
@@ -757,17 +758,35 @@ export default function LandingPage() {
         </div>
       </footer>
 
-      {/* WhatsApp Floating Widget */}
-      <a
-        href="https://wa.me/77773875355"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-[9999] w-14 h-14 bg-[#25D366] text-white rounded-full flex items-center justify-center shadow-xl hover-elevate active-elevate-2"
-        data-testid="button-whatsapp-widget"
-        aria-label="Написать в WhatsApp"
-      >
-        <SiWhatsapp className="w-7 h-7" />
-      </a>
+      {/* WhatsApp Floating Widget - rendered via Portal to ensure fixed positioning works */}
+      {createPortal(
+        <a
+          href="https://wa.me/77773875355"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            position: 'fixed',
+            bottom: '24px',
+            right: '24px',
+            zIndex: 99999,
+            width: '56px',
+            height: '56px',
+            backgroundColor: '#25D366',
+            color: 'white',
+            borderRadius: '50%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
+            textDecoration: 'none',
+          }}
+          data-testid="button-whatsapp-widget"
+          aria-label="Написать в WhatsApp"
+        >
+          <SiWhatsapp style={{ width: '28px', height: '28px' }} />
+        </a>,
+        document.body
+      )}
     </div>
   );
 }
