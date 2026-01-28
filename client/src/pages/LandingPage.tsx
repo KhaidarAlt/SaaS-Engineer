@@ -22,8 +22,10 @@ import {
   FileSpreadsheet,
   ArrowRight,
   Star,
-  Eye
+  Eye,
+  Phone
 } from "lucide-react";
+import { SiWhatsapp } from "react-icons/si";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -731,9 +733,19 @@ export default function LandingPage() {
               </div>
               <span className="text-xl font-bold">BotFactory</span>
             </div>
-            <p className="text-sm text-muted-foreground text-center">
-              AI-интернет-магазин в WhatsApp для вашего бизнеса
-            </p>
+            <div className="flex flex-col items-center gap-2">
+              <p className="text-sm text-muted-foreground text-center">
+                AI-интернет-магазин в WhatsApp для вашего бизнеса
+              </p>
+              <a 
+                href="tel:+77773875355" 
+                className="flex items-center gap-2 text-foreground font-medium hover:text-primary transition-colors"
+                data-testid="link-phone-footer"
+              >
+                <Phone className="w-4 h-4" />
+                +7 777 387 53 55
+              </a>
+            </div>
             <div className="flex items-center gap-6 text-sm text-muted-foreground">
               <a href="#" className="hover:text-foreground transition-colors" data-testid="link-contacts">Контакты</a>
               <a href="#" className="hover:text-foreground transition-colors" data-testid="link-privacy">Политика конфиденциальности</a>
@@ -744,6 +756,18 @@ export default function LandingPage() {
           </div>
         </div>
       </footer>
+
+      {/* WhatsApp Floating Widget */}
+      <a
+        href="https://wa.me/77773875355"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="fixed bottom-6 right-6 z-50 w-14 h-14 bg-[#25D366] text-white rounded-full flex items-center justify-center shadow-lg hover-elevate active-elevate-2"
+        data-testid="button-whatsapp-widget"
+        aria-label="Написать в WhatsApp"
+      >
+        <SiWhatsapp className="w-7 h-7" />
+      </a>
     </div>
   );
 }

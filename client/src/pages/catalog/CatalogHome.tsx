@@ -101,6 +101,7 @@ function ProductCard({ product, tenantSlug }: { product: ProductWithPrice; tenan
                 src={product.mainImageUrl}
                 alt={product.name}
                 className="w-full h-full object-cover"
+                loading="lazy"
               />
             ) : (
               <div className="w-full h-full flex items-center justify-center">
@@ -363,15 +364,15 @@ export default function CatalogHome() {
                     href={(data.tenant as any).gisLink}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center gap-1 hover:text-foreground transition-colors"
+                    className="flex items-start gap-1 hover:text-foreground transition-colors"
                   >
-                    <MapPin className="h-4 w-4" />
-                    <span className="max-w-[200px] truncate">{data.tenant.address}</span>
+                    <MapPin className="h-4 w-4 shrink-0 mt-0.5" />
+                    <span>{data.tenant.address}</span>
                   </a>
                 ) : (
-                  <span className="flex items-center gap-1">
-                    <MapPin className="h-4 w-4" />
-                    <span className="max-w-[200px] truncate">{data.tenant.address}</span>
+                  <span className="flex items-start gap-1">
+                    <MapPin className="h-4 w-4 shrink-0 mt-0.5" />
+                    <span>{data.tenant.address}</span>
                   </span>
                 )
               )}
@@ -414,15 +415,15 @@ export default function CatalogHome() {
                     href={(data.tenant as any).gisLink}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center gap-1 hover:text-foreground"
+                    className="flex items-start gap-1 hover:text-foreground text-center"
                   >
-                    <MapPin className="h-3 w-3" />
-                    <span className="max-w-[150px] truncate">{data.tenant.address}</span>
+                    <MapPin className="h-3 w-3 shrink-0 mt-0.5" />
+                    <span>{data.tenant.address}</span>
                   </a>
                 ) : (
-                  <span className="flex items-center gap-1">
-                    <MapPin className="h-3 w-3" />
-                    <span className="max-w-[150px] truncate">{data.tenant.address}</span>
+                  <span className="flex items-start gap-1 text-center">
+                    <MapPin className="h-3 w-3 shrink-0 mt-0.5" />
+                    <span>{data.tenant.address}</span>
                   </span>
                 )
               )}
