@@ -762,7 +762,7 @@ export default function LandingPage() {
         href="https://wa.me/77773875355"
         target="_blank"
         rel="noopener noreferrer"
-        className="fixed bottom-6 right-6 z-50 w-14 h-14 bg-[#25D366] text-white rounded-full flex items-center justify-center shadow-lg hover-elevate active-elevate-2"
+        className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-[9999] w-14 h-14 bg-[#25D366] text-white rounded-full flex items-center justify-center shadow-xl hover-elevate active-elevate-2"
         data-testid="button-whatsapp-widget"
         aria-label="Написать в WhatsApp"
       >
