@@ -38,20 +38,13 @@ async function compressImage(file: File): Promise<Blob> {
     img.onload = () => {
       URL.revokeObjectURL(img.src);
       
-      let { width, height } = img;
+      const { width, height } = img;
       
-      if (width > MAX_IMAGE_DIMENSION || height > MAX_IMAGE_DIMENSION) {
-        if (width > height) {
-          height = Math.round((height * MAX_IMAGE_DIMENSION) / width);
-          width = MAX_IMAGE_DIMENSION;
-        } else {
-          width = Math.round((width * MAX_IMAGE_DIMENSION) / height);
-          height = MAX_IMAGE_DIMENSION;
-        }
-      }
-
-      canvas.width = width;
-      canvas.height = height;
+      const maxDim = Math.max(width, height);
+      const targetSize = Math.min(maxDim, MAX_IMAGE_DIMENSION);
+      
+      canvas.width = targetSize;
+      canvas.height = targetSize;
       
       if (!ctx) {
         reject(new Error("Canvas context not available"));
@@ -59,8 +52,16 @@ async function compressImage(file: File): Promise<Blob> {
       }
 
       ctx.fillStyle = "#FFFFFF";
-      ctx.fillRect(0, 0, width, height);
-      ctx.drawImage(img, 0, 0, width, height);
+      ctx.fillRect(0, 0, targetSize, targetSize);
+      
+      const scale = Math.min(targetSize / width, targetSize / height);
+      const scaledWidth = width * scale;
+      const scaledHeight = height * scale;
+      
+      const offsetX = (targetSize - scaledWidth) / 2;
+      const offsetY = (targetSize - scaledHeight) / 2;
+      
+      ctx.drawImage(img, offsetX, offsetY, scaledWidth, scaledHeight);
 
       canvas.toBlob(
         (blob) => {
@@ -352,7 +353,7 @@ export function ProductImagesSection({ productId }: ProductImagesSectionProps) {
                     </Button>
                   </label>
                   <p className="text-xs text-muted-foreground mt-2">
-                    JPG, PNG, GIF, WebP до 10 МБ • Автоматическое сжатие до 1920px
+                    JPG, PNG, GIF, WebP до 10 МБ • Авто-оптимизация: квадрат до 1920px
                   </p>
                 </>
               )}
