@@ -89,7 +89,9 @@ export async function generateAiResponse(
   conversationHistory: ChatMessage[],
   context: TenantContext
 ): Promise<AiResponseResult> {
-  const catalogUrl = `https://${process.env.REPLIT_DEV_DOMAIN || 'app.replit.dev'}/c/${context.slug}`;
+  const baseDomain = process.env.BASE_URL || 
+    (process.env.NODE_ENV === 'production' ? 'https://botfactory.kz' : `https://${process.env.REPLIT_DEV_DOMAIN || 'localhost:5000'}`);
+  const catalogUrl = `${baseDomain}/c/${context.slug}`;
   
   // Check for handoff request first
   if (isHandoffRequest(userMessage)) {
@@ -184,24 +186,26 @@ function detectSuggestedStage(response: string, stages?: SalesStage[]): string |
 }
 
 function buildSystemPrompt(context: TenantContext, catalogUrl: string, matchedTag?: TagRule): string {
-  const langInstructions: Record<string, string> = {
-    ru: "Отвечай только на русском языке.",
-    kz: "Тек қазақ тілінде жауап бер. Жауап бер тек қазақша.",
-    en: "Reply only in English.",
-  };
-  
-  const languages = context.aiLanguages || ["ru"];
   let prompt = `Ты — профессиональный AI-продавец-консультант магазина "${context.storeName}".`;
   
-  // Build language instructions based on selected languages
-  const selectedLangInstructions = languages
-    .map(lang => langInstructions[lang])
-    .filter(Boolean)
-    .join("\n");
+  const languages = context.aiLanguages || ["ru", "kz", "en"];
+  const langNames: Record<string, string> = { ru: "русском", kz: "казахском", en: "английском" };
+  const supportedLangs = languages.map(l => langNames[l]).filter(Boolean).join(", ");
+  const defaultLang = languages.includes("ru") ? "русском" : langNames[languages[0]] || "русском";
   
-  prompt += `\n\n## ЯЗЫК ОБЩЕНИЯ
-${selectedLangInstructions || langInstructions.ru}
-Определяй язык клиента по его сообщениям и отвечай на том же языке (если он в списке разрешённых).`;
+  prompt += `\n\n## ЯЗЫК ОБЩЕНИЯ — КРИТИЧЕСКИ ВАЖНО!
+ВСЕГДА определяй язык клиента и ОТВЕЧАЙ НА ТОМ ЖЕ ЯЗЫКЕ.
+Разрешённые языки: ${supportedLangs}. Язык по умолчанию: ${defaultLang}.
+
+ПРАВИЛА:
+1. Определи язык последнего сообщения клиента:
+   - Казахский: буквы ә, і, ң, ғ, ү, ұ, қ, ө, һ или слова "Сәлем", "қанша", "қалай", "рахмет"
+   - Русский: кириллица без казахских букв
+   - Английский: латиница
+
+2. Если определённый язык есть в списке разрешённых — отвечай на нём ПОЛНОСТЬЮ
+3. Если язык НЕ в списке разрешённых — отвечай на ${defaultLang}
+4. НИКОГДА не смешивай языки в одном ответе!`;
   
   if (context.storeDescription) {
     prompt += `\n\nО магазине: ${context.storeDescription}`;
