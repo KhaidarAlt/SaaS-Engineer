@@ -7,7 +7,7 @@ import {
   aiSettings, aiSalesScripts, aiTagRules, aiKnowledgeArticles, aiFaqItems,
   aiPolicies, aiConversations, aiMessages, aiInterventionEvents, aiInboxTickets,
   wahaInstances, aiResponseCorrections, leads, passwordResetTokens, tenantLinks,
-  crmIntegrations, crmSyncLogs,
+  crmIntegrations, crmSyncLogs, orderStatusLogs,
   type User, type InsertUser, type Tenant, type InsertTenant,
   type Subscription, type InsertSubscription, type Plan, type InsertPlan,
   type Product, type InsertProduct, type Category, type InsertCategory,
@@ -34,6 +34,7 @@ import {
   type TenantLink, type InsertTenantLink,
   type CrmIntegration, type InsertCrmIntegration,
   type CrmSyncLog, type InsertCrmSyncLog,
+  type OrderStatusLog, type InsertOrderStatusLog,
 } from "@shared/schema";
 import bcrypt from "bcryptjs";
 
@@ -542,6 +543,34 @@ export class DatabaseStorage implements IStorage {
       updatedAt: new Date(),
     }).where(and(eq(orders.id, id), eq(orders.tenantId, tenantId))).returning();
     return order;
+  }
+
+  async updateOrderWithPayment(
+    id: string, 
+    tenantId: string, 
+    data: {
+      status?: string;
+      paymentStatus?: string;
+      paymentId?: string;
+      paymentProvider?: string;
+      paidAt?: Date;
+      paymentSource?: string;
+    }
+  ): Promise<Order | undefined> {
+    const [order] = await db.update(orders).set({
+      ...data,
+      updatedAt: new Date(),
+    }).where(and(eq(orders.id, id), eq(orders.tenantId, tenantId))).returning();
+    return order;
+  }
+
+  async logOrderStatusChange(log: InsertOrderStatusLog): Promise<OrderStatusLog> {
+    const [result] = await db.insert(orderStatusLogs).values(log).returning();
+    return result;
+  }
+
+  async getOrderStatusLogs(orderId: string): Promise<OrderStatusLog[]> {
+    return db.select().from(orderStatusLogs).where(eq(orderStatusLogs.orderId, orderId)).orderBy(desc(orderStatusLogs.createdAt));
   }
 
   async logEvent(event: InsertAnalyticsEvent): Promise<void> {
@@ -1732,6 +1761,12 @@ export class DatabaseStorage implements IStorage {
       .where(eq(crmSyncLogs.integrationId, integrationId))
       .orderBy(desc(crmSyncLogs.createdAt))
       .limit(limit);
+  }
+
+  async getCrmSyncLogsForOrder(orderId: string): Promise<CrmSyncLog[]> {
+    return db.select().from(crmSyncLogs)
+      .where(eq(crmSyncLogs.orderId, orderId))
+      .orderBy(desc(crmSyncLogs.createdAt));
   }
 }
 

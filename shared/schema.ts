@@ -322,7 +322,12 @@ export const orders = pgTable("orders", {
   subtotal: decimal("subtotal", { precision: 12, scale: 2 }).notNull(),
   discountTotal: decimal("discount_total", { precision: 12, scale: 2 }).notNull().default("0"),
   total: decimal("total", { precision: 12, scale: 2 }).notNull(),
-  status: text("status").notNull().default("new"), // new, in_progress, completed, cancelled
+  status: text("status").notNull().default("new"), // new, awaiting_payment, paid, in_progress, completed, cancelled
+  paymentStatus: text("payment_status").default("pending"), // pending, paid, failed, expired, manual
+  paymentId: text("payment_id"),
+  paymentProvider: text("payment_provider"), // kaspi, manual, etc
+  paidAt: timestamp("paid_at"),
+  paymentSource: text("payment_source"), // auto, manual
   whatsappSent: boolean("whatsapp_sent").notNull().default(false),
   whatsappSentAt: timestamp("whatsapp_sent_at"),
   whatsappError: text("whatsapp_error"),
@@ -369,6 +374,36 @@ export const orderItemsRelations = relations(orderItems, ({ one }) => ({
 export const insertOrderItemSchema = createInsertSchema(orderItems).omit({ id: true });
 export type InsertOrderItem = z.infer<typeof insertOrderItemSchema>;
 export type OrderItem = typeof orderItems.$inferSelect;
+
+// ============ ORDER STATUS LOGS ============
+export const orderStatusLogs = pgTable("order_status_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orderId: varchar("order_id").notNull().references(() => orders.id),
+  oldStatus: text("old_status"),
+  newStatus: text("new_status").notNull(),
+  oldPaymentStatus: text("old_payment_status"),
+  newPaymentStatus: text("new_payment_status"),
+  changedBy: text("changed_by").notNull(), // system, user
+  userId: varchar("user_id").references(() => users.id),
+  source: text("source"), // auto, manual
+  metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const orderStatusLogsRelations = relations(orderStatusLogs, ({ one }) => ({
+  order: one(orders, {
+    fields: [orderStatusLogs.orderId],
+    references: [orders.id],
+  }),
+  user: one(users, {
+    fields: [orderStatusLogs.userId],
+    references: [users.id],
+  }),
+}));
+
+export const insertOrderStatusLogSchema = createInsertSchema(orderStatusLogs).omit({ id: true, createdAt: true });
+export type InsertOrderStatusLog = z.infer<typeof insertOrderStatusLogSchema>;
+export type OrderStatusLog = typeof orderStatusLogs.$inferSelect;
 
 // ============ ANALYTICS EVENTS ============
 export const analyticsEvents = pgTable("analytics_events", {

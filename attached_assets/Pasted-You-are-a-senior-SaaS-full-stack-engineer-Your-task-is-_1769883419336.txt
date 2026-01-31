@@ -1,0 +1,154 @@
+You are a senior SaaS full-stack engineer.
+
+Your task is to implement a payment-aware order status system
+for a SaaS platform called “SmartCatalog”.
+
+The platform includes:
+- Internal CRM (Orders)
+- WhatsApp + AI assistant
+- External CRM integrations (Bitrix24, amoCRM)
+
+Interface language: **Russian only**
+
+────────────────────────────────
+ORDER STATUSES
+────────────────────────────────
+Internal CRM order statuses:
+
+1. Новый
+2. Ожидает оплаты
+3. Оплачен
+4. В работе
+5. Выполнен
+6. Отменён
+
+Rules:
+- Status “Оплачен” CAN be set:
+  a) Automatically — after successful payment confirmation
+  b) Manually — by user from internal CRM UI
+- Manual status change must be logged with source = manual
+- Automatic status change must be logged with source = payment
+
+────────────────────────────────
+PAYMENT FLOW (AUTOMATIC)
+────────────────────────────────
+1. Client places order via WhatsApp
+2. AI calculates final amount
+3. SmartCatalog creates payment request
+4. AI sends payment link in the same WhatsApp chat
+5. Client pays in Kaspi app
+6. SmartCatalog receives webhook or checks payment status
+7. On successful payment:
+   - order_status → “Оплачен”
+   - payment_status → PAID
+   - trigger CRM sync + notifications
+
+────────────────────────────────
+MANUAL STATUS FLOW
+────────────────────────────────
+- User can manually change order status to “Оплачен”
+- On manual change:
+  - payment_status remains unchanged (unless paid)
+  - system marks payment_source = manual
+  - triggers external CRM sync (if connected)
+
+────────────────────────────────
+DATABASE REQUIREMENTS
+────────────────────────────────
+Extend Orders table:
+- order_id
+- amount
+- order_status
+- payment_status (pending / paid / failed / expired / manual)
+- payment_id
+- payment_provider
+- paid_at
+- payment_source (auto | manual)
+
+Log table:
+- order_id
+- old_status
+- new_status
+- changed_by (system / user)
+- timestamp
+
+────────────────────────────────
+INTERNAL CRM LOGIC
+────────────────────────────────
+- Status dropdown must include “Оплачен”
+- UI must show:
+  - badge: 🟢 Оплачен / 🟡 Ожидает оплаты
+  - label: “Оплачено автоматически” / “Отмечено вручную”
+- No restrictions on reverting status (business decision)
+
+────────────────────────────────
+EXTERNAL CRM SYNC (IMPORTANT)
+────────────────────────────────
+If external CRM is connected (Bitrix24 / amoCRM):
+
+Trigger status sync when:
+- Order status becomes “Оплачен” (auto OR manual)
+
+Actions:
+- Move deal to configured “Оплачено” stage
+- Use mapping settings defined in integrations
+- Errors in external CRM must NOT block internal update
+
+────────────────────────────────
+NOTIFICATIONS
+────────────────────────────────
+
+1. WhatsApp (AI assistant):
+- Auto payment:
+  “✅ Оплата прошла успешно. Спасибо за заказ!”
+- Manual mark:
+  “ℹ️ Заказ отмечен как оплаченный.”
+
+2. Telegram (manager):
+- “💰 Заказ №123 отмечен как оплаченный (41 500 ₸)”
+- Include:
+  - source (auto / manual)
+  - link to order
+  - link to CRM (if connected)
+
+────────────────────────────────
+UI REQUIREMENTS
+────────────────────────────────
+Orders list:
+- Status dropdown (with “Оплачен”)
+- Payment badge
+- Indicator of payment source (icon or tooltip)
+
+Order details:
+- Payment status
+- Source of payment
+- Payment history
+- Status change history
+
+All UI texts, buttons, errors — in Russian.
+
+────────────────────────────────
+ERROR HANDLING
+────────────────────────────────
+User-friendly messages only:
+- “Оплата не подтверждена”
+- “Отмечено вручную”
+- “Ошибка синхронизации с CRM”
+
+────────────────────────────────
+SECURITY & RELIABILITY
+────────────────────────────────
+- Idempotent webhook handling
+- Status changes are atomic
+- External CRM sync is async and retryable
+
+────────────────────────────────
+OUTPUT
+────────────────────────────────
+Return:
+- Backend code (Node.js + Express)
+- Database schema updates
+- Minimal UI components
+- Ready-to-run SaaS feature
+
+This is a production-level implementation.

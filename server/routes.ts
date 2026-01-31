@@ -1273,14 +1273,17 @@ export async function registerRoutes(
 
   app.patch("/api/orders/:id", requireAuth, async (req, res) => {
     try {
-      const newStatus = req.body.status;
+      const { status: newStatus, paymentStatus: newPaymentStatus, paymentSource } = req.body;
       const tenantId = req.user!.tenantId!;
+      const userId = req.user!.id;
       
-      // Get current order to check if status is changing to completed
       const currentOrder = await storage.getOrder(req.params.id, tenantId);
       if (!currentOrder) {
         return res.status(404).json({ message: "Заказ не найден" });
       }
+      
+      const oldStatus = currentOrder.status;
+      const oldPaymentStatus = currentOrder.paymentStatus;
       
       // If changing to completed, deduct stock for each item
       if (newStatus === "completed" && currentOrder.status !== "completed") {
@@ -1295,7 +1298,65 @@ export async function registerRoutes(
         }
       }
       
-      const order = await storage.updateOrderStatus(req.params.id, tenantId, newStatus);
+      // Prepare update data
+      const updateData: Record<string, unknown> = {};
+      if (newStatus) updateData.status = newStatus;
+      if (newPaymentStatus) updateData.paymentStatus = newPaymentStatus;
+      
+      // If marking as paid manually
+      if (newStatus === "paid" || newPaymentStatus === "paid") {
+        updateData.paymentSource = paymentSource || "manual";
+        if (!currentOrder.paidAt) {
+          updateData.paidAt = new Date();
+        }
+        if (!currentOrder.paymentProvider) {
+          updateData.paymentProvider = "manual";
+        }
+      }
+      
+      const order = await storage.updateOrderWithPayment(req.params.id, tenantId, updateData);
+      
+      // Log the status change
+      if (newStatus && newStatus !== oldStatus) {
+        await storage.logOrderStatusChange({
+          orderId: req.params.id,
+          oldStatus,
+          newStatus,
+          oldPaymentStatus,
+          newPaymentStatus: newPaymentStatus || oldPaymentStatus,
+          changedBy: "user",
+          userId,
+          source: paymentSource || "manual",
+        });
+      }
+      
+      // If status changed to paid, trigger CRM sync and notifications
+      if (newStatus === "paid" && oldStatus !== "paid") {
+        const tenant = await storage.getTenant(tenantId);
+        
+        // Send Telegram notification
+        if (tenant?.telegramBotToken && tenant?.telegramChatId) {
+          const { sendTelegramMessage } = await import("./services/telegram");
+          const sourceLabel = paymentSource === "auto" ? "автоматически" : "вручную";
+          const message = `💰 Заказ №${order?.orderNumber} отмечен как оплаченный (${order?.total} ₸)\n\nИсточник: ${sourceLabel}`;
+          sendTelegramMessage({
+            botToken: tenant.telegramBotToken,
+            chatId: tenant.telegramChatId,
+            message,
+          }).catch(err => console.error("Failed to send payment Telegram notification:", err));
+        }
+        
+        // Sync with CRM if connected
+        try {
+          const { syncOrderStatusToCrm } = await import("./services/crm");
+          syncOrderStatusToCrm(order!, "paid").catch(err => 
+            console.error("Failed to sync paid status to CRM:", err)
+          );
+        } catch (crmErr) {
+          console.error("CRM sync error:", crmErr);
+        }
+      }
+      
       res.json(order);
     } catch (error) {
       console.error("Error updating order:", error);

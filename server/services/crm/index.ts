@@ -1,7 +1,7 @@
 import { bitrixService } from "./bitrix.service";
 import { amoCrmService } from "./amocrm.service";
 import { storage } from "../../storage";
-import type { CrmIntegration, Order, OrderItem } from "@shared/schema";
+import type { CrmIntegration, Order, OrderItem, CrmSyncLog } from "@shared/schema";
 
 export interface CrmDealData {
   title: string;
@@ -120,6 +120,66 @@ export async function refreshCrmTokenIfNeeded(integration: CrmIntegration): Prom
   }
 
   return null;
+}
+
+export async function syncOrderStatusToCrm(order: Order, newStatus: string): Promise<void> {
+  const integrations = await storage.getActiveCrmIntegrations(order.tenantId);
+  
+  if (integrations.length === 0) return;
+
+  for (const integration of integrations) {
+    try {
+      // Find existing CRM entity for this order
+      const syncLogs = await storage.getCrmSyncLogsForOrder(order.id);
+      const successLog = syncLogs.find(log => 
+        log.integrationId === integration.id && 
+        log.status === "success" && 
+        log.crmEntityId
+      );
+
+      if (!successLog?.crmEntityId) {
+        console.log(`No CRM entity found for order ${order.id} in ${integration.crmType}`);
+        continue;
+      }
+
+      // Get the target stage ID for "paid" status from field mapping or use configured stage
+      const fieldMapping = integration.fieldMapping as Record<string, string> || {};
+      const paidStageId = fieldMapping.paidStageId || integration.stageId;
+
+      if (!paidStageId) {
+        console.log(`No paid stage configured for ${integration.crmType}`);
+        continue;
+      }
+
+      if (integration.crmType === "bitrix24") {
+        await bitrixService.updateDealStage(integration, successLog.crmEntityId, paidStageId);
+      } else if (integration.crmType === "amocrm") {
+        await amoCrmService.updateLeadStatus(integration, successLog.crmEntityId, paidStageId);
+      }
+
+      await storage.createCrmSyncLog({
+        integrationId: integration.id,
+        tenantId: order.tenantId,
+        orderId: order.id,
+        action: "update_status",
+        status: "success",
+        crmEntityId: successLog.crmEntityId,
+        requestData: { newStatus, paidStageId },
+      });
+
+    } catch (error: any) {
+      console.error(`CRM status sync error (${integration.crmType}):`, error);
+      await storage.createCrmSyncLog({
+        integrationId: integration.id,
+        tenantId: order.tenantId,
+        orderId: order.id,
+        action: "update_status",
+        status: "error",
+        errorMessage: error.message,
+        requestData: { newStatus },
+      });
+    }
+  }
 }
 
 export { bitrixService, amoCrmService };
