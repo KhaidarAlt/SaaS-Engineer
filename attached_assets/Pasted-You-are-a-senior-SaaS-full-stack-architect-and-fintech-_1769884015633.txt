@@ -1,0 +1,243 @@
+You are a senior SaaS full-stack architect and fintech engineer.
+
+Build a production-ready payment module for a SaaS platform called “SmartCatalog”.
+
+SmartCatalog already has:
+- WhatsApp integration with AI assistant
+- Internal CRM (Orders)
+- External CRM integrations (Bitrix24, amoCRM)
+- Telegram notifications
+
+Your task:
+Implement a NEW CORE FEATURE — a dedicated “Платежи” section that enables
+accepting payments via Kaspi directly from WhatsApp and automatically detecting payment status.
+
+INTERFACE LANGUAGE: **RUSSIAN ONLY**
+
+────────────────────────────────
+CORE PRINCIPLES
+────────────────────────────────
+1. SmartCatalog is NOT a payment provider
+2. Each business user connects their OWN Kaspi Business account
+3. SmartCatalog orchestrates payments, does not store money
+4. Payments can be marked as PAID automatically OR manually
+5. Internal CRM is the source of truth
+6. External CRM must stay in sync
+
+────────────────────────────────
+NEW SIDEBAR SECTION
+────────────────────────────────
+Create a NEW dashboard section:
+
+📌 **“Платежи”**
+
+This section must NOT be inside “Заказы” or “Интеграции”.
+It is a top-level business-critical module.
+
+────────────────────────────────
+SECTION: ПЛАТЕЖИ (UI)
+────────────────────────────────
+
+### 1. Kaspi Connection Block
+Show connection status:
+- 🟢 Подключено
+- 🔴 Не подключено
+- 🟡 Ошибка / требуется переподключение
+
+Actions:
+- Подключить Kaspi
+- Проверить соединение
+- Отключить
+
+Connection fields:
+- Merchant ID
+- API Token / Key
+- Webhook Secret (if required)
+
+Validate credentials via test API call.
+
+────────────────────────────────
+### 2. Payment Settings
+User-configurable settings:
+- Автоматически формировать счёт после создания заказа (ON/OFF)
+- Таймаут оплаты (минуты)
+- Повторное напоминание клиенту (ON/OFF)
+- Действие после оплаты:
+  - Перевести заказ в “Оплачен”
+  - Уведомить менеджера
+  - Синхронизировать с CRM
+
+────────────────────────────────
+### 3. Payment History
+Table:
+- Заказ
+- Клиент
+- Сумма
+- Статус платежа:
+  - Ожидает оплаты
+  - Оплачен
+  - Ошибка
+  - Просрочен
+- Источник:
+  - Автоматически
+  - Вручную
+- Дата / время
+- Ссылка на заказ
+- Ссылка на CRM (если подключена)
+
+────────────────────────────────
+INTERNAL CRM (ORDERS)
+────────────────────────────────
+
+### Order Statuses
+Extend internal CRM statuses:
+
+1. Новый
+2. Ожидает оплаты
+3. Оплачен
+4. В работе
+5. Выполнен
+6. Отменён
+
+Rules:
+- Status “Оплачен” can be set:
+  a) Automatically — after successful payment
+  b) Manually — from internal CRM UI
+- Every status change must be logged
+- UI must show payment source (auto / manual)
+
+Orders UI:
+- Status dropdown (includes “Оплачен”)
+- Payment badge
+- Button “Сформировать счёт” (if not paid)
+
+────────────────────────────────
+PAYMENT FLOW (AUTOMATIC)
+────────────────────────────────
+1. Client places order in WhatsApp
+2. AI assistant calculates final amount
+3. SmartCatalog creates Kaspi payment
+4. AI sends payment link in the SAME WhatsApp chat
+5. Client clicks link → redirected to Kaspi app
+6. Client sees amount and pays
+7. SmartCatalog receives webhook or checks status
+8. On success:
+   - payment_status = PAID
+   - order_status = “Оплачен”
+   - trigger notifications and CRM sync
+
+────────────────────────────────
+PAYMENT FLOW (MANUAL)
+────────────────────────────────
+- User manually sets order status to “Оплачен”
+- payment_source = manual
+- payment_status remains unchanged
+- External CRM sync is triggered
+
+────────────────────────────────
+BACKEND REQUIREMENTS
+────────────────────────────────
+
+### Database
+Orders table additions:
+- payment_status (pending / paid / failed / expired / manual)
+- payment_id
+- payment_provider
+- paid_at
+- payment_source (auto / manual)
+
+Payments table:
+- payment_id
+- order_id
+- amount
+- status
+- provider
+- created_at
+- updated_at
+
+Status history table:
+- order_id
+- old_status
+- new_status
+- source
+- timestamp
+
+────────────────────────────────
+PAYMENT API
+────────────────────────────────
+Endpoints:
+- POST /payments/create
+- POST /payments/webhook
+- GET /payments/status/:order_id
+
+Requirements:
+- Idempotent webhook handling
+- Atomic updates
+- Retry logic
+
+────────────────────────────────
+EXTERNAL CRM SYNC
+────────────────────────────────
+If Bitrix24 or amoCRM is connected:
+
+Trigger sync when:
+- Order status becomes “Оплачен” (auto OR manual)
+
+Actions:
+- Move deal to configured “Оплачено” stage
+- Log success or failure
+- Errors must NOT block internal logic
+
+────────────────────────────────
+NOTIFICATIONS
+────────────────────────────────
+
+### WhatsApp (AI assistant)
+- Auto payment:
+  “✅ Оплата прошла успешно. Спасибо за заказ!”
+- Manual:
+  “ℹ️ Заказ отмечен как оплаченный.”
+
+### Telegram (manager)
+- “💰 Заказ №123 оплачен на 41 500 ₸”
+- Include:
+  - payment source (auto/manual)
+  - order link
+  - CRM link
+
+────────────────────────────────
+ERROR HANDLING
+────────────────────────────────
+All errors must be human-readable (Russian):
+- “Оплата не завершена”
+- “Ошибка подтверждения оплаты”
+- “Ошибка синхронизации с CRM”
+- “Требуется переподключение Kaspi”
+
+────────────────────────────────
+SECURITY
+────────────────────────────────
+- Encrypt stored Kaspi credentials
+- Validate webhooks
+- Prevent duplicate payments
+- Multi-tenant isolation
+
+────────────────────────────────
+TECH STACK
+────────────────────────────────
+- Node.js + Express
+- PostgreSQL
+- Async/await
+- Modular architecture
+
+────────────────────────────────
+OUTPUT
+────────────────────────────────
+Return:
+- Full backend code
+- Database schema
+- Minimal UI components
+- Ready-to-run SaaS feature
+
+This is a core monetization feature.
+Implement it as production-grade SaaS logic.

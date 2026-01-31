@@ -20,6 +20,7 @@ import ProductFormPage from "@/pages/dashboard/ProductFormPage";
 import CategoriesPage from "@/pages/dashboard/CategoriesPage";
 import OrdersPage from "@/pages/dashboard/OrdersPage";
 import OrderDetailPage from "@/pages/dashboard/OrderDetailPage";
+import PaymentsPage from "@/pages/dashboard/PaymentsPage";
 import DiscountsPage from "@/pages/dashboard/DiscountsPage";
 import AnalyticsPage from "@/pages/dashboard/AnalyticsPage";
 import BillingPage from "@/pages/dashboard/BillingPage";
@@ -137,6 +138,9 @@ function Router() {
       </Route>
       <Route path="/dashboard/orders/:id">
         <ProtectedRoute component={OrderDetailPage} />
+      </Route>
+      <Route path="/dashboard/payments">
+        <ProtectedRoute component={PaymentsPage} />
       </Route>
       <Route path="/dashboard/discounts">
         <ProtectedRoute component={DiscountsPage} />

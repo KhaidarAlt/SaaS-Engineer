@@ -7,7 +7,7 @@ import {
   aiSettings, aiSalesScripts, aiTagRules, aiKnowledgeArticles, aiFaqItems,
   aiPolicies, aiConversations, aiMessages, aiInterventionEvents, aiInboxTickets,
   wahaInstances, aiResponseCorrections, leads, passwordResetTokens, tenantLinks,
-  crmIntegrations, crmSyncLogs, orderStatusLogs,
+  crmIntegrations, crmSyncLogs, orderStatusLogs, kaspiIntegrations, payments,
   type User, type InsertUser, type Tenant, type InsertTenant,
   type Subscription, type InsertSubscription, type Plan, type InsertPlan,
   type Product, type InsertProduct, type Category, type InsertCategory,
@@ -35,6 +35,8 @@ import {
   type CrmIntegration, type InsertCrmIntegration,
   type CrmSyncLog, type InsertCrmSyncLog,
   type OrderStatusLog, type InsertOrderStatusLog,
+  type KaspiIntegration, type InsertKaspiIntegration,
+  type Payment, type InsertPayment,
 } from "@shared/schema";
 import bcrypt from "bcryptjs";
 
@@ -1767,6 +1769,103 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(crmSyncLogs)
       .where(eq(crmSyncLogs.orderId, orderId))
       .orderBy(desc(crmSyncLogs.createdAt));
+  }
+
+  // ============ KASPI INTEGRATION ============
+  async getKaspiIntegration(tenantId: string): Promise<KaspiIntegration | undefined> {
+    const [integration] = await db.select().from(kaspiIntegrations)
+      .where(eq(kaspiIntegrations.tenantId, tenantId))
+      .limit(1);
+    return integration;
+  }
+
+  async createKaspiIntegration(data: InsertKaspiIntegration): Promise<KaspiIntegration> {
+    const [integration] = await db.insert(kaspiIntegrations).values(data).returning();
+    return integration;
+  }
+
+  async updateKaspiIntegration(tenantId: string, data: Partial<InsertKaspiIntegration>): Promise<KaspiIntegration | undefined> {
+    const [integration] = await db.update(kaspiIntegrations)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(kaspiIntegrations.tenantId, tenantId))
+      .returning();
+    return integration;
+  }
+
+  async deleteKaspiIntegration(tenantId: string): Promise<void> {
+    await db.delete(kaspiIntegrations)
+      .where(eq(kaspiIntegrations.tenantId, tenantId));
+  }
+
+  // ============ PAYMENTS ============
+  async getPayment(id: string): Promise<Payment | undefined> {
+    const [payment] = await db.select().from(payments)
+      .where(eq(payments.id, id))
+      .limit(1);
+    return payment;
+  }
+
+  async getPaymentByOrderId(orderId: string): Promise<Payment | undefined> {
+    const [payment] = await db.select().from(payments)
+      .where(eq(payments.orderId, orderId))
+      .orderBy(desc(payments.createdAt))
+      .limit(1);
+    return payment;
+  }
+
+  async getPaymentByExternalId(externalId: string): Promise<Payment | undefined> {
+    const [payment] = await db.select().from(payments)
+      .where(eq(payments.externalId, externalId))
+      .limit(1);
+    return payment;
+  }
+
+  async getPayments(tenantId: string, options?: { 
+    status?: string; 
+    limit?: number;
+    offset?: number;
+  }): Promise<Payment[]> {
+    let query = db.select().from(payments)
+      .where(eq(payments.tenantId, tenantId))
+      .orderBy(desc(payments.createdAt));
+    
+    if (options?.status) {
+      query = query.where(and(
+        eq(payments.tenantId, tenantId),
+        eq(payments.status, options.status)
+      ));
+    }
+    
+    if (options?.limit) {
+      query = query.limit(options.limit);
+    }
+    
+    if (options?.offset) {
+      query = query.offset(options.offset);
+    }
+    
+    return query;
+  }
+
+  async createPayment(data: InsertPayment): Promise<Payment> {
+    const [payment] = await db.insert(payments).values(data).returning();
+    return payment;
+  }
+
+  async updatePayment(id: string, data: Partial<InsertPayment>): Promise<Payment | undefined> {
+    const [payment] = await db.update(payments)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(payments.id, id))
+      .returning();
+    return payment;
+  }
+
+  async updatePaymentByOrderId(orderId: string, data: Partial<InsertPayment>): Promise<Payment | undefined> {
+    const [payment] = await db.update(payments)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(payments.orderId, orderId))
+      .returning();
+    return payment;
   }
 }
 

@@ -3664,6 +3664,203 @@ export async function registerRoutes(
     }
   });
 
+  // ============ KASPI INTEGRATION ============
+  
+  app.get("/api/kaspi/integration", requireAuth, async (req, res) => {
+    try {
+      const integration = await storage.getKaspiIntegration(req.user!.tenantId!);
+      res.json(integration || null);
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка получения интеграции Kaspi" });
+    }
+  });
+
+  app.post("/api/kaspi/integration", requireAuth, async (req, res) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const { merchantId, apiToken, webhookSecret, ...settings } = req.body;
+      
+      const existing = await storage.getKaspiIntegration(tenantId);
+      
+      if (existing) {
+        const updated = await storage.updateKaspiIntegration(tenantId, {
+          merchantId,
+          apiToken,
+          webhookSecret,
+          ...settings,
+          status: "connected",
+          lastCheckedAt: new Date(),
+        });
+        res.json(updated);
+      } else {
+        const integration = await storage.createKaspiIntegration({
+          tenantId,
+          merchantId,
+          apiToken,
+          webhookSecret,
+          ...settings,
+          status: "connected",
+        });
+        res.json(integration);
+      }
+    } catch (error) {
+      console.error("Error saving Kaspi integration:", error);
+      res.status(500).json({ message: "Ошибка сохранения интеграции Kaspi" });
+    }
+  });
+
+  app.post("/api/kaspi/test", requireAuth, async (req, res) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const integration = await storage.getKaspiIntegration(tenantId);
+      
+      if (!integration) {
+        return res.status(404).json({ success: false, message: "Интеграция не найдена" });
+      }
+      
+      const { kaspiService } = await import("./services/payments");
+      const isConnected = await kaspiService.testConnection(integration);
+      
+      if (isConnected) {
+        await storage.updateKaspiIntegration(tenantId, {
+          status: "connected",
+          lastCheckedAt: new Date(),
+          lastError: null,
+          lastErrorAt: null,
+        });
+        res.json({ success: true, message: "Подключение успешно" });
+      } else {
+        await storage.updateKaspiIntegration(tenantId, {
+          status: "error",
+          lastError: "Не удалось подключиться к Kaspi API",
+          lastErrorAt: new Date(),
+        });
+        res.json({ success: false, message: "Ошибка подключения к Kaspi" });
+      }
+    } catch (error) {
+      res.status(500).json({ success: false, message: "Ошибка проверки соединения" });
+    }
+  });
+
+  app.delete("/api/kaspi/integration", requireAuth, async (req, res) => {
+    try {
+      await storage.deleteKaspiIntegration(req.user!.tenantId!);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка удаления интеграции" });
+    }
+  });
+
+  app.patch("/api/kaspi/settings", requireAuth, async (req, res) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const settings = req.body;
+      
+      const updated = await storage.updateKaspiIntegration(tenantId, settings);
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка обновления настроек" });
+    }
+  });
+
+  // ============ PAYMENTS ============
+  
+  app.get("/api/payments", requireAuth, async (req, res) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const status = req.query.status as string | undefined;
+      const limit = parseInt(req.query.limit as string) || 50;
+      const offset = parseInt(req.query.offset as string) || 0;
+      
+      const payments = await storage.getPayments(tenantId, { status, limit, offset });
+      res.json(payments);
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка получения платежей" });
+    }
+  });
+
+  app.get("/api/payments/:orderId", requireAuth, async (req, res) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const { checkPaymentStatus } = await import("./services/payments");
+      const result = await checkPaymentStatus(tenantId, req.params.orderId);
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка получения статуса платежа" });
+    }
+  });
+
+  app.post("/api/payments/create", requireAuth, async (req, res) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const { orderId } = req.body;
+      
+      const order = await storage.getOrder(orderId, tenantId);
+      if (!order) {
+        return res.status(404).json({ message: "Заказ не найден" });
+      }
+      
+      const { createPaymentForOrder } = await import("./services/payments");
+      const result = await createPaymentForOrder({
+        order,
+        tenantId,
+        source: "manual",
+      });
+      
+      if (result.success) {
+        res.json({
+          success: true,
+          payment: result.payment,
+          paymentUrl: result.paymentUrl,
+        });
+      } else {
+        res.status(400).json({
+          success: false,
+          message: result.error || "Ошибка создания платежа",
+        });
+      }
+    } catch (error) {
+      console.error("Error creating payment:", error);
+      res.status(500).json({ message: "Ошибка создания платежа" });
+    }
+  });
+
+  app.post("/api/payments/webhook", async (req, res) => {
+    try {
+      const signature = req.headers["x-kaspi-signature"] as string;
+      const { tenantId, paymentId } = req.body;
+      
+      if (!tenantId || !paymentId) {
+        return res.status(400).json({ error: "Missing required fields" });
+      }
+      
+      const integration = await storage.getKaspiIntegration(tenantId);
+      if (!integration) {
+        return res.status(404).json({ error: "Integration not found" });
+      }
+      
+      const { kaspiService, processPaymentWebhook } = await import("./services/payments");
+      
+      if (integration.webhookSecret && signature) {
+        const isValid = kaspiService.validateWebhook(integration, signature, JSON.stringify(req.body));
+        if (!isValid) {
+          return res.status(401).json({ error: "Invalid signature" });
+        }
+      }
+      
+      const result = await processPaymentWebhook(tenantId, paymentId, req.body);
+      
+      if (result.success) {
+        res.json({ success: true });
+      } else {
+        res.status(400).json({ error: result.error });
+      }
+    } catch (error) {
+      console.error("Payment webhook error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   // ============ CRM INTEGRATIONS ============
   
   // Get CRM integrations

@@ -1009,6 +1009,100 @@ export const insertCrmSyncLogSchema = createInsertSchema(crmSyncLogs).omit({ id:
 export type InsertCrmSyncLog = z.infer<typeof insertCrmSyncLogSchema>;
 export type CrmSyncLog = typeof crmSyncLogs.$inferSelect;
 
+// ============ KASPI INTEGRATIONS ============
+export const kaspiIntegrations = pgTable("kaspi_integrations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  status: text("status").notNull().default("disconnected"), // connected, disconnected, error
+  
+  // Kaspi credentials (encrypted in production)
+  merchantId: text("merchant_id"),
+  apiToken: text("api_token"),
+  webhookSecret: text("webhook_secret"),
+  
+  // Settings
+  autoGenerateInvoice: boolean("auto_generate_invoice").default(true),
+  paymentTimeout: integer("payment_timeout").default(30), // minutes
+  sendReminder: boolean("send_reminder").default(true),
+  reminderMinutes: integer("reminder_minutes").default(15),
+  
+  // Actions after payment
+  updateOrderStatus: boolean("update_order_status").default(true),
+  notifyManager: boolean("notify_manager").default(true),
+  syncWithCrm: boolean("sync_with_crm").default(true),
+  
+  // Status tracking
+  lastCheckedAt: timestamp("last_checked_at"),
+  lastError: text("last_error"),
+  lastErrorAt: timestamp("last_error_at"),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertKaspiIntegrationSchema = createInsertSchema(kaspiIntegrations).omit({ 
+  id: true, createdAt: true, updatedAt: true 
+});
+export type InsertKaspiIntegration = z.infer<typeof insertKaspiIntegrationSchema>;
+export type KaspiIntegration = typeof kaspiIntegrations.$inferSelect;
+
+// ============ PAYMENTS ============
+export const payments = pgTable("payments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  orderId: varchar("order_id").notNull().references(() => orders.id),
+  
+  // Payment details
+  amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
+  currency: text("currency").notNull().default("KZT"),
+  status: text("status").notNull().default("pending"), // pending, paid, failed, expired, cancelled
+  
+  // Provider details
+  provider: text("provider").notNull().default("kaspi"), // kaspi, manual
+  externalId: text("external_id"), // ID from Kaspi
+  paymentUrl: text("payment_url"), // Link for customer to pay
+  
+  // Customer info
+  customerPhone: text("customer_phone"),
+  customerName: text("customer_name"),
+  
+  // Tracking
+  source: text("source").notNull().default("auto"), // auto, manual
+  expiresAt: timestamp("expires_at"),
+  paidAt: timestamp("paid_at"),
+  failedAt: timestamp("failed_at"),
+  failureReason: text("failure_reason"),
+  
+  // Webhook data
+  webhookData: jsonb("webhook_data"),
+  webhookReceivedAt: timestamp("webhook_received_at"),
+  
+  // Notifications
+  whatsappNotified: boolean("whatsapp_notified").default(false),
+  telegramNotified: boolean("telegram_notified").default(false),
+  crmSynced: boolean("crm_synced").default(false),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const paymentsRelations = relations(payments, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [payments.tenantId],
+    references: [tenants.id],
+  }),
+  order: one(orders, {
+    fields: [payments.orderId],
+    references: [orders.id],
+  }),
+}));
+
+export const insertPaymentSchema = createInsertSchema(payments).omit({ 
+  id: true, createdAt: true, updatedAt: true 
+});
+export type InsertPayment = z.infer<typeof insertPaymentSchema>;
+export type Payment = typeof payments.$inferSelect;
+
 // ============ FORM VALIDATION SCHEMAS ============
 export const loginSchema = z.object({
   email: z.string().email("Введите корректный email"),
