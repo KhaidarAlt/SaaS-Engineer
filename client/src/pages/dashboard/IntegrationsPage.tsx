@@ -67,8 +67,8 @@ export default function IntegrationsPage() {
     queryKey: ["/api/billing"],
   });
 
-  const currentPlanName = billing?.subscription?.plan?.name || "";
-  const hasCrmAccess = ["Про", "Бизнес"].includes(currentPlanName);
+  const currentPlanName = billing?.subscription?.plan?.name?.toLowerCase() || "";
+  const hasCrmAccess = ["про", "бизнес", "pro", "business"].includes(currentPlanName);
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
