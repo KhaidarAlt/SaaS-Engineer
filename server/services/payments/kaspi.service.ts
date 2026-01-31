@@ -142,10 +142,15 @@ class KaspiService {
     integration: KaspiIntegration,
     signature: string,
     payload: string
-  ): boolean {
+  ): { valid: boolean; error?: string } {
     if (!integration.webhookSecret) {
-      console.warn("No webhook secret configured");
-      return true;
+      console.error("Webhook secret not configured - rejecting webhook for security");
+      return { valid: false, error: "Webhook secret not configured" };
+    }
+
+    if (!signature) {
+      console.error("No signature provided in webhook request");
+      return { valid: false, error: "Missing signature" };
     }
 
     const crypto = require("crypto");
@@ -154,7 +159,22 @@ class KaspiService {
       .update(payload)
       .digest("hex");
 
-    return signature === expectedSignature;
+    // Use constant-time comparison to prevent timing attacks
+    const signatureBuffer = Buffer.from(signature, "hex");
+    const expectedBuffer = Buffer.from(expectedSignature, "hex");
+    
+    if (signatureBuffer.length !== expectedBuffer.length) {
+      return { valid: false, error: "Invalid signature format" };
+    }
+
+    const isValid = crypto.timingSafeEqual(signatureBuffer, expectedBuffer);
+    
+    if (!isValid) {
+      console.error("Webhook signature validation failed");
+      return { valid: false, error: "Invalid signature" };
+    }
+
+    return { valid: true };
   }
 
   generatePaymentLink(orderId: string, amount: number): string {

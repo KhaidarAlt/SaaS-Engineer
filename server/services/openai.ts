@@ -100,7 +100,7 @@ export async function generateAiResponse(
   // Check for handoff request first
   if (isHandoffRequest(userMessage)) {
     return {
-      content: `Конечно! Сейчас позову менеджера, он скоро подключится к нашему диалогу и поможет вам. Пожалуйста, подождите немного 🙏`,
+      content: `Конечно! Сейчас позову менеджера, он скоро подключится к нашему диалогу и поможет вам. Пожалуйста, подождите немного.`,
       matchedTag: "handoff",
       action: "handoff",
     };
@@ -112,7 +112,7 @@ export async function generateAiResponse(
   if (matchedTag) {
     if (matchedTag.action === "send_catalog_link") {
       let response = matchedTag.responseTemplate || 
-        `С удовольствием покажу наш каталог! 🛍️\n\n👉 **Каталог "${context.storeName}"**\n${catalogUrl}\n\nТам вы найдёте все товары с ценами и сможете оформить заказ.`;
+        `С удовольствием покажу наш каталог!\n\nКаталог "${context.storeName}"\n${catalogUrl}\n\nТам вы найдёте все товары с ценами и сможете оформить заказ.`;
       response = response.replace("{catalog_link}", catalogUrl);
       response = response.replace("{store_name}", context.storeName);
       return {
@@ -124,7 +124,7 @@ export async function generateAiResponse(
     
     if (matchedTag.action === "handoff") {
       return {
-        content: `Хорошо, сейчас позову менеджера! Он скоро подключится и поможет вам. Подождите, пожалуйста 🙏`,
+        content: `Хорошо, сейчас позову менеджера! Он скоро подключится и поможет вам. Подождите, пожалуйста.`,
         matchedTag: matchedTag.tag,
         action: "handoff",
       };
@@ -242,7 +242,7 @@ function buildSystemPrompt(context: TenantContext, catalogUrl: string, matchedTa
 
   // Discounts section - IMPORTANT
   if (context.discounts && context.discounts.length > 0) {
-    prompt += `\n\n## 💰 СКИДКИ В МАГАЗИНЕ (ОБЯЗАТЕЛЬНО УПОМИНАЙ!)`;
+    prompt += `\n\n## СКИДКИ В МАГАЗИНЕ (ОБЯЗАТЕЛЬНО УПОМИНАЙ!)`;
     context.discounts.forEach(discount => {
       const valueText = discount.type === 'percent' 
         ? `${discount.value}%` 
@@ -296,7 +296,7 @@ function buildSystemPrompt(context: TenantContext, catalogUrl: string, matchedTa
   prompt += `\n\n## ССЫЛКА НА КАТАЛОГ
 Когда клиент хочет посмотреть товары, выбрать или купить — ОБЯЗАТЕЛЬНО дай ссылку в таком формате:
 
-👉 **Каталог "${context.storeName}"**
+Каталог "${context.storeName}"
 ${catalogUrl}
 
 Там все товары с ценами и можно оформить заказ!`;
@@ -312,7 +312,7 @@ ${catalogUrl}
 
   prompt += `\n\n## ПЕРЕДАЧА МЕНЕДЖЕРУ
 Если клиент просит менеджера, оператора или живого человека — НЕ ГОВОРИ звонить по телефону!
-Отвечай: "Конечно! Сейчас позову менеджера, он скоро подключится к нашему диалогу. Подождите, пожалуйста 🙏"`;
+Отвечай: "Конечно! Сейчас позову менеджера, он скоро подключится к нашему диалогу. Подождите, пожалуйста."`;
 
   if (context.tone === "formal") {
     prompt += `\n\n## СТИЛЬ ОБЩЕНИЯ

@@ -2,6 +2,8 @@ import { storage } from "../../storage";
 import { kaspiService, type KaspiPaymentResult } from "./kaspi.service";
 import type { Order, Payment, KaspiIntegration } from "@shared/schema";
 
+export { kaspiService };
+
 export interface CreatePaymentOptions {
   order: Order;
   tenantId: string;
@@ -65,6 +67,7 @@ export async function createPaymentForOrder(options: CreatePaymentOptions): Prom
   
   await storage.updateOrderWithPayment(order.id, tenantId, {
     status: "awaiting_payment",
+    paymentStatus: "pending",
     paymentId: payment.id,
     paymentProvider: "kaspi",
   });
@@ -109,18 +112,25 @@ export async function processPaymentWebhook(
     const tenant = await storage.getTenant(tenantId);
     const order = await storage.getOrder(payment.orderId, tenantId);
     
-    if (order && kaspiIntegration.updateOrderStatus) {
-      await storage.updateOrderWithPayment(order.id, tenantId, {
-        status: "paid",
+    // Always update payment status on orders, optionally update order status
+    if (order) {
+      const updateData: Record<string, unknown> = {
         paymentStatus: "paid",
         paidAt: new Date(),
         paymentSource: "auto",
-      });
+      };
+      
+      // Only update order.status to "paid" if configured
+      if (kaspiIntegration.updateOrderStatus) {
+        updateData.status = "paid";
+      }
+      
+      await storage.updateOrderWithPayment(order.id, tenantId, updateData);
       
       await storage.logOrderStatusChange({
         orderId: order.id,
         oldStatus: order.status,
-        newStatus: "paid",
+        newStatus: kaspiIntegration.updateOrderStatus ? "paid" : order.status,
         oldPaymentStatus: order.paymentStatus || "pending",
         newPaymentStatus: "paid",
         changedBy: "system",
@@ -133,7 +143,7 @@ export async function processPaymentWebhook(
       sendTelegramMessage({
         botToken: tenant.telegramBotToken,
         chatId: tenant.telegramChatId,
-        message: `💰 Оплата получена!\n\nЗаказ: #${order?.orderNumber}\nСумма: ${order?.total} ₸\nКлиент: ${order?.customerName}\nИсточник: автоматически (Kaspi)`,
+        message: `Оплата получена!\n\nЗаказ: #${order?.orderNumber}\nСумма: ${order?.total} тг\nКлиент: ${order?.customerName}\nИсточник: автоматически (Kaspi)`,
       }).catch(err => console.error("Failed to send Telegram notification:", err));
     }
     
@@ -146,7 +156,7 @@ export async function processPaymentWebhook(
         
         if (activeInstance) {
           const customerChatId = order.customerPhone.replace(/\D/g, "") + "@c.us";
-          const confirmationMessage = `✅ Оплата получена!\n\nВаш заказ #${order.orderNumber} на сумму ${order.total} ₸ успешно оплачен.\n\nСпасибо за покупку! Мы свяжемся с вами для уточнения деталей доставки.`;
+          const confirmationMessage = `Оплата получена!\n\nВаш заказ #${order.orderNumber} на сумму ${order.total} тг успешно оплачен.\n\nСпасибо за покупку! Мы свяжемся с вами для уточнения деталей доставки.`;
           
           await wahaService.sendTextMessage(
             activeInstance.instanceName,

@@ -3867,11 +3867,11 @@ export async function registerRoutes(
       
       const { kaspiService, processPaymentWebhook } = await import("./services/payments");
       
-      if (integration.webhookSecret && signature) {
-        const isValid = kaspiService.validateWebhook(integration, signature, JSON.stringify(req.body));
-        if (!isValid) {
-          return res.status(401).json({ error: "Invalid signature" });
-        }
+      // Always validate webhook signature for security
+      const validationResult = kaspiService.validateWebhook(integration, signature, JSON.stringify(req.body));
+      if (!validationResult.valid) {
+        console.error(`[Kaspi] Webhook validation failed: ${validationResult.error}`);
+        return res.status(401).json({ error: validationResult.error || "Invalid signature" });
       }
       
       const result = await processPaymentWebhook(tenantId, paymentId, req.body);
