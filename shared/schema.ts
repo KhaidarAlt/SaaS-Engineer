@@ -905,6 +905,75 @@ export const insertTenantLinkSchema = createInsertSchema(tenantLinks).omit({ id:
 export type InsertTenantLink = z.infer<typeof insertTenantLinkSchema>;
 export type TenantLink = typeof tenantLinks.$inferSelect;
 
+// ============ CRM INTEGRATIONS ============
+export const crmIntegrations = pgTable("crm_integrations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  crmType: text("crm_type").notNull(), // bitrix24, amocrm
+  status: text("status").notNull().default("disconnected"), // connected, disconnected, error, pending
+  
+  // OAuth tokens (encrypted in production)
+  accessToken: text("access_token"),
+  refreshToken: text("refresh_token"),
+  tokenExpiresAt: timestamp("token_expires_at"),
+  
+  // CRM-specific data
+  crmDomain: text("crm_domain"), // e.g., mycompany.bitrix24.kz
+  crmUserId: text("crm_user_id"),
+  
+  // Integration settings
+  pipelineId: text("pipeline_id"),
+  pipelineName: text("pipeline_name"),
+  stageId: text("stage_id"),
+  stageName: text("stage_name"),
+  responsibleUserId: text("responsible_user_id"),
+  responsibleUserName: text("responsible_user_name"),
+  entityType: text("entity_type").default("deal"), // deal, lead
+  
+  // Field mapping (JSON)
+  fieldMapping: jsonb("field_mapping").$type<Record<string, string>>(),
+  
+  // Status tracking
+  lastSyncAt: timestamp("last_sync_at"),
+  lastError: text("last_error"),
+  lastErrorAt: timestamp("last_error_at"),
+  webhookStatus: text("webhook_status").default("inactive"), // active, inactive, error
+  webhookSecret: text("webhook_secret"),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const crmIntegrationsRelations = relations(crmIntegrations, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [crmIntegrations.tenantId],
+    references: [tenants.id],
+  }),
+}));
+
+export const insertCrmIntegrationSchema = createInsertSchema(crmIntegrations).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertCrmIntegration = z.infer<typeof insertCrmIntegrationSchema>;
+export type CrmIntegration = typeof crmIntegrations.$inferSelect;
+
+// ============ CRM SYNC LOGS ============
+export const crmSyncLogs = pgTable("crm_sync_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  integrationId: varchar("integration_id").notNull().references(() => crmIntegrations.id),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  orderId: varchar("order_id").references(() => orders.id),
+  action: text("action").notNull(), // create_deal, update_deal, webhook_received
+  status: text("status").notNull(), // success, error
+  crmEntityId: text("crm_entity_id"), // ID of created entity in CRM
+  errorMessage: text("error_message"),
+  requestData: jsonb("request_data"),
+  responseData: jsonb("response_data"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertCrmSyncLogSchema = createInsertSchema(crmSyncLogs).omit({ id: true, createdAt: true });
+export type InsertCrmSyncLog = z.infer<typeof insertCrmSyncLogSchema>;
+export type CrmSyncLog = typeof crmSyncLogs.$inferSelect;
+
 // ============ FORM VALIDATION SCHEMAS ============
 export const loginSchema = z.object({
   email: z.string().email("Введите корректный email"),

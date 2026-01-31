@@ -49,6 +49,7 @@ import CartPage from "@/pages/catalog/CartPage";
 import CheckoutPage from "@/pages/catalog/CheckoutPage";
 import LinksPage from "@/pages/dashboard/LinksPage";
 import LinksPublicPage from "@/pages/public/LinksPublicPage";
+import IntegrationsPage from "@/pages/dashboard/IntegrationsPage";
 
 function ProtectedRoute({ 
   component: Component,
@@ -157,6 +158,9 @@ function Router() {
       </Route>
       <Route path="/dashboard/catalog-health">
         <ProtectedRoute component={CatalogHealthPage} />
+      </Route>
+      <Route path="/dashboard/integrations">
+        <ProtectedRoute component={IntegrationsPage} />
       </Route>
 
       <Route path="/dashboard/ai">

@@ -7,6 +7,7 @@ import {
   aiSettings, aiSalesScripts, aiTagRules, aiKnowledgeArticles, aiFaqItems,
   aiPolicies, aiConversations, aiMessages, aiInterventionEvents, aiInboxTickets,
   wahaInstances, aiResponseCorrections, leads, passwordResetTokens, tenantLinks,
+  crmIntegrations, crmSyncLogs,
   type User, type InsertUser, type Tenant, type InsertTenant,
   type Subscription, type InsertSubscription, type Plan, type InsertPlan,
   type Product, type InsertProduct, type Category, type InsertCategory,
@@ -31,6 +32,8 @@ import {
   type Lead, type InsertLead,
   type AiResponseCorrection, type InsertAiResponseCorrection,
   type TenantLink, type InsertTenantLink,
+  type CrmIntegration, type InsertCrmIntegration,
+  type CrmSyncLog, type InsertCrmSyncLog,
 } from "@shared/schema";
 import bcrypt from "bcryptjs";
 
@@ -514,6 +517,10 @@ export class DatabaseStorage implements IStorage {
 
     const items = await db.select().from(orderItems).where(eq(orderItems.orderId, id));
     return { ...order, items };
+  }
+
+  async getOrderItems(orderId: string): Promise<OrderItem[]> {
+    return db.select().from(orderItems).where(eq(orderItems.orderId, orderId));
   }
 
   async createOrder(insertOrder: InsertOrder, items: InsertOrderItem[]): Promise<Order> {
@@ -1668,6 +1675,63 @@ export class DatabaseStorage implements IStorage {
     await db.update(users)
       .set({ password: hashedPassword, updatedAt: new Date() })
       .where(eq(users.id, userId));
+  }
+
+  // ============ CRM INTEGRATIONS ============
+  async getCrmIntegrations(tenantId: string): Promise<CrmIntegration[]> {
+    return db.select().from(crmIntegrations)
+      .where(eq(crmIntegrations.tenantId, tenantId))
+      .orderBy(desc(crmIntegrations.createdAt));
+  }
+
+  async getCrmIntegration(id: string, tenantId: string): Promise<CrmIntegration | undefined> {
+    const [integration] = await db.select().from(crmIntegrations)
+      .where(and(eq(crmIntegrations.id, id), eq(crmIntegrations.tenantId, tenantId)));
+    return integration;
+  }
+
+  async getCrmIntegrationByCrmType(tenantId: string, crmType: string): Promise<CrmIntegration | undefined> {
+    const [integration] = await db.select().from(crmIntegrations)
+      .where(and(eq(crmIntegrations.tenantId, tenantId), eq(crmIntegrations.crmType, crmType)));
+    return integration;
+  }
+
+  async createCrmIntegration(data: InsertCrmIntegration): Promise<CrmIntegration> {
+    const [integration] = await db.insert(crmIntegrations).values(data).returning();
+    return integration;
+  }
+
+  async updateCrmIntegration(id: string, tenantId: string, data: Partial<InsertCrmIntegration>): Promise<CrmIntegration | undefined> {
+    const [integration] = await db.update(crmIntegrations)
+      .set({ ...data, updatedAt: new Date() })
+      .where(and(eq(crmIntegrations.id, id), eq(crmIntegrations.tenantId, tenantId)))
+      .returning();
+    return integration;
+  }
+
+  async deleteCrmIntegration(id: string, tenantId: string): Promise<boolean> {
+    await db.delete(crmSyncLogs).where(eq(crmSyncLogs.integrationId, id));
+    await db.delete(crmIntegrations)
+      .where(and(eq(crmIntegrations.id, id), eq(crmIntegrations.tenantId, tenantId)));
+    return true;
+  }
+
+  async getActiveCrmIntegrations(tenantId: string): Promise<CrmIntegration[]> {
+    return db.select().from(crmIntegrations)
+      .where(and(eq(crmIntegrations.tenantId, tenantId), eq(crmIntegrations.status, "connected")));
+  }
+
+  // ============ CRM SYNC LOGS ============
+  async createCrmSyncLog(data: InsertCrmSyncLog): Promise<CrmSyncLog> {
+    const [log] = await db.insert(crmSyncLogs).values(data).returning();
+    return log;
+  }
+
+  async getCrmSyncLogs(integrationId: string, limit: number = 50): Promise<CrmSyncLog[]> {
+    return db.select().from(crmSyncLogs)
+      .where(eq(crmSyncLogs.integrationId, integrationId))
+      .orderBy(desc(crmSyncLogs.createdAt))
+      .limit(limit);
   }
 }
 

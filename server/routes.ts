@@ -504,9 +504,8 @@ async function ensureDemoTenant() {
     name: "Демо магазин",
     slug: "demo",
     status: "active",
-    planId: startPlan.id,
-    email: "demo@smartcatalog.kz",
-    phone: "+77001234567",
+    contactEmail: "demo@smartcatalog.kz",
+    contactPhone: "+77001234567",
     address: "Алматы, демо-адрес",
     description: "Это демонстрационный каталог для ознакомления с возможностями SmartCatalog",
   });
@@ -1772,6 +1771,7 @@ export async function registerRoutes(
         unitPrice: string;
         total: string;
       }> = [];
+      const orderProducts: Array<{id: string; name: string; price: string; sku: string}> = [];
 
       for (const item of items) {
         const product = await storage.getProduct(item.productId, tenant.id);
@@ -1788,6 +1788,7 @@ export async function registerRoutes(
           unitPrice: product.price,
           total: itemTotal.toFixed(2),
         });
+        orderProducts.push({ id: product.id, name: product.name, price: product.price, sku: product.sku });
       }
 
       const order = await storage.createOrder(
@@ -1833,6 +1834,17 @@ export async function registerRoutes(
           chatId: tenant.telegramChatId,
           message,
         }).catch(err => console.error("Failed to send Telegram notification:", err));
+      }
+
+      // Create deal in connected CRM systems
+      try {
+        const { createCrmDeal } = await import("./services/crm");
+        const createdOrderItems = await storage.getOrderItems(order.id);
+        createCrmDeal(order, createdOrderItems, orderProducts).catch(err => 
+          console.error("Failed to create CRM deal:", err)
+        );
+      } catch (crmErr) {
+        console.error("CRM integration error:", crmErr);
       }
 
       res.json({ 
@@ -3588,6 +3600,430 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error saving Telegram settings:", error);
       res.status(500).json({ message: "Ошибка сохранения настроек" });
+    }
+  });
+
+  // ============ CRM INTEGRATIONS ============
+  
+  // Get CRM integrations
+  app.get("/api/crm/integrations", requireAuth, async (req, res) => {
+    try {
+      const integrations = await storage.getCrmIntegrations(req.user!.tenantId!);
+      res.json(integrations);
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка получения интеграций" });
+    }
+  });
+
+  // Get auth URL for CRM
+  app.get("/api/crm/auth/url", requireAuth, async (req, res) => {
+    try {
+      const crmType = req.query.crmType as string;
+      const state = Buffer.from(JSON.stringify({
+        tenantId: req.user!.tenantId,
+        userId: req.user!.id,
+        crmType,
+      })).toString("base64");
+
+      let url = "";
+      if (crmType === "bitrix24") {
+        const clientId = process.env.BITRIX24_CLIENT_ID || "";
+        const redirectUri = process.env.BITRIX24_REDIRECT_URI || `${process.env.BASE_URL || "https://botfactory.kz"}/api/crm/oauth/bitrix24/callback`;
+        url = `https://oauth.bitrix.info/oauth/authorize/?client_id=${clientId}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}`;
+      } else if (crmType === "amocrm") {
+        const clientId = process.env.AMOCRM_CLIENT_ID || "";
+        url = `https://www.amocrm.ru/oauth?client_id=${clientId}&mode=post_message&state=${state}`;
+      }
+
+      res.json({ url });
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка получения URL авторизации" });
+    }
+  });
+
+  // OAuth callback for CRM
+  app.post("/api/crm/auth/callback", requireAuth, async (req, res) => {
+    try {
+      const { crmType, code, domain } = req.body;
+      const tenantId = req.user!.tenantId!;
+
+      // Check existing integration
+      const existing = await storage.getCrmIntegrationByCrmType(tenantId, crmType);
+      if (existing) {
+        await storage.deleteCrmIntegration(existing.id, tenantId);
+      }
+
+      let accessToken = "";
+      let refreshToken = "";
+      let tokenExpiresAt = new Date();
+      let crmDomain = domain || "";
+
+      if (crmType === "bitrix24") {
+        const clientId = process.env.BITRIX24_CLIENT_ID || "";
+        const clientSecret = process.env.BITRIX24_CLIENT_SECRET || "";
+        const redirectUri = process.env.BITRIX24_REDIRECT_URI || `${process.env.BASE_URL || "https://botfactory.kz"}/api/crm/oauth/bitrix24/callback`;
+
+        const tokenRes = await fetch("https://oauth.bitrix.info/oauth/token/", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({
+            grant_type: "authorization_code",
+            client_id: clientId,
+            client_secret: clientSecret,
+            code,
+            redirect_uri: redirectUri,
+          }),
+        });
+
+        if (!tokenRes.ok) {
+          throw new Error("Не удалось получить токен");
+        }
+
+        const tokenData = await tokenRes.json();
+        accessToken = tokenData.access_token;
+        refreshToken = tokenData.refresh_token;
+        tokenExpiresAt = new Date(Date.now() + (tokenData.expires_in || 3600) * 1000);
+        crmDomain = tokenData.domain || tokenData.member_id;
+      } else if (crmType === "amocrm") {
+        const clientId = process.env.AMOCRM_CLIENT_ID || "";
+        const clientSecret = process.env.AMOCRM_CLIENT_SECRET || "";
+        const redirectUri = process.env.AMOCRM_REDIRECT_URI || `${process.env.BASE_URL || "https://botfactory.kz"}/api/crm/oauth/amocrm/callback`;
+
+        const tokenRes = await fetch(`https://${domain}/oauth2/access_token`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            client_id: clientId,
+            client_secret: clientSecret,
+            grant_type: "authorization_code",
+            code,
+            redirect_uri: redirectUri,
+          }),
+        });
+
+        if (!tokenRes.ok) {
+          throw new Error("Не удалось получить токен");
+        }
+
+        const tokenData = await tokenRes.json();
+        accessToken = tokenData.access_token;
+        refreshToken = tokenData.refresh_token;
+        tokenExpiresAt = new Date(Date.now() + (tokenData.expires_in || 86400) * 1000);
+        crmDomain = domain;
+      }
+
+      const integration = await storage.createCrmIntegration({
+        tenantId,
+        crmType,
+        status: "pending",
+        accessToken,
+        refreshToken,
+        tokenExpiresAt,
+        crmDomain,
+      });
+
+      res.json({ integrationId: integration.id });
+    } catch (error: any) {
+      console.error("CRM auth error:", error);
+      res.status(500).json({ message: error.message || "Ошибка авторизации" });
+    }
+  });
+
+  // Get pipelines from CRM
+  app.get("/api/crm/integrations/:id/pipelines", requireAuth, async (req, res) => {
+    try {
+      const integration = await storage.getCrmIntegration(req.params.id, req.user!.tenantId!);
+      if (!integration) {
+        return res.status(404).json({ message: "Интеграция не найдена" });
+      }
+
+      let pipelines: any[] = [];
+      
+      if (integration.crmType === "bitrix24" && integration.crmDomain && integration.accessToken) {
+        const response = await fetch(`https://${integration.crmDomain}/rest/crm.category.list`, {
+          method: "POST",
+          headers: { 
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${integration.accessToken}`,
+          },
+          body: JSON.stringify({ entityTypeId: 2 }),
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          const categories = data.result?.categories || [];
+          
+          for (const cat of categories) {
+            const stagesRes = await fetch(`https://${integration.crmDomain}/rest/crm.dealcategory.stage.list`, {
+              method: "POST",
+              headers: { 
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${integration.accessToken}`,
+              },
+              body: JSON.stringify({ id: cat.ID }),
+            });
+            
+            let stages: any[] = [];
+            if (stagesRes.ok) {
+              const stagesData = await stagesRes.json();
+              stages = (stagesData.result || []).map((s: any) => ({
+                id: s.STATUS_ID,
+                name: s.NAME,
+              }));
+            }
+            
+            pipelines.push({
+              id: cat.ID,
+              name: cat.NAME,
+              stages,
+            });
+          }
+        }
+      } else if (integration.crmType === "amocrm" && integration.crmDomain && integration.accessToken) {
+        const response = await fetch(`https://${integration.crmDomain}/api/v4/leads/pipelines`, {
+          headers: { "Authorization": `Bearer ${integration.accessToken}` },
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          pipelines = (data._embedded?.pipelines || []).map((p: any) => ({
+            id: String(p.id),
+            name: p.name,
+            stages: (p._embedded?.statuses || []).map((s: any) => ({
+              id: String(s.id),
+              name: s.name,
+            })),
+          }));
+        }
+      }
+
+      res.json(pipelines);
+    } catch (error) {
+      console.error("Get pipelines error:", error);
+      res.status(500).json({ message: "Ошибка получения воронок" });
+    }
+  });
+
+  // Get users from CRM
+  app.get("/api/crm/integrations/:id/users", requireAuth, async (req, res) => {
+    try {
+      const integration = await storage.getCrmIntegration(req.params.id, req.user!.tenantId!);
+      if (!integration) {
+        return res.status(404).json({ message: "Интеграция не найдена" });
+      }
+
+      let users: any[] = [];
+      
+      if (integration.crmType === "bitrix24" && integration.crmDomain && integration.accessToken) {
+        const response = await fetch(`https://${integration.crmDomain}/rest/user.get`, {
+          method: "POST",
+          headers: { 
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${integration.accessToken}`,
+          },
+          body: JSON.stringify({ FILTER: { ACTIVE: true } }),
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          users = (data.result || []).map((u: any) => ({
+            id: String(u.ID),
+            name: `${u.NAME || ""} ${u.LAST_NAME || ""}`.trim() || u.EMAIL,
+          }));
+        }
+      } else if (integration.crmType === "amocrm" && integration.crmDomain && integration.accessToken) {
+        const response = await fetch(`https://${integration.crmDomain}/api/v4/users`, {
+          headers: { "Authorization": `Bearer ${integration.accessToken}` },
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          users = (data._embedded?.users || []).map((u: any) => ({
+            id: String(u.id),
+            name: u.name,
+          }));
+        }
+      }
+
+      res.json(users);
+    } catch (error) {
+      console.error("Get users error:", error);
+      res.status(500).json({ message: "Ошибка получения пользователей" });
+    }
+  });
+
+  // Update CRM integration settings
+  app.patch("/api/crm/integrations/:id", requireAuth, async (req, res) => {
+    try {
+      const integration = await storage.updateCrmIntegration(
+        req.params.id, 
+        req.user!.tenantId!, 
+        {
+          ...req.body,
+          status: "connected",
+        }
+      );
+      
+      if (!integration) {
+        return res.status(404).json({ message: "Интеграция не найдена" });
+      }
+      
+      res.json(integration);
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка обновления интеграции" });
+    }
+  });
+
+  // Test CRM connection
+  app.post("/api/crm/integrations/:id/test", requireAuth, async (req, res) => {
+    try {
+      const integration = await storage.getCrmIntegration(req.params.id, req.user!.tenantId!);
+      if (!integration) {
+        return res.status(404).json({ message: "Интеграция не найдена" });
+      }
+
+      let success = false;
+      
+      if (integration.crmType === "bitrix24" && integration.crmDomain && integration.accessToken) {
+        const response = await fetch(`https://${integration.crmDomain}/rest/profile`, {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${integration.accessToken}` },
+        });
+        success = response.ok;
+      } else if (integration.crmType === "amocrm" && integration.crmDomain && integration.accessToken) {
+        const response = await fetch(`https://${integration.crmDomain}/api/v4/account`, {
+          headers: { "Authorization": `Bearer ${integration.accessToken}` },
+        });
+        success = response.ok;
+      }
+
+      if (success) {
+        await storage.updateCrmIntegration(req.params.id, req.user!.tenantId!, {
+          status: "connected",
+          lastSyncAt: new Date(),
+        });
+      } else {
+        await storage.updateCrmIntegration(req.params.id, req.user!.tenantId!, {
+          status: "error",
+          lastError: "Не удалось подключиться к CRM",
+          lastErrorAt: new Date(),
+        });
+      }
+
+      res.json({ success, error: success ? null : "Не удалось подключиться к CRM" });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Ошибка тестирования" });
+    }
+  });
+
+  // Send test deal to CRM
+  app.post("/api/crm/integrations/:id/test-deal", requireAuth, async (req, res) => {
+    try {
+      const integration = await storage.getCrmIntegration(req.params.id, req.user!.tenantId!);
+      if (!integration || integration.status !== "connected") {
+        return res.status(400).json({ success: false, message: "Интеграция не настроена" });
+      }
+
+      const tenant = await storage.getTenant(req.user!.tenantId!);
+      const testData = {
+        title: `[ТЕСТ] Заявка от SmartCatalog`,
+        clientName: "Тестовый клиент",
+        phone: "+77001234567",
+        email: "test@example.com",
+        products: "Тестовый товар x1 = 10000₸",
+        amount: 10000,
+        comment: "Это тестовая заявка для проверки интеграции",
+      };
+
+      let dealId = "";
+      
+      if (integration.crmType === "bitrix24" && integration.crmDomain && integration.accessToken) {
+        const fields: any = {
+          TITLE: testData.title,
+          STAGE_ID: integration.stageId || "NEW",
+          OPPORTUNITY: testData.amount,
+          CURRENCY_ID: "KZT",
+          COMMENTS: `${testData.products}\n\n${testData.comment}`,
+          SOURCE_ID: "WEB",
+          SOURCE_DESCRIPTION: "SmartCatalog",
+        };
+        
+        if (integration.responsibleUserId) {
+          fields.ASSIGNED_BY_ID = integration.responsibleUserId;
+        }
+
+        const response = await fetch(`https://${integration.crmDomain}/rest/crm.deal.add`, {
+          method: "POST",
+          headers: { 
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${integration.accessToken}`,
+          },
+          body: JSON.stringify({ fields }),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          dealId = String(data.result);
+        } else {
+          throw new Error("Ошибка создания сделки");
+        }
+      } else if (integration.crmType === "amocrm" && integration.crmDomain && integration.accessToken) {
+        const leadData: any = {
+          name: testData.title,
+          price: testData.amount,
+          pipeline_id: integration.pipelineId ? parseInt(integration.pipelineId) : undefined,
+          status_id: integration.stageId ? parseInt(integration.stageId) : undefined,
+          _embedded: {
+            tags: [{ name: "SmartCatalog" }, { name: "Тест" }],
+          },
+        };
+
+        if (integration.responsibleUserId) {
+          leadData.responsible_user_id = parseInt(integration.responsibleUserId);
+        }
+
+        const response = await fetch(`https://${integration.crmDomain}/api/v4/leads`, {
+          method: "POST",
+          headers: { 
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${integration.accessToken}`,
+          },
+          body: JSON.stringify([leadData]),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          dealId = String(data._embedded?.leads?.[0]?.id || "");
+        } else {
+          throw new Error("Ошибка создания лида");
+        }
+      }
+
+      await storage.updateCrmIntegration(req.params.id, req.user!.tenantId!, {
+        lastSyncAt: new Date(),
+      });
+
+      res.json({ 
+        success: true, 
+        message: "Тестовая сделка успешно создана!", 
+        dealId 
+      });
+    } catch (error: any) {
+      console.error("Test deal error:", error);
+      res.json({ 
+        success: false, 
+        message: error.message || "Ошибка создания тестовой сделки" 
+      });
+    }
+  });
+
+  // Delete CRM integration
+  app.delete("/api/crm/integrations/:id", requireAuth, async (req, res) => {
+    try {
+      await storage.deleteCrmIntegration(req.params.id, req.user!.tenantId!);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка удаления интеграции" });
     }
   });
 

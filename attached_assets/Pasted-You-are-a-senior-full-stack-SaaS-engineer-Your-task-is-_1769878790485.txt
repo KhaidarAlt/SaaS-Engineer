@@ -1,0 +1,187 @@
+You are a senior full-stack SaaS engineer.
+
+Your task is to build a production-ready CRM integration module for a SaaS platform called “SmartCatalog”.
+
+SmartCatalog is a web service where businesses receive customer requests (orders, leads) from WhatsApp catalogs.
+Users on Business and PRO plans can connect their CRM system.
+
+CRM systems to support:
+- Bitrix24
+- amoCRM
+
+────────────────────────────────
+GENERAL REQUIREMENTS
+────────────────────────────────
+1. Interface language: **Russian (100%)**
+2. Target audience: non-technical business users
+3. UX priority: simple, guided, wizard-based
+4. Architecture: SmartCatalog is the source of truth, CRM is a receiver
+5. Multi-tenant: each SmartCatalog user connects their own CRM account
+6. Backend + minimal frontend UI (React or simple server-rendered pages is acceptable)
+
+────────────────────────────────
+FUNCTIONAL REQUIREMENTS
+────────────────────────────────
+
+### 1. Integrations Section (UI)
+Create a new section in the SmartCatalog dashboard called:
+
+📌 **“Интеграции”**
+
+Inside it show CRM cards:
+- Bitrix24
+- amoCRM
+
+Each card must show:
+- CRM logo
+- Connection status:
+  🟢 Подключено
+  🔴 Не подключено
+  🟡 Ошибка подключения
+- Button:
+  - “Подключить”
+  - “Отключить”
+  - “Переподключить”
+- Last sync time
+- Session status (token valid / expired)
+
+────────────────────────────────
+### 2. Connection Wizard (Step-by-Step UI)
+When user clicks “Подключить”, open a wizard:
+
+**Step 1: Выбор CRM**
+- Bitrix24
+- amoCRM
+
+**Step 2: Авторизация**
+- Redirect user to CRM OAuth2
+- Show loading + explanation text in Russian
+
+**Step 3: Настройки интеграции**
+User must select:
+- Воронка (pipeline)
+- Этап для новой заявки
+- Ответственный менеджер (optional)
+- Тип сущности:
+  - Сделка
+  - Лид (Bitrix24)
+
+All lists must be fetched live from CRM API.
+
+**Step 4: Маппинг полей**
+Default mapping (editable):
+- Имя клиента → CRM Имя
+- Телефон → CRM Телефон
+- Товары → Комментарий
+- Сумма → Бюджет
+- Источник → “SmartCatalog”
+
+**Step 5: Тестовая заявка**
+- Button “Отправить тестовую заявку”
+- Show result:
+  ✅ Успешно создана сделка
+  ❌ Ошибка (с текстом)
+
+**Step 6: Готово**
+- Status: 🟢 Интеграция активна
+- Explain what will happen automatically
+
+────────────────────────────────
+### 3. Backend (Node.js + Express)
+Create backend services with clear modular structure:
+
+/crm
+  bitrix.service.js
+  amocrm.service.js
+  token.manager.js
+/routes
+  crm.auth.routes.js
+  crm.sync.routes.js
+  crm.webhook.routes.js
+/db
+  integrations.table (user_id, crm, tokens, settings, status)
+
+────────────────────────────────
+### 4. OAuth2 Logic
+Implement full OAuth2 flow for both CRMs:
+- Authorization
+- Token exchange
+- Token refresh
+- Token expiration handling
+
+If token expired:
+- Show 🟡 “Требуется переподключение”
+- Disable sync until refreshed
+
+────────────────────────────────
+### 5. Automatic CRM Actions
+After successful connection:
+
+✔ Automatically create deal/lead in CRM for every new SmartCatalog request  
+✔ Automatically move deal across stages based on SmartCatalog events:
+  - Заявка создана
+  - Клиент подтвердил
+  - Оплачено
+  - Отказ
+✔ Allow updating deal status via API
+✔ Support manual re-sync button
+
+────────────────────────────────
+### 6. Webhooks
+Implement webhook endpoints:
+- Receive CRM events
+- Log them
+- Optionally sync status back to SmartCatalog
+
+Show webhook status in UI:
+🟢 Webhook active
+🔴 Webhook error
+
+────────────────────────────────
+### 7. Status Indicators (IMPORTANT)
+Every integration must show:
+
+- Connection status
+- OAuth token status
+- Last API call status
+- Last error message (human readable, Russian)
+- Last successful sync time
+
+────────────────────────────────
+### 8. Error Handling (Human-Readable)
+NO technical errors in UI.
+
+Convert errors to messages like:
+- “Не удалось подключиться к CRM”
+- “Истёк срок доступа, переподключите CRM”
+- “CRM временно недоступна”
+- “Ошибка создания сделки”
+
+────────────────────────────────
+### 9. Security
+- Store tokens encrypted
+- Validate webhook signatures
+- Protect routes by user session
+
+────────────────────────────────
+### 10. Documentation
+Generate README.md with:
+- How integration works
+- How user connects CRM
+- What happens automatically
+- Troubleshooting section (Russian)
+
+────────────────────────────────
+### 11. Output
+Return:
+- Full backend code
+- Minimal UI components
+- Clear comments
+- Ready to run project
+
+Do NOT use mock logic.
+Follow real Bitrix24 and amoCRM API logic.
+Use async/await.
+Code must be clean and readable.
+
+This is a SaaS-level production feature.
