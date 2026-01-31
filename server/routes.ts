@@ -1908,6 +1908,26 @@ export async function registerRoutes(
         console.error("CRM integration error:", crmErr);
       }
 
+      // Auto-generate Kaspi payment invoice if enabled
+      let paymentUrl: string | null = null;
+      try {
+        const kaspiIntegration = await storage.getKaspiIntegration(tenant.id);
+        if (kaspiIntegration && kaspiIntegration.status === "connected" && kaspiIntegration.autoGenerateInvoice) {
+          const { createPaymentForOrder } = await import("./services/payments");
+          const paymentResult = await createPaymentForOrder({
+            order,
+            tenantId: tenant.id,
+            source: "catalog",
+          });
+          if (paymentResult.success && paymentResult.paymentUrl) {
+            paymentUrl = paymentResult.paymentUrl;
+            console.log(`[Payment] Auto-generated Kaspi invoice for order ${order.orderNumber}: ${paymentUrl}`);
+          }
+        }
+      } catch (paymentErr) {
+        console.error("Auto-payment generation error:", paymentErr);
+      }
+
       res.json({ 
         orderId: order.id, 
         orderNumber: order.orderNumber,
@@ -1917,6 +1937,7 @@ export async function registerRoutes(
           items: orderItems,
         },
         catalogUrl: `${req.protocol}://${req.get('host')}/c/${tenantSlug}`,
+        paymentUrl,
       });
     } catch (error) {
       console.error("Order error:", error);
@@ -3385,6 +3406,7 @@ export async function registerRoutes(
     const tagRules = await storage.getAiTagRules(tenantId);
     const faqItems = await storage.getAiFaqItems(tenantId);
     const knowledgeArticles = await storage.getAiKnowledgeArticles(tenantId);
+    const kaspiIntegration = await storage.getKaspiIntegration(tenantId);
     
     // Build category map
     const categoryMap = new Map<string, string>();
@@ -3442,6 +3464,10 @@ export async function registerRoutes(
       currentStage: conversation.currentStage || undefined,
       aiLanguages: (tenant as any).aiLanguages || ["ru"],
       aiSystemPrompt: (tenant as any).aiSystemPrompt || undefined,
+      paymentOptions: kaspiIntegration && kaspiIntegration.status === "connected" ? {
+        kaspiEnabled: true,
+        autoInvoice: kaspiIntegration.autoGenerateInvoice || false,
+      } : undefined,
     };
     
     try {

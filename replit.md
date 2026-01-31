@@ -60,6 +60,7 @@ Preferred communication style: Simple, everyday language.
 - Replit Object Storage (Google Cloud Storage) for persistent files, with presigned URL uploads.
 
 ### Payment Processing
+- **Kaspi Business** (fully integrated): Payment link generation, webhook processing, auto-invoice creation, payment status tracking, post-payment notifications (Telegram + WhatsApp)
 - Stripe (scaffolded)
 
 ### CRM Integrations

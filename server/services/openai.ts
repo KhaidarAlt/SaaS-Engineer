@@ -69,6 +69,10 @@ interface TenantContext {
   currentStage?: string;
   aiLanguages?: string[];
   aiSystemPrompt?: string;
+  paymentOptions?: {
+    kaspiEnabled: boolean;
+    autoInvoice: boolean;
+  };
 }
 
 interface AiResponseResult {
@@ -296,6 +300,15 @@ function buildSystemPrompt(context: TenantContext, catalogUrl: string, matchedTa
 ${catalogUrl}
 
 Там все товары с ценами и можно оформить заказ!`;
+
+  // Payment options section
+  if (context.paymentOptions?.kaspiEnabled) {
+    prompt += `\n\n## СПОСОБЫ ОПЛАТЫ
+У нас подключена оплата через Kaspi! Когда клиент спрашивает об оплате или хочет оплатить:
+- Скажи что можно оплатить через Kaspi
+- После оформления заказа клиент получит ссылку на оплату
+- Оплата безопасная через официальный сервис Kaspi`;
+  }
 
   prompt += `\n\n## ПЕРЕДАЧА МЕНЕДЖЕРУ
 Если клиент просит менеджера, оператора или живого человека — НЕ ГОВОРИ звонить по телефону!

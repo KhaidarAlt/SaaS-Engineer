@@ -137,6 +137,29 @@ export async function processPaymentWebhook(
       }).catch(err => console.error("Failed to send Telegram notification:", err));
     }
     
+    // Send WhatsApp confirmation to customer
+    if (order?.customerPhone) {
+      try {
+        const { wahaService } = await import("../waha");
+        const wahaInstances = await storage.getWahaInstances(tenantId);
+        const activeInstance = wahaInstances.find(i => i.status === "active");
+        
+        if (activeInstance) {
+          const customerChatId = order.customerPhone.replace(/\D/g, "") + "@c.us";
+          const confirmationMessage = `✅ Оплата получена!\n\nВаш заказ #${order.orderNumber} на сумму ${order.total} ₸ успешно оплачен.\n\nСпасибо за покупку! Мы свяжемся с вами для уточнения деталей доставки.`;
+          
+          await wahaService.sendTextMessage(
+            activeInstance.instanceName,
+            customerChatId,
+            confirmationMessage
+          );
+          console.log(`[Payment] Sent WhatsApp confirmation to ${order.customerPhone}`);
+        }
+      } catch (whatsappErr) {
+        console.error("Failed to send WhatsApp confirmation:", whatsappErr);
+      }
+    }
+    
     if (kaspiIntegration.syncWithCrm && order) {
       try {
         const { syncOrderStatusToCrm } = await import("../crm");
