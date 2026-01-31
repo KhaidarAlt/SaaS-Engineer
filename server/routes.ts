@@ -1317,11 +1317,11 @@ export async function registerRoutes(
       const order = await storage.updateOrderWithPayment(req.params.id, tenantId, updateData);
       
       // Log the status change
-      if (newStatus && newStatus !== oldStatus) {
+      if ((newStatus && newStatus !== oldStatus) || (newPaymentStatus && newPaymentStatus !== oldPaymentStatus)) {
         await storage.logOrderStatusChange({
           orderId: req.params.id,
           oldStatus,
-          newStatus,
+          newStatus: newStatus || oldStatus,
           oldPaymentStatus,
           newPaymentStatus: newPaymentStatus || oldPaymentStatus,
           changedBy: "user",
@@ -1330,8 +1330,8 @@ export async function registerRoutes(
         });
       }
       
-      // If status changed to paid, trigger CRM sync and notifications
-      if (newStatus === "paid" && oldStatus !== "paid") {
+      // If payment status changed to paid, trigger CRM sync and notifications
+      if (newPaymentStatus === "paid" && oldPaymentStatus !== "paid") {
         const tenant = await storage.getTenant(tenantId);
         
         // Send Telegram notification

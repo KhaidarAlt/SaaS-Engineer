@@ -6,12 +6,16 @@ import {
   Search,
   ShoppingCart,
   Eye,
+  CreditCard,
+  Clock,
+  CheckCircle,
+  XCircle,
 } from "lucide-react";
 import { SiWhatsapp } from "react-icons/si";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -35,9 +39,18 @@ import type { Order } from "@shared/schema";
 
 const statusOptions = [
   { value: "new", label: "Новый", variant: "default" as const },
+  { value: "awaiting_payment", label: "Ожидает оплаты", variant: "secondary" as const },
   { value: "in_progress", label: "В работе", variant: "secondary" as const },
   { value: "completed", label: "Выполнен", variant: "outline" as const },
   { value: "cancelled", label: "Отменён", variant: "destructive" as const },
+];
+
+const paymentStatusOptions = [
+  { value: "pending", label: "Ожидает", icon: Clock, color: "text-yellow-600" },
+  { value: "paid", label: "Оплачен", icon: CheckCircle, color: "text-green-600" },
+  { value: "failed", label: "Ошибка", icon: XCircle, color: "text-red-600" },
+  { value: "expired", label: "Истёк", icon: XCircle, color: "text-muted-foreground" },
+  { value: "manual", label: "Вручную", icon: CreditCard, color: "text-blue-600" },
 ];
 
 export default function OrdersPage() {
@@ -57,6 +70,16 @@ export default function OrdersPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
       toast({ title: "Статус обновлён" });
+    },
+  });
+
+  const updatePaymentMutation = useMutation({
+    mutationFn: async ({ id, paymentStatus }: { id: string; paymentStatus: string }) => {
+      return apiRequest("PATCH", `/api/orders/${id}`, { paymentStatus });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      toast({ title: "Статус оплаты обновлён" });
     },
   });
 
@@ -85,6 +108,11 @@ export default function OrdersPage() {
   const getStatusBadge = (status: string) => {
     const option = statusOptions.find((s) => s.value === status);
     return option || { label: status, variant: "secondary" as const };
+  };
+
+  const getPaymentBadge = (paymentStatus: string | null | undefined) => {
+    const option = paymentStatusOptions.find((s) => s.value === paymentStatus);
+    return option || paymentStatusOptions[0];
   };
 
   const formatPhoneForWhatsApp = (phone: string) => {
@@ -157,6 +185,7 @@ export default function OrdersPage() {
                   <TableHead>Номер</TableHead>
                   <TableHead>Клиент</TableHead>
                   <TableHead>Сумма</TableHead>
+                  <TableHead>Оплата</TableHead>
                   <TableHead>Статус</TableHead>
                   <TableHead>WhatsApp</TableHead>
                   <TableHead>Дата</TableHead>
@@ -165,7 +194,7 @@ export default function OrdersPage() {
               </TableHeader>
               <TableBody>
                 {isLoading ? (
-                  [...Array(5)].map((_, i) => <TableRowSkeleton key={i} cols={7} />)
+                  [...Array(5)].map((_, i) => <TableRowSkeleton key={i} cols={8} />)
                 ) : filteredOrders && filteredOrders.length > 0 ? (
                   filteredOrders.map((order, index) => (
                     <motion.tr
@@ -194,6 +223,37 @@ export default function OrdersPage() {
                       </TableCell>
                       <TableCell className="font-medium">
                         {formatPrice(order.total)}
+                      </TableCell>
+                      <TableCell>
+                        <Select
+                          value={order.paymentStatus || "pending"}
+                          onValueChange={(paymentStatus) =>
+                            updatePaymentMutation.mutate({ id: order.id, paymentStatus })
+                          }
+                        >
+                          <SelectTrigger className="w-32 h-8">
+                            {(() => {
+                              const badge = getPaymentBadge(order.paymentStatus);
+                              const Icon = badge.icon;
+                              return (
+                                <div className={`flex items-center gap-1.5 ${badge.color}`}>
+                                  <Icon className="h-3.5 w-3.5" />
+                                  <span className="text-sm">{badge.label}</span>
+                                </div>
+                              );
+                            })()}
+                          </SelectTrigger>
+                          <SelectContent>
+                            {paymentStatusOptions.map((ps) => (
+                              <SelectItem key={ps.value} value={ps.value}>
+                                <div className={`flex items-center gap-1.5 ${ps.color}`}>
+                                  <ps.icon className="h-3.5 w-3.5" />
+                                  <span>{ps.label}</span>
+                                </div>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </TableCell>
                       <TableCell>
                         <Select
@@ -245,7 +305,7 @@ export default function OrdersPage() {
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={7} className="h-48">
+                    <TableCell colSpan={8} className="h-48">
                       <div className="flex flex-col items-center justify-center text-center">
                         <ShoppingCart className="h-12 w-12 text-muted-foreground/50 mb-3" />
                         <p className="font-medium">Нет заказов</p>
