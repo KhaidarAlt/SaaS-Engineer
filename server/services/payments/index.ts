@@ -247,5 +247,3 @@ export async function checkPaymentStatus(
   
   return { status: payment.status, payment };
 }
-
-export { kaspiService };

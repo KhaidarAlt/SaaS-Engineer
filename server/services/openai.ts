@@ -220,7 +220,7 @@ function buildSystemPrompt(context: TenantContext, catalogUrl: string, matchedTa
 
   // Promotions section - IMPORTANT
   if (context.promotions && context.promotions.length > 0) {
-    prompt += `\n\n## 🔥 АКТУАЛЬНЫЕ АКЦИИ (ОБЯЗАТЕЛЬНО УПОМИНАЙ!)`;
+    prompt += `\n\n## АКТУАЛЬНЫЕ АКЦИИ (ОБЯЗАТЕЛЬНО УПОМИНАЙ!)`;
     context.promotions.forEach(promo => {
       prompt += `\n\n**${promo.name}**`;
       if (promo.description) {
