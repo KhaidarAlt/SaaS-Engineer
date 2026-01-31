@@ -56,6 +56,7 @@ export const tenants = pgTable("tenants", {
   aiLanguages: text("ai_languages").array().default(sql`ARRAY['ru']::text[]`),
   aiSystemPrompt: text("ai_system_prompt"),
   aiTypingDelay: integer("ai_typing_delay").default(0),
+  customDomain: text("custom_domain"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

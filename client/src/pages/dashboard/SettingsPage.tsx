@@ -7,7 +7,7 @@ import { motion } from "framer-motion";
 import { 
   Save, Store, MessageCircle, Bell, ExternalLink, Upload, Image, 
   Share2, QrCode, Download, Clock, MapPin, Link2, Copy, Check, 
-  Loader2, Phone, Trash2, CheckCircle, AlertCircle, RefreshCw, Lock, Send
+  Loader2, Phone, Trash2, CheckCircle, AlertCircle, RefreshCw, Lock, Send, Globe
 } from "lucide-react";
 import { SiWhatsapp, SiTelegram } from "react-icons/si";
 import { z } from "zod";
@@ -51,6 +51,7 @@ const settingsFormSchema = z.object({
   notificationPhone: z.string().optional(),
   telegramBotToken: z.string().optional(),
   telegramChatId: z.string().optional(),
+  customDomain: z.string().optional(),
 });
 
 type SettingsFormData = z.infer<typeof settingsFormSchema>;
@@ -221,6 +222,7 @@ export default function SettingsPage() {
       notificationPhone: "",
       telegramBotToken: "",
       telegramChatId: "",
+      customDomain: "",
     },
   });
 
@@ -242,6 +244,7 @@ export default function SettingsPage() {
         notificationPhone: tenant.notificationPhone || "",
         telegramBotToken: tenant.telegramBotToken || "",
         telegramChatId: tenant.telegramChatId || "",
+        customDomain: (tenant as any).customDomain || "",
       });
       setLogoPreview(tenant.logoUrl || "");
       setOgImagePreview((tenant as any).ogImageUrl || "");
@@ -619,6 +622,55 @@ export default function SettingsPage() {
                       Скачать QR-код
                     </Button>
                   </div>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.12 }}
+          >
+            <Card data-testid="card-custom-domain">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Globe className="h-5 w-5" />
+                  Свой домен
+                </CardTitle>
+                <CardDescription>
+                  Подключите свой домен для каталога (например, catalog.myshop.kz)
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="customDomain">Доменное имя</Label>
+                  <Input
+                    id="customDomain"
+                    placeholder="catalog.myshop.kz"
+                    {...form.register("customDomain")}
+                    data-testid="input-custom-domain"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Укажите домен без http:// и без слеша в конце
+                  </p>
+                </div>
+                
+                <div className="p-4 bg-muted/50 rounded-lg space-y-3">
+                  <p className="text-sm font-medium">Инструкция по настройке DNS:</p>
+                  <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside">
+                    <li>Войдите в панель управления вашего домена</li>
+                    <li>Создайте CNAME запись:</li>
+                  </ol>
+                  <div className="bg-background p-3 rounded border font-mono text-xs space-y-1">
+                    <div><span className="text-muted-foreground">Тип:</span> CNAME</div>
+                    <div><span className="text-muted-foreground">Имя:</span> {form.watch("customDomain")?.split('.')[0] || "catalog"}</div>
+                    <div><span className="text-muted-foreground">Значение:</span> botfactory.kz</div>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    После настройки DNS изменения вступят в силу в течение 24 часов.
+                    Напишите в поддержку после настройки для активации домена.
+                  </p>
                 </div>
               </CardContent>
             </Card>
