@@ -1,0 +1,352 @@
+You are a senior SaaS architect, UX product designer and Meta Cloud API expert.
+
+Build a NEW standalone section inside a SaaS platform called “SmartCatalog”
+called:
+
+📌 “WhatsApp — Официальное подключение Meta”
+
+GOAL:
+Create a FRIENDLY, INTUITIVE, SAFE all-in-one control center
+for connecting, managing, scaling and analyzing WhatsApp Cloud API
+with AI assistant support — without forcing users to work inside Meta Business Manager.
+
+TARGET USER:
+Non-technical business owners and managers.
+
+INTERFACE LANGUAGE: RUSSIAN ONLY  
+TONE: simple, friendly, human, explanatory  
+NO technical jargon visible to user
+
+────────────────────────────────
+CORE PRODUCT PRINCIPLES
+────────────────────────────────
+1. Hide all Meta technical complexity
+2. Prevent user actions that can lead to bans
+3. Explain all statuses and risks in human language
+4. Guide user step-by-step (no guesswork)
+5. One AI assistant, one toggle, multiple channels
+6. SmartCatalog is an orchestration & safety layer
+7. User always understands:
+   - what is happening
+   - why it matters
+   - what to do next
+
+────────────────────────────────
+SECTION STRUCTURE (TOP LEVEL)
+────────────────────────────────
+Create a top-level dashboard section:
+
+📌 WhatsApp (Официальный канал Meta)
+
+Tabs:
+1. Подключение
+2. Номера
+3. Шаблоны сообщений
+4. Официальные рассылки
+5. Аналитика
+6. Безопасность и статус
+
+────────────────────────────────
+TAB 1: ПОДКЛЮЧЕНИЕ (CLOUD API ONBOARDING)
+────────────────────────────────
+Implement a STEP-BY-STEP onboarding wizard with progress bar.
+
+STEP 1 — Подготовка
+Explain clearly:
+- Номер должен быть свободен
+- Нужен аккаунт Meta
+- Для работы потребуется привязка карты
+
+Tooltip examples:
+“Это стандартное требование Meta. Мы проведём вас по всем шагам.”
+
+Buttons:
+- Продолжить
+- Отмена
+
+STEP 2 — Авторизация Meta (OAuth)
+Friendly text:
+“Мы подключаемся к Meta, чтобы автоматически настроить WhatsApp для вас.”
+
+Statuses:
+- ⏳ Выполняется авторизация
+- ✅ Авторизация успешна
+- ❌ Ошибка авторизации (explain reason)
+
+STEP 3 — Бизнес-аккаунт и WhatsApp Business Account (WABA)
+Options:
+- Select existing
+- Button: “Создать автоматически”
+
+Tooltip:
+“Мы создадим необходимые сущности. Вручную ничего делать не нужно.”
+
+STEP 4 — Подключение номера
+- Input phone number
+- Send SMS / Call code
+- Verify code
+
+Statuses:
+- ⏳ Проверяем номер
+- ✅ Номер подтверждён
+- ❌ Номер не подходит (clear reason)
+
+STEP 5 — Webhooks и тест
+Auto-register webhooks.
+Checklist:
+- ✅ Webhook активен
+- ✅ События получаются
+- ✅ Отправка доступна
+
+Button:
+- Отправить тестовое сообщение
+
+STEP 6 — Оплата Meta (CRITICAL)
+If billing not configured:
+Show warning:
+🔴 “Оплата Meta не настроена. Без этого WhatsApp работать не будет.”
+
+Button:
+👉 “Добавить карту для оплаты Meta”
+
+Redirect user ONLY to official Meta billing page.
+After return:
+- Recheck billing status
+- Show:
+  🟢 Карта подключена
+  🟡 Ожидает подтверждения
+  🔴 Оплата не настроена
+
+Provide help text:
+“Карта привязывается на стороне Meta. Мы не храним платёжные данные.”
+
+────────────────────────────────
+TAB 2: НОМЕРА
+────────────────────────────────
+For each phone number show a card with:
+
+- Номер
+- Статус подключения: 🟢 Активен / 🟡 Ограничен / 🔴 Проблема
+- Канал: WhatsApp Cloud API
+- Quality Rating:
+  🟢 Высокое / 🟡 Среднее / 🔴 Низкое
+- Messaging Tier (human readable):
+  Низкий / Средний / Высокий
+- Статус бизнеса:
+  🟢 Подтверждён / 🟡 Проверяется / 🔴 Не подтверждён
+- Статус биллинга:
+  🟢 Активна / 🔴 Требуется действие
+
+Tooltips (examples):
+- “Качество номера влияет на лимиты и безопасность.”
+- “Уровень лимитов растёт автоматически при хорошем качестве.”
+
+Buttons:
+- Проверить
+- Отправить тест
+- Отключить
+
+Explain:
+“Добавление нескольких номеров позволяет масштабировать отправку и снижать риски.”
+
+────────────────────────────────
+LOGIC OF TIER GROWTH (VERY IMPORTANT)
+────────────────────────────────
+Explain growth in UI:
+
+Tier increases automatically when:
+- Качество номера высокое
+- Бизнес подтверждён
+- Есть биллинг
+- Низкий процент жалоб
+- Стабильные ответы клиентов
+
+Show recommendations:
+- “Улучшите качество, отвечая только заинтересованным клиентам”
+- “Не запускайте рассылки слишком рано”
+- “Подтвердите бизнес для роста лимитов”
+
+────────────────────────────────
+TAB 3: ШАБЛОНЫ СООБЩЕНИЙ
+────────────────────────────────
+Implement Template Manager via Meta API.
+
+Features:
+- Create template
+- Choose category:
+  Utility / Marketing / Authentication
+- Language selection
+- Variables preview
+- Submit for approval
+- Show status:
+  ⏳ На проверке
+  ✅ Одобрен
+  ❌ Отклонён (show reason in Russian)
+
+Tooltips:
+- Utility: “Сервисные уведомления”
+- Marketing: “Рекламные сообщения (доступны после прогрева)”
+
+Buttons:
+- Использовать
+- Дублировать
+- Пересоздать
+
+────────────────────────────────
+TAB 4: ОФИЦИАЛЬНЫЕ РАССЫЛКИ
+────────────────────────────────
+Only approved template-based messaging.
+
+Features:
+- Create campaign
+- Select template
+- Select audience (filters, tags)
+- Select sending numbers
+- Schedule or send now
+- Automatic Meta limit compliance
+
+Statuses:
+- Запланирована
+- Отправляется
+- Завершена
+- Ошибка
+
+Warnings:
+“Для новых аккаунтов рассылки временно недоступны — это снижает риск блокировки.”
+
+────────────────────────────────
+TAB 5: АНАЛИТИКА
+────────────────────────────────
+Focus on business value.
+
+Show:
+- Отправлено
+- Доставлено
+- Ответы
+- Заказы
+- Оплаты
+- Доход из WhatsApp
+
+Funnels:
+Сообщения → Ответы → Заказы → Оплаты
+
+Analytics by:
+- Номер
+- Шаблон
+- Рассылка
+
+────────────────────────────────
+TAB 6: БЕЗОПАСНОСТЬ И СТАТУС (AI RISK MONITOR)
+────────────────────────────────
+Implement AI Risk Monitor that analyzes:
+
+- Возраст аккаунта
+- Статус верификации бизнеса
+- Статус биллинга
+- Quality Rating
+- Messaging Tier
+- Объёмы отправки
+- Reply / ignore signals
+
+Show final status:
+🟢 Всё в порядке  
+🟡 Повышенный риск  
+🔴 Высокий риск — действия ограничены
+
+Example messages:
+- “Аккаунт новый. Рекомендуем пройти прогрев.”
+- “Качество номера снизилось. Уменьшите объёмы.”
+- “Добавьте карту для продолжения работы.”
+
+────────────────────────────────
+ONBOARDING WITH WARM-UP LOGIC
+────────────────────────────────
+Automatically enforce warm-up:
+
+Day 1–2:
+- Только ответы и utility шаблоны
+
+Day 3–5:
+- Небольшие сервисные сообщения
+
+Day 7+:
+- Marketing шаблоны
+- Рассылки
+
+Show progress:
+“Прогрев аккаунта: день X из 7”
+
+────────────────────────────────
+AI ASSISTANT INTEGRATION (VERY IMPORTANT)
+────────────────────────────────
+AI assistant already exists with ON/OFF toggle.
+
+REQUIREMENTS:
+- Keep ONE toggle for AI assistant
+- No additional settings for user
+
+Implement AI MESSAGE ROUTER:
+
+Each phone number has:
+channel_type = "waha" | "cloud_api"
+
+Logic:
+- Incoming messages from WAHA and Cloud API go to the same AI logic
+- Outgoing messages routed by channel_type
+- Cloud API respects 24h window:
+  - inside window → free text
+  - outside window → approved template
+
+UI (read-only):
+“Активные каналы:
+🟢 WhatsApp Cloud API
+🟡 WAHA (резерв)”
+
+Tooltip:
+“AI автоматически использует официальный канал, если он подключён.”
+
+────────────────────────────────
+META-ONLY ACTION LINKS
+────────────────────────────────
+Whenever user must act ONLY inside Meta, provide:
+- Clear explanation
+- Button with correct deep-link to Meta
+Examples:
+- Добавить карту
+- Подтвердить бизнес
+- Загрузить документы
+
+Explain:
+“Это действие выполняется на стороне Meta. Мы покажем результат здесь.”
+
+────────────────────────────────
+SECURITY & COMPLIANCE
+────────────────────────────────
+- Never store Meta documents
+- Never expose tokens
+- Enforce safe defaults
+- Log all critical actions
+
+────────────────────────────────
+TECH STACK
+────────────────────────────────
+- Node.js + Express
+- Meta Graph API
+- PostgreSQL
+- Async queues
+- Modular architecture
+
+────────────────────────────────
+OUTPUT
+────────────────────────────────
+Return:
+- Backend logic
+- Meta integrations
+- Database schema
+- UI components
+- UX texts
+- Risk monitor logic
+- AI message router
+
+This is a production-grade SaaS control center
+for safe, scalable WhatsApp Cloud API usage.

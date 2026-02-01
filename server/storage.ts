@@ -8,6 +8,8 @@ import {
   aiPolicies, aiConversations, aiMessages, aiInterventionEvents, aiInboxTickets,
   wahaInstances, aiResponseCorrections, leads, passwordResetTokens, tenantLinks,
   crmIntegrations, crmSyncLogs, orderStatusLogs, kaspiIntegrations, payments,
+  waCloudIntegrations, waCloudPhoneNumbers, waCloudTemplates, waCloudCampaigns,
+  waCloudWarmupStatus, waCloudAnalytics, waCloudRiskEvents,
   type User, type InsertUser, type Tenant, type InsertTenant,
   type Subscription, type InsertSubscription, type Plan, type InsertPlan,
   type Product, type InsertProduct, type Category, type InsertCategory,
@@ -37,6 +39,13 @@ import {
   type OrderStatusLog, type InsertOrderStatusLog,
   type KaspiIntegration, type InsertKaspiIntegration,
   type Payment, type InsertPayment,
+  type WaCloudIntegration, type InsertWaCloudIntegration,
+  type WaCloudPhoneNumber, type InsertWaCloudPhoneNumber,
+  type WaCloudTemplate, type InsertWaCloudTemplate,
+  type WaCloudCampaign, type InsertWaCloudCampaign,
+  type WaCloudWarmupStatus, type InsertWaCloudWarmupStatus,
+  type WaCloudAnalytics, type InsertWaCloudAnalytics,
+  type WaCloudRiskEvent, type InsertWaCloudRiskEvent,
 } from "@shared/schema";
 import bcrypt from "bcryptjs";
 
@@ -243,6 +252,47 @@ export interface IStorage {
   getPasswordResetToken(token: string): Promise<{ email: string; token: string; expiresAt: Date; usedAt: Date | null } | undefined>;
   markPasswordResetTokenUsed(token: string): Promise<void>;
   updateUserPassword(userId: string, hashedPassword: string): Promise<void>;
+  
+  // WhatsApp Cloud API Integration
+  getWaCloudIntegration(tenantId: string): Promise<WaCloudIntegration | undefined>;
+  createWaCloudIntegration(data: InsertWaCloudIntegration): Promise<WaCloudIntegration>;
+  updateWaCloudIntegration(tenantId: string, data: Partial<InsertWaCloudIntegration>): Promise<WaCloudIntegration | undefined>;
+  deleteWaCloudIntegration(tenantId: string): Promise<void>;
+  
+  // WhatsApp Cloud Phone Numbers
+  getWaCloudPhoneNumbers(tenantId: string): Promise<WaCloudPhoneNumber[]>;
+  getWaCloudPhoneNumber(id: string): Promise<WaCloudPhoneNumber | undefined>;
+  createWaCloudPhoneNumber(data: InsertWaCloudPhoneNumber): Promise<WaCloudPhoneNumber>;
+  updateWaCloudPhoneNumber(id: string, data: Partial<InsertWaCloudPhoneNumber>): Promise<WaCloudPhoneNumber | undefined>;
+  deleteWaCloudPhoneNumber(id: string): Promise<void>;
+  
+  // WhatsApp Cloud Templates
+  getWaCloudTemplates(tenantId: string): Promise<WaCloudTemplate[]>;
+  getWaCloudTemplate(id: string): Promise<WaCloudTemplate | undefined>;
+  createWaCloudTemplate(data: InsertWaCloudTemplate): Promise<WaCloudTemplate>;
+  updateWaCloudTemplate(id: string, data: Partial<InsertWaCloudTemplate>): Promise<WaCloudTemplate | undefined>;
+  deleteWaCloudTemplate(id: string): Promise<void>;
+  
+  // WhatsApp Cloud Campaigns
+  getWaCloudCampaigns(tenantId: string): Promise<WaCloudCampaign[]>;
+  getWaCloudCampaign(id: string): Promise<WaCloudCampaign | undefined>;
+  createWaCloudCampaign(data: InsertWaCloudCampaign): Promise<WaCloudCampaign>;
+  updateWaCloudCampaign(id: string, data: Partial<InsertWaCloudCampaign>): Promise<WaCloudCampaign | undefined>;
+  deleteWaCloudCampaign(id: string): Promise<void>;
+  
+  // WhatsApp Cloud Warmup Status
+  getWaCloudWarmupStatus(tenantId: string): Promise<WaCloudWarmupStatus | undefined>;
+  createWaCloudWarmupStatus(data: InsertWaCloudWarmupStatus): Promise<WaCloudWarmupStatus>;
+  updateWaCloudWarmupStatus(tenantId: string, data: Partial<InsertWaCloudWarmupStatus>): Promise<WaCloudWarmupStatus | undefined>;
+  
+  // WhatsApp Cloud Analytics
+  getWaCloudAnalytics(tenantId: string, from: Date, to: Date): Promise<WaCloudAnalytics[]>;
+  createWaCloudAnalytics(data: InsertWaCloudAnalytics): Promise<WaCloudAnalytics>;
+  
+  // WhatsApp Cloud Risk Events
+  getWaCloudRiskEvents(tenantId: string, resolved?: boolean): Promise<WaCloudRiskEvent[]>;
+  createWaCloudRiskEvent(data: InsertWaCloudRiskEvent): Promise<WaCloudRiskEvent>;
+  resolveWaCloudRiskEvent(id: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1866,6 +1916,182 @@ export class DatabaseStorage implements IStorage {
       .where(eq(payments.orderId, orderId))
       .returning();
     return payment;
+  }
+
+  // WhatsApp Cloud Integration methods
+  async getWaCloudIntegration(tenantId: string): Promise<WaCloudIntegration | undefined> {
+    const [integration] = await db.select().from(waCloudIntegrations)
+      .where(eq(waCloudIntegrations.tenantId, tenantId));
+    return integration;
+  }
+
+  async createWaCloudIntegration(data: InsertWaCloudIntegration): Promise<WaCloudIntegration> {
+    const [integration] = await db.insert(waCloudIntegrations).values(data).returning();
+    return integration;
+  }
+
+  async updateWaCloudIntegration(tenantId: string, data: Partial<InsertWaCloudIntegration>): Promise<WaCloudIntegration | undefined> {
+    const [integration] = await db.update(waCloudIntegrations)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(waCloudIntegrations.tenantId, tenantId))
+      .returning();
+    return integration;
+  }
+
+  async deleteWaCloudIntegration(tenantId: string): Promise<void> {
+    await db.delete(waCloudIntegrations).where(eq(waCloudIntegrations.tenantId, tenantId));
+  }
+
+  // WhatsApp Cloud Phone Numbers methods
+  async getWaCloudPhoneNumbers(tenantId: string): Promise<WaCloudPhoneNumber[]> {
+    return db.select().from(waCloudPhoneNumbers)
+      .where(eq(waCloudPhoneNumbers.tenantId, tenantId))
+      .orderBy(desc(waCloudPhoneNumbers.createdAt));
+  }
+
+  async getWaCloudPhoneNumber(id: string): Promise<WaCloudPhoneNumber | undefined> {
+    const [phone] = await db.select().from(waCloudPhoneNumbers)
+      .where(eq(waCloudPhoneNumbers.id, id));
+    return phone;
+  }
+
+  async createWaCloudPhoneNumber(data: InsertWaCloudPhoneNumber): Promise<WaCloudPhoneNumber> {
+    const [phone] = await db.insert(waCloudPhoneNumbers).values(data).returning();
+    return phone;
+  }
+
+  async updateWaCloudPhoneNumber(id: string, data: Partial<InsertWaCloudPhoneNumber>): Promise<WaCloudPhoneNumber | undefined> {
+    const [phone] = await db.update(waCloudPhoneNumbers)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(waCloudPhoneNumbers.id, id))
+      .returning();
+    return phone;
+  }
+
+  async deleteWaCloudPhoneNumber(id: string): Promise<void> {
+    await db.delete(waCloudPhoneNumbers).where(eq(waCloudPhoneNumbers.id, id));
+  }
+
+  // WhatsApp Cloud Templates methods
+  async getWaCloudTemplates(tenantId: string): Promise<WaCloudTemplate[]> {
+    return db.select().from(waCloudTemplates)
+      .where(eq(waCloudTemplates.tenantId, tenantId))
+      .orderBy(desc(waCloudTemplates.createdAt));
+  }
+
+  async getWaCloudTemplate(id: string): Promise<WaCloudTemplate | undefined> {
+    const [template] = await db.select().from(waCloudTemplates)
+      .where(eq(waCloudTemplates.id, id));
+    return template;
+  }
+
+  async createWaCloudTemplate(data: InsertWaCloudTemplate): Promise<WaCloudTemplate> {
+    const [template] = await db.insert(waCloudTemplates).values(data).returning();
+    return template;
+  }
+
+  async updateWaCloudTemplate(id: string, data: Partial<InsertWaCloudTemplate>): Promise<WaCloudTemplate | undefined> {
+    const [template] = await db.update(waCloudTemplates)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(waCloudTemplates.id, id))
+      .returning();
+    return template;
+  }
+
+  async deleteWaCloudTemplate(id: string): Promise<void> {
+    await db.delete(waCloudTemplates).where(eq(waCloudTemplates.id, id));
+  }
+
+  // WhatsApp Cloud Campaigns methods
+  async getWaCloudCampaigns(tenantId: string): Promise<WaCloudCampaign[]> {
+    return db.select().from(waCloudCampaigns)
+      .where(eq(waCloudCampaigns.tenantId, tenantId))
+      .orderBy(desc(waCloudCampaigns.createdAt));
+  }
+
+  async getWaCloudCampaign(id: string): Promise<WaCloudCampaign | undefined> {
+    const [campaign] = await db.select().from(waCloudCampaigns)
+      .where(eq(waCloudCampaigns.id, id));
+    return campaign;
+  }
+
+  async createWaCloudCampaign(data: InsertWaCloudCampaign): Promise<WaCloudCampaign> {
+    const [campaign] = await db.insert(waCloudCampaigns).values(data).returning();
+    return campaign;
+  }
+
+  async updateWaCloudCampaign(id: string, data: Partial<InsertWaCloudCampaign>): Promise<WaCloudCampaign | undefined> {
+    const [campaign] = await db.update(waCloudCampaigns)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(waCloudCampaigns.id, id))
+      .returning();
+    return campaign;
+  }
+
+  async deleteWaCloudCampaign(id: string): Promise<void> {
+    await db.delete(waCloudCampaigns).where(eq(waCloudCampaigns.id, id));
+  }
+
+  // WhatsApp Cloud Warmup Status methods
+  async getWaCloudWarmupStatus(tenantId: string): Promise<WaCloudWarmupStatus | undefined> {
+    const [status] = await db.select().from(waCloudWarmupStatus)
+      .where(eq(waCloudWarmupStatus.tenantId, tenantId));
+    return status;
+  }
+
+  async createWaCloudWarmupStatus(data: InsertWaCloudWarmupStatus): Promise<WaCloudWarmupStatus> {
+    const [status] = await db.insert(waCloudWarmupStatus).values(data).returning();
+    return status;
+  }
+
+  async updateWaCloudWarmupStatus(tenantId: string, data: Partial<InsertWaCloudWarmupStatus>): Promise<WaCloudWarmupStatus | undefined> {
+    const [status] = await db.update(waCloudWarmupStatus)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(waCloudWarmupStatus.tenantId, tenantId))
+      .returning();
+    return status;
+  }
+
+  // WhatsApp Cloud Analytics methods
+  async getWaCloudAnalytics(tenantId: string, from: Date, to: Date): Promise<WaCloudAnalytics[]> {
+    return db.select().from(waCloudAnalytics)
+      .where(and(
+        eq(waCloudAnalytics.tenantId, tenantId),
+        gte(waCloudAnalytics.date, from),
+        lte(waCloudAnalytics.date, to)
+      ))
+      .orderBy(desc(waCloudAnalytics.date));
+  }
+
+  async createWaCloudAnalytics(data: InsertWaCloudAnalytics): Promise<WaCloudAnalytics> {
+    const [analytics] = await db.insert(waCloudAnalytics).values(data).returning();
+    return analytics;
+  }
+
+  // WhatsApp Cloud Risk Events methods
+  async getWaCloudRiskEvents(tenantId: string, resolved?: boolean): Promise<WaCloudRiskEvent[]> {
+    if (resolved !== undefined) {
+      return db.select().from(waCloudRiskEvents)
+        .where(and(
+          eq(waCloudRiskEvents.tenantId, tenantId),
+          eq(waCloudRiskEvents.resolved, resolved)
+        ))
+        .orderBy(desc(waCloudRiskEvents.createdAt));
+    }
+    return db.select().from(waCloudRiskEvents)
+      .where(eq(waCloudRiskEvents.tenantId, tenantId))
+      .orderBy(desc(waCloudRiskEvents.createdAt));
+  }
+
+  async createWaCloudRiskEvent(data: InsertWaCloudRiskEvent): Promise<WaCloudRiskEvent> {
+    const [event] = await db.insert(waCloudRiskEvents).values(data).returning();
+    return event;
+  }
+
+  async resolveWaCloudRiskEvent(id: string): Promise<void> {
+    await db.update(waCloudRiskEvents)
+      .set({ resolved: true, resolvedAt: new Date() })
+      .where(eq(waCloudRiskEvents.id, id));
   }
 }
 

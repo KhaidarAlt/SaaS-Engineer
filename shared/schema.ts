@@ -1103,6 +1103,343 @@ export const insertPaymentSchema = createInsertSchema(payments).omit({
 export type InsertPayment = z.infer<typeof insertPaymentSchema>;
 export type Payment = typeof payments.$inferSelect;
 
+// ============ WHATSAPP CLOUD API INTEGRATION ============
+export const waCloudIntegrations = pgTable("wa_cloud_integrations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id).unique(),
+  
+  // OAuth credentials (encrypted in production)
+  accessToken: text("access_token"),
+  tokenExpiresAt: timestamp("token_expires_at"),
+  
+  // Meta Business Account
+  businessId: text("business_id"),
+  wabaId: text("waba_id"), // WhatsApp Business Account ID
+  
+  // Connection status
+  status: text("status").notNull().default("disconnected"), // disconnected, connecting, connected, error
+  connectionError: text("connection_error"),
+  
+  // Billing status
+  billingStatus: text("billing_status").default("unknown"), // unknown, active, required, suspended
+  
+  // Webhook configuration
+  webhookVerifyToken: text("webhook_verify_token"),
+  webhookSecret: text("webhook_secret"),
+  webhookActive: boolean("webhook_active").default(false),
+  
+  // Onboarding state
+  onboardingStep: integer("onboarding_step").default(0), // 0-6 wizard steps
+  onboardingCompleted: boolean("onboarding_completed").default(false),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const waCloudIntegrationsRelations = relations(waCloudIntegrations, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [waCloudIntegrations.tenantId],
+    references: [tenants.id],
+  }),
+}));
+
+export const insertWaCloudIntegrationSchema = createInsertSchema(waCloudIntegrations).omit({ 
+  id: true, createdAt: true, updatedAt: true 
+});
+export type InsertWaCloudIntegration = z.infer<typeof insertWaCloudIntegrationSchema>;
+export type WaCloudIntegration = typeof waCloudIntegrations.$inferSelect;
+
+// ============ WHATSAPP CLOUD PHONE NUMBERS ============
+export const waCloudPhoneNumbers = pgTable("wa_cloud_phone_numbers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  integrationId: varchar("integration_id").notNull().references(() => waCloudIntegrations.id),
+  
+  // Phone details
+  phoneNumber: text("phone_number").notNull(),
+  phoneNumberId: text("phone_number_id"), // Meta's phone number ID
+  displayPhoneNumber: text("display_phone_number"),
+  
+  // Status
+  status: text("status").notNull().default("pending"), // pending, active, limited, blocked
+  verificationStatus: text("verification_status").default("unverified"), // unverified, pending, verified
+  
+  // Quality and limits
+  qualityRating: text("quality_rating").default("unknown"), // unknown, green, yellow, red
+  messagingTier: text("messaging_tier").default("tier_1"), // tier_1, tier_2, tier_3, tier_4
+  
+  // Business verification
+  businessStatus: text("business_status").default("unverified"), // unverified, pending, verified
+  
+  // Channel type for AI router
+  channelType: text("channel_type").notNull().default("cloud_api"), // cloud_api, waha
+  isDefault: boolean("is_default").default(false),
+  
+  // Last sync
+  lastSyncAt: timestamp("last_sync_at"),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const waCloudPhoneNumbersRelations = relations(waCloudPhoneNumbers, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [waCloudPhoneNumbers.tenantId],
+    references: [tenants.id],
+  }),
+  integration: one(waCloudIntegrations, {
+    fields: [waCloudPhoneNumbers.integrationId],
+    references: [waCloudIntegrations.id],
+  }),
+}));
+
+export const insertWaCloudPhoneNumberSchema = createInsertSchema(waCloudPhoneNumbers).omit({ 
+  id: true, createdAt: true, updatedAt: true, lastSyncAt: true 
+});
+export type InsertWaCloudPhoneNumber = z.infer<typeof insertWaCloudPhoneNumberSchema>;
+export type WaCloudPhoneNumber = typeof waCloudPhoneNumbers.$inferSelect;
+
+// ============ WHATSAPP MESSAGE TEMPLATES ============
+export const waCloudTemplates = pgTable("wa_cloud_templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  integrationId: varchar("integration_id").notNull().references(() => waCloudIntegrations.id),
+  
+  // Template details
+  name: text("name").notNull(),
+  language: text("language").notNull().default("ru"),
+  category: text("category").notNull().default("utility"), // utility, marketing, authentication
+  
+  // Content
+  headerType: text("header_type"), // text, image, video, document
+  headerContent: text("header_content"),
+  bodyText: text("body_text").notNull(),
+  footerText: text("footer_text"),
+  buttons: jsonb("buttons").$type<{type: string; text: string; url?: string; phoneNumber?: string}[]>(),
+  
+  // Variables
+  variables: jsonb("variables").$type<{name: string; example: string}[]>(),
+  
+  // Meta sync
+  metaTemplateId: text("meta_template_id"),
+  status: text("status").notNull().default("draft"), // draft, pending, approved, rejected
+  rejectionReason: text("rejection_reason"),
+  
+  // Usage stats
+  usageCount: integer("usage_count").default(0),
+  lastUsedAt: timestamp("last_used_at"),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const waCloudTemplatesRelations = relations(waCloudTemplates, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [waCloudTemplates.tenantId],
+    references: [tenants.id],
+  }),
+  integration: one(waCloudIntegrations, {
+    fields: [waCloudTemplates.integrationId],
+    references: [waCloudIntegrations.id],
+  }),
+}));
+
+export const insertWaCloudTemplateSchema = createInsertSchema(waCloudTemplates).omit({ 
+  id: true, createdAt: true, updatedAt: true, usageCount: true, lastUsedAt: true 
+});
+export type InsertWaCloudTemplate = z.infer<typeof insertWaCloudTemplateSchema>;
+export type WaCloudTemplate = typeof waCloudTemplates.$inferSelect;
+
+// ============ WHATSAPP BROADCAST CAMPAIGNS ============
+export const waCloudCampaigns = pgTable("wa_cloud_campaigns", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  integrationId: varchar("integration_id").notNull().references(() => waCloudIntegrations.id),
+  templateId: varchar("template_id").references(() => waCloudTemplates.id),
+  
+  // Campaign details
+  name: text("name").notNull(),
+  description: text("description"),
+  
+  // Targeting
+  audienceType: text("audience_type").notNull().default("all"), // all, tags, custom
+  audienceTags: text("audience_tags").array(),
+  audienceFilters: jsonb("audience_filters").$type<Record<string, any>>(),
+  
+  // Sending
+  phoneNumberIds: text("phone_number_ids").array(), // Which numbers to send from
+  
+  // Scheduling
+  status: text("status").notNull().default("draft"), // draft, scheduled, sending, completed, paused, failed
+  scheduledAt: timestamp("scheduled_at"),
+  startedAt: timestamp("started_at"),
+  completedAt: timestamp("completed_at"),
+  
+  // Stats
+  totalRecipients: integer("total_recipients").default(0),
+  sentCount: integer("sent_count").default(0),
+  deliveredCount: integer("delivered_count").default(0),
+  readCount: integer("read_count").default(0),
+  repliedCount: integer("replied_count").default(0),
+  failedCount: integer("failed_count").default(0),
+  
+  // Error tracking
+  lastError: text("last_error"),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const waCloudCampaignsRelations = relations(waCloudCampaigns, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [waCloudCampaigns.tenantId],
+    references: [tenants.id],
+  }),
+  integration: one(waCloudIntegrations, {
+    fields: [waCloudCampaigns.integrationId],
+    references: [waCloudIntegrations.id],
+  }),
+  template: one(waCloudTemplates, {
+    fields: [waCloudCampaigns.templateId],
+    references: [waCloudTemplates.id],
+  }),
+}));
+
+export const insertWaCloudCampaignSchema = createInsertSchema(waCloudCampaigns).omit({ 
+  id: true, createdAt: true, updatedAt: true,
+  totalRecipients: true, sentCount: true, deliveredCount: true, 
+  readCount: true, repliedCount: true, failedCount: true,
+  startedAt: true, completedAt: true
+});
+export type InsertWaCloudCampaign = z.infer<typeof insertWaCloudCampaignSchema>;
+export type WaCloudCampaign = typeof waCloudCampaigns.$inferSelect;
+
+// ============ WHATSAPP ACCOUNT WARMUP STATUS ============
+export const waCloudWarmupStatus = pgTable("wa_cloud_warmup_status", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id).unique(),
+  integrationId: varchar("integration_id").notNull().references(() => waCloudIntegrations.id),
+  
+  // Warmup progress
+  startedAt: timestamp("started_at").notNull().defaultNow(),
+  currentDay: integer("current_day").default(1), // Day 1-7+
+  stage: text("stage").notNull().default("initial"), // initial, utility_only, limited_marketing, full
+  
+  // Daily limits
+  dailyMessageLimit: integer("daily_message_limit").default(50),
+  dailyMessagesSent: integer("daily_messages_sent").default(0),
+  lastResetAt: timestamp("last_reset_at").defaultNow(),
+  
+  // Restrictions
+  marketingEnabled: boolean("marketing_enabled").default(false),
+  broadcastEnabled: boolean("broadcast_enabled").default(false),
+  
+  // Recommendations
+  recommendations: jsonb("recommendations").$type<string[]>(),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const waCloudWarmupStatusRelations = relations(waCloudWarmupStatus, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [waCloudWarmupStatus.tenantId],
+    references: [tenants.id],
+  }),
+  integration: one(waCloudIntegrations, {
+    fields: [waCloudWarmupStatus.integrationId],
+    references: [waCloudIntegrations.id],
+  }),
+}));
+
+export const insertWaCloudWarmupStatusSchema = createInsertSchema(waCloudWarmupStatus).omit({ 
+  id: true, createdAt: true, updatedAt: true, dailyMessagesSent: true, lastResetAt: true 
+});
+export type InsertWaCloudWarmupStatus = z.infer<typeof insertWaCloudWarmupStatusSchema>;
+export type WaCloudWarmupStatus = typeof waCloudWarmupStatus.$inferSelect;
+
+// ============ WHATSAPP ANALYTICS EVENTS ============
+export const waCloudAnalytics = pgTable("wa_cloud_analytics", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  phoneNumberId: varchar("phone_number_id").references(() => waCloudPhoneNumbers.id),
+  campaignId: varchar("campaign_id").references(() => waCloudCampaigns.id),
+  
+  // Date for aggregation
+  date: timestamp("date").notNull(),
+  
+  // Message stats
+  messagesSent: integer("messages_sent").default(0),
+  messagesDelivered: integer("messages_delivered").default(0),
+  messagesRead: integer("messages_read").default(0),
+  messagesReplied: integer("messages_replied").default(0),
+  messagesFailed: integer("messages_failed").default(0),
+  
+  // Business outcomes
+  ordersCreated: integer("orders_created").default(0),
+  paymentsReceived: integer("payments_received").default(0),
+  revenue: decimal("revenue", { precision: 12, scale: 2 }).default("0"),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const waCloudAnalyticsRelations = relations(waCloudAnalytics, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [waCloudAnalytics.tenantId],
+    references: [tenants.id],
+  }),
+  phoneNumber: one(waCloudPhoneNumbers, {
+    fields: [waCloudAnalytics.phoneNumberId],
+    references: [waCloudPhoneNumbers.id],
+  }),
+  campaign: one(waCloudCampaigns, {
+    fields: [waCloudAnalytics.campaignId],
+    references: [waCloudCampaigns.id],
+  }),
+}));
+
+export const insertWaCloudAnalyticsSchema = createInsertSchema(waCloudAnalytics).omit({ 
+  id: true, createdAt: true 
+});
+export type InsertWaCloudAnalytics = z.infer<typeof insertWaCloudAnalyticsSchema>;
+export type WaCloudAnalytics = typeof waCloudAnalytics.$inferSelect;
+
+// ============ WHATSAPP RISK EVENTS ============
+export const waCloudRiskEvents = pgTable("wa_cloud_risk_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  phoneNumberId: varchar("phone_number_id").references(() => waCloudPhoneNumbers.id),
+  
+  // Risk details
+  severity: text("severity").notNull().default("low"), // low, medium, high, critical
+  type: text("type").notNull(), // quality_drop, tier_decrease, billing_issue, verification_required, rate_limit
+  message: text("message").notNull(),
+  recommendation: text("recommendation"),
+  
+  // Resolution
+  resolved: boolean("resolved").default(false),
+  resolvedAt: timestamp("resolved_at"),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const waCloudRiskEventsRelations = relations(waCloudRiskEvents, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [waCloudRiskEvents.tenantId],
+    references: [tenants.id],
+  }),
+  phoneNumber: one(waCloudPhoneNumbers, {
+    fields: [waCloudRiskEvents.phoneNumberId],
+    references: [waCloudPhoneNumbers.id],
+  }),
+}));
+
+export const insertWaCloudRiskEventSchema = createInsertSchema(waCloudRiskEvents).omit({ 
+  id: true, createdAt: true, resolved: true, resolvedAt: true 
+});
+export type InsertWaCloudRiskEvent = z.infer<typeof insertWaCloudRiskEventSchema>;
+export type WaCloudRiskEvent = typeof waCloudRiskEvents.$inferSelect;
+
 // ============ FORM VALIDATION SCHEMAS ============
 export const loginSchema = z.object({
   email: z.string().email("Введите корректный email"),
