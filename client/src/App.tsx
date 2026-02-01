@@ -51,6 +51,7 @@ import CheckoutPage from "@/pages/catalog/CheckoutPage";
 import LinksPage from "@/pages/dashboard/LinksPage";
 import LinksPublicPage from "@/pages/public/LinksPublicPage";
 import IntegrationsPage from "@/pages/dashboard/IntegrationsPage";
+import WhatsAppCloudPage from "@/pages/dashboard/WhatsAppCloudPage";
 
 function ProtectedRoute({ 
   component: Component,
@@ -165,6 +166,9 @@ function Router() {
       </Route>
       <Route path="/dashboard/integrations">
         <ProtectedRoute component={IntegrationsPage} />
+      </Route>
+      <Route path="/dashboard/whatsapp-cloud">
+        <ProtectedRoute component={WhatsAppCloudPage} />
       </Route>
 
       <Route path="/dashboard/ai">

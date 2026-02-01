@@ -1132,6 +1132,9 @@ export const waCloudIntegrations = pgTable("wa_cloud_integrations", {
   onboardingStep: integer("onboarding_step").default(0), // 0-6 wizard steps
   onboardingCompleted: boolean("onboarding_completed").default(false),
   
+  // OAuth CSRF protection
+  oauthNonce: text("oauth_nonce"),
+  
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

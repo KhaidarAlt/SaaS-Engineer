@@ -49,7 +49,7 @@ Preferred communication style: Simple, everyday language.
 ### Messaging Integrations
 - WAHA (WhatsApp API)
 - Telegram Bot API (prepared)
-- Meta WhatsApp Cloud API (prepared)
+- **Meta WhatsApp Cloud API** (fully integrated): OAuth flow with CSRF protection (HMAC-signed state, nonce validation), phone number management, template system with Meta approval workflow, warmup logic (50 msg/day → full features over 7 days), AI risk monitoring, webhook signature verification (raw body + timingSafeEqual), broadcast campaigns support
 
 ### AI Services
 - OpenAI API

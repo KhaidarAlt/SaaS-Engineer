@@ -3887,6 +3887,334 @@ export async function registerRoutes(
     }
   });
 
+  // ============ WHATSAPP CLOUD API ============
+
+  app.get("/api/whatsapp-cloud/integration", requireAuth, async (req, res) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const integration = await storage.getWaCloudIntegration(tenantId);
+      res.json(integration || null);
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка получения интеграции" });
+    }
+  });
+
+  app.post("/api/whatsapp-cloud/onboarding/start", requireAuth, async (req, res) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const { metaCloudService } = await import("./services/whatsapp-cloud/meta.service");
+      
+      const appId = process.env.META_APP_ID || "";
+      const appSecret = process.env.META_APP_SECRET || "";
+      if (!appId || !appSecret) {
+        return res.status(400).json({ message: "Meta App не настроен" });
+      }
+      
+      const baseUrl = process.env.REPLIT_DEV_DOMAIN 
+        ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+        : process.env.BASE_URL || "http://localhost:5000";
+      const redirectUri = `${baseUrl}/api/whatsapp-cloud/oauth/callback`;
+      
+      const oauthUrl = await metaCloudService.initiateOAuth(tenantId, appId, redirectUri, appSecret);
+      res.json({ success: true, oauthUrl });
+    } catch (error) {
+      console.error("Onboarding start error:", error);
+      res.status(500).json({ message: "Ошибка запуска подключения" });
+    }
+  });
+
+  app.get("/api/whatsapp-cloud/oauth/callback", async (req, res) => {
+    try {
+      const { code, state } = req.query;
+      if (!code || !state) {
+        return res.redirect("/dashboard/whatsapp-cloud?error=missing_params");
+      }
+      
+      const { metaCloudService } = await import("./services/whatsapp-cloud/meta.service");
+      const appSecret = process.env.META_APP_SECRET || "";
+      
+      const stateVerification = metaCloudService.verifyOAuthState(state as string, appSecret);
+      if (!stateVerification.valid || !stateVerification.tenantId || !stateVerification.nonce) {
+        console.error("OAuth state verification failed:", stateVerification.error);
+        return res.redirect(`/dashboard/whatsapp-cloud?error=${encodeURIComponent(stateVerification.error || "invalid_state")}`);
+      }
+      
+      const tenantId = stateVerification.tenantId;
+      
+      const nonceValid = await metaCloudService.validateOAuthNonce(tenantId, stateVerification.nonce);
+      if (!nonceValid) {
+        console.error("OAuth nonce validation failed for tenant:", tenantId);
+        return res.redirect("/dashboard/whatsapp-cloud?error=invalid_or_used_state");
+      }
+      
+      const appId = process.env.META_APP_ID || "";
+      const baseUrl = process.env.REPLIT_DEV_DOMAIN 
+        ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+        : process.env.BASE_URL || "http://localhost:5000";
+      const redirectUri = `${baseUrl}/api/whatsapp-cloud/oauth/callback`;
+      
+      const result = await metaCloudService.handleOAuthCallback(
+        tenantId, 
+        code as string, 
+        appId, 
+        appSecret, 
+        redirectUri
+      );
+      
+      if (result.success) {
+        res.redirect("/dashboard/whatsapp-cloud?success=1");
+      } else {
+        res.redirect(`/dashboard/whatsapp-cloud?error=${encodeURIComponent(result.error || "auth_failed")}`);
+      }
+    } catch (error) {
+      console.error("OAuth callback error:", error);
+      res.redirect("/dashboard/whatsapp-cloud?error=callback_failed");
+    }
+  });
+
+  app.get("/api/whatsapp-cloud/phones", requireAuth, async (req, res) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const phones = await storage.getWaCloudPhoneNumbers(tenantId);
+      res.json(phones);
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка получения номеров" });
+    }
+  });
+
+  app.post("/api/whatsapp-cloud/phones/sync", requireAuth, async (req, res) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const { metaCloudService } = await import("./services/whatsapp-cloud/meta.service");
+      
+      const result = await metaCloudService.fetchPhoneNumbers(tenantId);
+      if (!result.success) {
+        return res.status(400).json({ message: result.error });
+      }
+      
+      const integration = await storage.getWaCloudIntegration(tenantId);
+      if (!integration) {
+        return res.status(404).json({ message: "Интеграция не найдена" });
+      }
+      
+      const existingPhones = await storage.getWaCloudPhoneNumbers(tenantId);
+      for (const phone of result.phones || []) {
+        const existing = existingPhones.find(p => p.phoneNumberId === phone.id);
+        if (existing) {
+          await storage.updateWaCloudPhoneNumber(existing.id, {
+            qualityRating: phone.quality_rating?.toLowerCase() || "unknown",
+            messagingTier: phone.messaging_limit_tier?.toLowerCase() || "tier_1",
+            displayPhoneNumber: phone.display_phone_number,
+            lastSyncAt: new Date(),
+          });
+        } else {
+          await storage.createWaCloudPhoneNumber({
+            tenantId,
+            integrationId: integration.id,
+            phoneNumber: phone.display_phone_number,
+            phoneNumberId: phone.id,
+            displayPhoneNumber: phone.display_phone_number,
+            status: "active",
+            verificationStatus: "verified",
+            qualityRating: phone.quality_rating?.toLowerCase() || "unknown",
+            messagingTier: phone.messaging_limit_tier?.toLowerCase() || "tier_1",
+            channelType: "cloud_api",
+            isDefault: existingPhones.length === 0,
+          });
+        }
+      }
+      
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка синхронизации номеров" });
+    }
+  });
+
+  const testMessageSchema = z.object({
+    phoneNumberId: z.string().min(1),
+    recipientPhone: z.string().regex(/^\+?[1-9]\d{6,14}$/),
+  });
+
+  app.post("/api/whatsapp-cloud/test-message", requireAuth, async (req, res) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      
+      const validationResult = testMessageSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ 
+          success: false, 
+          error: "Некорректные данные",
+          details: validationResult.error.flatten()
+        });
+      }
+      
+      const { phoneNumberId, recipientPhone } = validationResult.data;
+      
+      const phones = await storage.getWaCloudPhoneNumbers(tenantId);
+      const phoneExists = phones.some(p => p.phoneNumberId === phoneNumberId);
+      if (!phoneExists) {
+        return res.status(403).json({ success: false, error: "Номер не принадлежит этому аккаунту" });
+      }
+      
+      const { metaCloudService } = await import("./services/whatsapp-cloud/meta.service");
+      const result = await metaCloudService.sendTestMessage(tenantId, phoneNumberId, recipientPhone);
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Ошибка отправки сообщения" });
+    }
+  });
+
+  app.get("/api/whatsapp-cloud/templates", requireAuth, async (req, res) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const templates = await storage.getWaCloudTemplates(tenantId);
+      res.json(templates);
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка получения шаблонов" });
+    }
+  });
+
+  const createTemplateSchema = z.object({
+    name: z.string().min(1).max(100).regex(/^[a-z0-9_]+$/),
+    language: z.string().min(2).max(10).default("ru"),
+    category: z.enum(["utility", "marketing", "authentication"]),
+    bodyText: z.string().min(1).max(1024),
+    headerType: z.enum(["text", "image", "video", "document"]).optional(),
+    headerContent: z.string().optional(),
+    footerText: z.string().max(60).optional(),
+    buttons: z.array(z.object({
+      type: z.enum(["QUICK_REPLY", "PHONE_NUMBER", "URL"]),
+      text: z.string().max(25),
+      url: z.string().optional(),
+      phoneNumber: z.string().optional(),
+    })).max(3).optional(),
+  });
+
+  app.post("/api/whatsapp-cloud/templates", requireAuth, async (req, res) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      
+      const validationResult = createTemplateSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ 
+          success: false, 
+          error: "Некорректные данные шаблона",
+          details: validationResult.error.flatten()
+        });
+      }
+      
+      const { metaCloudService } = await import("./services/whatsapp-cloud/meta.service");
+      const result = await metaCloudService.createTemplate(tenantId, validationResult.data);
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Ошибка создания шаблона" });
+    }
+  });
+
+  app.post("/api/whatsapp-cloud/templates/sync", requireAuth, async (req, res) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const { metaCloudService } = await import("./services/whatsapp-cloud/meta.service");
+      
+      const result = await metaCloudService.syncTemplates(tenantId);
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Ошибка синхронизации шаблонов" });
+    }
+  });
+
+  app.get("/api/whatsapp-cloud/campaigns", requireAuth, async (req, res) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const campaigns = await storage.getWaCloudCampaigns(tenantId);
+      res.json(campaigns);
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка получения рассылок" });
+    }
+  });
+
+  app.get("/api/whatsapp-cloud/warmup", requireAuth, async (req, res) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const { metaCloudService } = await import("./services/whatsapp-cloud/meta.service");
+      
+      await metaCloudService.updateWarmupProgress(tenantId);
+      const warmup = await storage.getWaCloudWarmupStatus(tenantId);
+      res.json(warmup || null);
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка получения статуса прогрева" });
+    }
+  });
+
+  app.get("/api/whatsapp-cloud/risk", requireAuth, async (req, res) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const { metaCloudService } = await import("./services/whatsapp-cloud/meta.service");
+      
+      const integration = await storage.getWaCloudIntegration(tenantId);
+      if (!integration) {
+        return res.json({ score: "green", issues: [], recommendations: [] });
+      }
+      
+      const phones = await storage.getWaCloudPhoneNumbers(tenantId);
+      const warmup = await storage.getWaCloudWarmupStatus(tenantId);
+      
+      const riskStatus = metaCloudService.calculateRiskScore(integration, phones, warmup);
+      res.json(riskStatus);
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка получения статуса риска" });
+    }
+  });
+
+  app.get("/api/whatsapp-cloud/webhook/:tenantId", async (req, res) => {
+    try {
+      const { tenantId } = req.params;
+      
+      if (req.query["hub.mode"] === "subscribe") {
+        const integration = await storage.getWaCloudIntegration(tenantId);
+        if (integration?.webhookVerifyToken === req.query["hub.verify_token"]) {
+          return res.send(req.query["hub.challenge"]);
+        }
+        return res.status(403).send("Verification failed");
+      }
+      
+      res.status(400).send("Bad request");
+    } catch (error) {
+      console.error("WhatsApp Cloud webhook verification error:", error);
+      res.status(500).send("Internal server error");
+    }
+  });
+
+  app.post("/api/whatsapp-cloud/webhook/:tenantId", async (req, res) => {
+    try {
+      const { tenantId } = req.params;
+      
+      const signature = req.headers["x-hub-signature-256"] as string;
+      if (!signature) {
+        return res.status(401).json({ error: "Missing signature" });
+      }
+      
+      const { metaCloudService } = await import("./services/whatsapp-cloud/meta.service");
+      const appSecret = process.env.META_APP_SECRET || "";
+      
+      const rawBody = (req as any).rawBody;
+      if (!rawBody) {
+        console.error("Raw body not available for webhook signature verification");
+        return res.status(500).json({ error: "Server configuration error" });
+      }
+      
+      if (!metaCloudService.verifyWebhookSignature(rawBody, signature, appSecret)) {
+        return res.status(401).json({ error: "Invalid signature" });
+      }
+      
+      await metaCloudService.handleWebhookEvent(tenantId, req.body);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("WhatsApp Cloud webhook error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   // ============ CRM INTEGRATIONS ============
   
   // Get CRM integrations

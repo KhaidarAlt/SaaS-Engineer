@@ -24,6 +24,7 @@ import {
   UserPlus,
   FileText,
   Link2,
+  MessageCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -51,6 +52,7 @@ const tenantNavItems: NavItem[] = [
   { href: "/dashboard/import", label: "Импорт", icon: Upload, lockForPlans: ["Старт"] },
   { href: "/dashboard/ai", label: "AI-ассистент", icon: Bot, lockForPlans: ["Старт", "Каталог"] },
   { href: "/dashboard/integrations", label: "Интеграции", icon: Link2, lockForPlans: ["Старт", "Каталог", "Каталог + AI"] },
+  { href: "/dashboard/whatsapp-cloud", label: "WhatsApp Meta", icon: MessageCircle, lockForPlans: ["Старт", "Каталог"] },
   { href: "/dashboard/catalog-health", label: "Здоровье каталога", icon: Activity },
   { href: "/dashboard/links", label: "Мои ссылки", icon: ExternalLink },
   { href: "/dashboard/analytics", label: "Аналитика", icon: BarChart3, lockForPlans: ["Старт"] },
