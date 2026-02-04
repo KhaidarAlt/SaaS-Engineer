@@ -258,6 +258,7 @@ export interface IStorage {
   createWaCloudIntegration(data: InsertWaCloudIntegration): Promise<WaCloudIntegration>;
   updateWaCloudIntegration(tenantId: string, data: Partial<InsertWaCloudIntegration>): Promise<WaCloudIntegration | undefined>;
   deleteWaCloudIntegration(tenantId: string): Promise<void>;
+  getWaCloudIntegrationByPhoneNumberId(phoneNumberId: string): Promise<WaCloudIntegration | undefined>;
   
   // WhatsApp Cloud Phone Numbers
   getWaCloudPhoneNumbers(tenantId: string): Promise<WaCloudPhoneNumber[]>;
@@ -1940,6 +1941,17 @@ export class DatabaseStorage implements IStorage {
 
   async deleteWaCloudIntegration(tenantId: string): Promise<void> {
     await db.delete(waCloudIntegrations).where(eq(waCloudIntegrations.tenantId, tenantId));
+  }
+
+  async getWaCloudIntegrationByPhoneNumberId(phoneNumberId: string): Promise<WaCloudIntegration | undefined> {
+    // Find phone number first, then get integration by tenantId
+    const [phone] = await db.select().from(waCloudPhoneNumbers)
+      .where(eq(waCloudPhoneNumbers.phoneNumberId, phoneNumberId));
+    if (!phone) return undefined;
+    
+    const [integration] = await db.select().from(waCloudIntegrations)
+      .where(eq(waCloudIntegrations.tenantId, phone.tenantId));
+    return integration;
   }
 
   // WhatsApp Cloud Phone Numbers methods

@@ -4215,6 +4215,69 @@ export async function registerRoutes(
     }
   });
 
+  // Global webhook endpoint for Meta verification (without tenantId)
+  const WEBHOOK_VERIFY_TOKEN = process.env.WEBHOOK_VERIFY_TOKEN || "BOTFACTORY_VERIFY_2026";
+  
+  app.get("/api/whatsapp-cloud/webhook", async (req, res) => {
+    try {
+      if (req.query["hub.mode"] === "subscribe") {
+        if (req.query["hub.verify_token"] === WEBHOOK_VERIFY_TOKEN) {
+          console.log("WhatsApp Cloud webhook verification successful");
+          return res.send(req.query["hub.challenge"]);
+        }
+        console.log("WhatsApp Cloud webhook verification failed: invalid token");
+        return res.status(403).send("Verification failed");
+      }
+      res.status(400).send("Bad request");
+    } catch (error) {
+      console.error("WhatsApp Cloud webhook verification error:", error);
+      res.status(500).send("Internal server error");
+    }
+  });
+
+  app.post("/api/whatsapp-cloud/webhook", async (req, res) => {
+    try {
+      const signature = req.headers["x-hub-signature-256"] as string;
+      if (!signature) {
+        return res.status(401).json({ error: "Missing signature" });
+      }
+      
+      const { metaCloudService } = await import("./services/whatsapp-cloud/meta.service");
+      const appSecret = process.env.META_APP_SECRET || "";
+      
+      const rawBody = (req as any).rawBody;
+      if (!rawBody) {
+        console.error("Raw body not available for webhook signature verification");
+        return res.status(500).json({ error: "Server configuration error" });
+      }
+      
+      if (!metaCloudService.verifyWebhookSignature(rawBody, signature, appSecret)) {
+        return res.status(401).json({ error: "Invalid signature" });
+      }
+      
+      // Extract tenantId from webhook payload (in entry[].changes[].value.metadata.phone_number_id)
+      // and route to appropriate handler
+      const body = req.body;
+      if (body.entry) {
+        for (const entry of body.entry) {
+          const phoneNumberId = entry.changes?.[0]?.value?.metadata?.phone_number_id;
+          if (phoneNumberId) {
+            // Find tenant by phone_number_id
+            const integration = await storage.getWaCloudIntegrationByPhoneNumberId(phoneNumberId);
+            if (integration) {
+              await metaCloudService.handleWebhookEvent(integration.tenantId, body);
+            }
+          }
+        }
+      }
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error("WhatsApp Cloud webhook error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   // ============ CRM INTEGRATIONS ============
   
   // Get CRM integrations
