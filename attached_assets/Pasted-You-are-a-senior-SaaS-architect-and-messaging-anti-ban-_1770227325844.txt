@@ -1,0 +1,210 @@
+You are a senior SaaS architect and messaging anti-ban engineer.
+
+Build a Safe Bulk Messaging Engine for WhatsApp
+inside a SaaS platform called “SmartCatalog”.
+
+WhatsApp connection is implemented via WAHA.
+Cloud API is NOT used.
+
+The goal:
+Enable sending messages to a large client base
+WITHOUT mass-spam behavior and WITHOUT number bans.
+
+INTERFACE LANGUAGE: RUSSIAN ONLY
+
+────────────────────────────────
+CORE PHILOSOPHY
+────────────────────────────────
+1. This is NOT a “рассылка”
+2. This is a context-based conversation reactivation system
+3. Every message must look like a natural continuation of dialog
+4. Safety > volume
+5. System must self-regulate message limits
+
+────────────────────────────────
+NEW MODULE
+────────────────────────────────
+Create a new module:
+📌 **“Умный повторный контакт”**
+
+NOT named:
+- Рассылки
+- Массовые сообщения
+- Маркетинг
+
+────────────────────────────────
+ELIGIBLE CONTACTS (VERY IMPORTANT)
+────────────────────────────────
+Messages can be sent ONLY if:
+- Client previously wrote at least one message
+- Client was not blocked
+- Client did not send “стоп”
+- Client did not reply in last N hours
+
+Store flags:
+- has_dialog_history
+- do_not_disturb
+- last_client_reply_at
+
+────────────────────────────────
+MESSAGE TRIGGERS
+────────────────────────────────
+Allowed triggers only:
+
+1. Abandoned cart
+2. Unpaid order
+3. Previous purchase (reactivation)
+4. Long inactivity after dialog
+5. Manual trigger by business user
+
+NO cold outreach.
+
+────────────────────────────────
+SAFE VOLUME LIMITS (DYNAMIC)
+────────────────────────────────
+System must NOT use fixed limits.
+
+Implement dynamic rate control based on:
+- reply_rate (% of replies)
+- ignore_rate
+- block_rate (if detectable)
+- delivery errors
+
+Rules:
+- If reply_rate drops → decrease volume
+- If replies are high → slowly increase volume
+- Hard safety cap per number: ~1000 messages/day
+- Batch sending with random delays
+- No burst sending
+
+────────────────────────────────
+AUTO RATE-LIMIT ENGINE
+────────────────────────────────
+Create a limiter that:
+- Calculates allowed messages per hour
+- Randomizes delays
+- Spreads sending across time
+- Stops instantly if negative signals detected
+
+Limiter must work via message queue.
+
+────────────────────────────────
+AI MESSAGE GENERATION
+────────────────────────────────
+AI must:
+- Generate UNIQUE messages per client
+- Use dialog context (products, orders, payments)
+- Ask a question to provoke reply
+- Avoid sales pressure
+- Use polite human tone
+
+Language: Russian only
+
+Examples (conceptual):
+- Reminder
+- Clarification
+- Help offer
+- Soft reactivation
+
+DO NOT repeat same text.
+
+────────────────────────────────
+QUIET HOURS
+────────────────────────────────
+Implement quiet hours:
+- Default: 22:00 – 09:00
+- Configurable per account
+- No messages sent during quiet hours
+
+────────────────────────────────
+ANTI-SPAM RULES
+────────────────────────────────
+- Max follow-ups per client: configurable
+- Cancel scheduled message if client replies
+- One active message per dialog at a time
+- Immediate stop if “стоп”, “не пишите”, etc.
+
+────────────────────────────────
+DATABASE
+────────────────────────────────
+Contacts table:
+- phone
+- last_message_at
+- do_not_disturb
+- interaction_score
+
+Messages table:
+- message_id
+- contact_id
+- trigger_type
+- sent_at
+- status
+- reply_received (bool)
+
+Rate metrics table:
+- date
+- sent_count
+- reply_count
+- ignore_count
+- calculated_limit
+
+────────────────────────────────
+WAHA INTEGRATION
+────────────────────────────────
+- Send messages via WAHA API
+- Handle send errors
+- Retry safely
+- Log all sends
+
+────────────────────────────────
+UI REQUIREMENTS
+────────────────────────────────
+Dashboard:
+- Enable / disable module
+- Current safe limit indicator
+- Health status:
+  🟢 Safe
+  🟡 Caution
+  🔴 Stop sending
+
+Campaign setup:
+- Select trigger
+- Preview AI-generated example
+- Schedule window
+- Max messages
+
+All UI text in Russian.
+
+────────────────────────────────
+SECURITY & UX
+────────────────────────────────
+- Never spam
+- Never message blocked users
+- Respect WhatsApp behavior signals
+- Log everything
+
+────────────────────────────────
+FUTURE COMPATIBILITY
+────────────────────────────────
+Abstract message sending:
+sendMessage(provider, payload)
+
+Providers:
+- waha (now)
+- whatsapp_cloud (future)
+
+Same logic, different transport.
+
+────────────────────────────────
+OUTPUT
+────────────────────────────────
+Return:
+- Backend logic
+- Scheduler + queue
+- Rate-limit engine
+- Database schema
+- Minimal UI
+- Ready-to-run SaaS feature
+
+This system must survive long-term WhatsApp usage
+WITHOUT Cloud API and WITHOUT bans.
