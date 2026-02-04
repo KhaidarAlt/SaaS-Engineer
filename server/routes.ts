@@ -4195,6 +4195,17 @@ export async function registerRoutes(
     }
   });
 
+  app.delete("/api/whatsapp-cloud/integration", requireAuth, async (req, res) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      await storage.deleteWaCloudIntegration(tenantId);
+      res.json({ success: true, message: "Интеграция сброшена" });
+    } catch (error) {
+      console.error("Delete integration error:", error);
+      res.status(500).json({ message: "Ошибка удаления интеграции" });
+    }
+  });
+
   app.post("/api/whatsapp-cloud/onboarding/start", requireAuth, async (req, res) => {
     try {
       const tenantId = req.user!.tenantId!;

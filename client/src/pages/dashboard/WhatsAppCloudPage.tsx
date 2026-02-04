@@ -104,6 +104,8 @@ export default function WhatsAppCloudPage() {
     bodyText: "",
     footerText: "",
   });
+  const [oauthUrl, setOauthUrl] = useState<string | null>(null);
+  const [popupBlocked, setPopupBlocked] = useState(false);
 
   const { data: integration, isLoading: integrationLoading } = useQuery<WaCloudIntegration | null>({
     queryKey: ["/api/whatsapp-cloud/integration"],
@@ -141,12 +143,39 @@ export default function WhatsAppCloudPage() {
     },
     onSuccess: (data) => {
       if (data.oauthUrl) {
-        window.open(data.oauthUrl, "_blank");
+        setOauthUrl(data.oauthUrl);
+        const popup = window.open(data.oauthUrl, "_blank");
+        if (!popup || popup.closed || typeof popup.closed === 'undefined') {
+          setPopupBlocked(true);
+          toast({ 
+            title: "Окно заблокировано", 
+            description: "Разрешите всплывающие окна или используйте ссылку ниже",
+            variant: "destructive"
+          });
+        } else {
+          setPopupBlocked(false);
+        }
       }
       queryClient.invalidateQueries({ queryKey: ["/api/whatsapp-cloud/integration"] });
     },
     onError: () => {
       toast({ title: "Ошибка запуска подключения", variant: "destructive" });
+    },
+  });
+
+  const resetIntegrationMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("DELETE", "/api/whatsapp-cloud/integration");
+      return res.json();
+    },
+    onSuccess: () => {
+      setOauthUrl(null);
+      setPopupBlocked(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/whatsapp-cloud/integration"] });
+      toast({ title: "Интеграция сброшена", description: "Можете начать подключение заново" });
+    },
+    onError: () => {
+      toast({ title: "Ошибка сброса", variant: "destructive" });
     },
   });
 
@@ -333,6 +362,56 @@ export default function WhatsAppCloudPage() {
                     Ошибка подключения
                   </div>
                   <p className="text-sm text-red-600 mt-1">{integration.connectionError}</p>
+                </div>
+              )}
+
+              {(currentStep === 1 || currentStep === 2) && (
+                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-3">
+                  <div className="flex items-center gap-2 text-blue-600 font-medium">
+                    <Info className="h-4 w-4" />
+                    Застряли на этом шаге?
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    Если окно Meta не открылось или авторизация не завершилась, нажмите кнопку ниже.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => startOnboardingMutation.mutate()}
+                      disabled={startOnboardingMutation.isPending}
+                      data-testid="button-retry-auth"
+                    >
+                      {startOnboardingMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Попробовать снова
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      onClick={() => resetIntegrationMutation.mutate()}
+                      disabled={resetIntegrationMutation.isPending}
+                      data-testid="button-reset-integration"
+                    >
+                      {resetIntegrationMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                      <XCircle className="h-4 w-4 mr-2" />
+                      Сбросить и начать заново
+                    </Button>
+                  </div>
+                  {popupBlocked && oauthUrl && (
+                    <div className="mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded">
+                      <p className="text-sm text-yellow-700 mb-2">
+                        Всплывающее окно заблокировано. Откройте ссылку вручную:
+                      </p>
+                      <a
+                        href={oauthUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-blue-600 underline break-all"
+                        data-testid="link-oauth-manual"
+                      >
+                        {oauthUrl.substring(0, 80)}...
+                      </a>
+                    </div>
+                  )}
                 </div>
               )}
 
