@@ -38,6 +38,15 @@ import { useUpload } from "@/hooks/use-upload";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { PromoBlock } from "@shared/schema";
 
+// Helper to normalize image URL (handles both old objectPath and new /objects/ URLs)
+function normalizeImageUrl(url: string | null | undefined): string {
+  if (!url) return "";
+  if (url.startsWith("http") || url.startsWith("/objects/")) {
+    return url;
+  }
+  return `/objects/${url}`;
+}
+
 const promoBlockFormSchema = z.object({
   imageUrl: z.string().min(1, "Изображение обязательно"),
   title: z.string().optional(),
@@ -183,7 +192,18 @@ export default function PromoZonePage() {
 
     const result = await uploadFile(file);
     if (result) {
-      form.setValue("imageUrl", result.objectPath);
+      // Make the file publicly accessible
+      try {
+        await fetch("/api/uploads/set-public", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ objectPath: result.objectPath }),
+        });
+      } catch (e) {
+        console.error("Failed to set public access:", e);
+      }
+      // Store full URL path for display
+      form.setValue("imageUrl", `/objects/${result.objectPath}`);
     }
 
     if (fileInputRef.current) {
@@ -234,7 +254,7 @@ export default function PromoZonePage() {
                   <div className="relative aspect-[3/1] bg-muted">
                     {block.imageUrl ? (
                       <img
-                        src={block.imageUrl}
+                        src={normalizeImageUrl(block.imageUrl)}
                         alt={block.title || "Промо-блок"}
                         className="w-full h-full object-cover"
                         data-testid={`img-promo-block-${block.id}`}
@@ -340,7 +360,7 @@ export default function PromoZonePage() {
                 {imageUrl ? (
                   <div className="relative aspect-[3/1] rounded-lg overflow-hidden bg-muted">
                     <img
-                      src={imageUrl}
+                      src={normalizeImageUrl(imageUrl)}
                       alt="Превью"
                       className="w-full h-full object-cover"
                       data-testid="img-preview"

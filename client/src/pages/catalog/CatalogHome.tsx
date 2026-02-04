@@ -80,6 +80,17 @@ const TAG_CONFIG: Record<string, { label: string; color: string }> = {
   low_stock: { label: "Заканчивается", color: "bg-orange-500" },
 };
 
+// Helper to normalize image URL (handles both old objectPath and new /objects/ URLs)
+function normalizeImageUrl(url: string | null | undefined): string {
+  if (!url) return "";
+  // Already a full URL or starts with /objects/
+  if (url.startsWith("http") || url.startsWith("/objects/")) {
+    return url;
+  }
+  // Object path without /objects/ prefix
+  return `/objects/${url}`;
+}
+
 interface CatalogData {
   tenant: Tenant;
   products: ProductWithPrice[];
@@ -579,7 +590,7 @@ function PromoCarousel({
               >
                 <div className="relative aspect-[21/9] md:aspect-[3/1] rounded-lg overflow-hidden">
                   <img
-                    src={block.imageUrl}
+                    src={normalizeImageUrl(block.imageUrl)}
                     alt={block.title || "Promo"}
                     className="w-full h-full object-cover"
                     loading={index === 0 ? "eager" : "lazy"}
