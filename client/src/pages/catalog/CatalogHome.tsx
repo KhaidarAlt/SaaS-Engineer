@@ -500,7 +500,6 @@ function QuickViewModal({
 function PromoCarousel({
   promoBlocks,
   tenantSlug,
-  tenantPhone,
 }: {
   promoBlocks: PromoBlock[];
   tenantSlug: string;
@@ -550,16 +549,6 @@ function PromoCarousel({
     return () => scrollContainer.removeEventListener("scroll", handleScroll);
   }, [currentIndex, promoBlocks.length]);
 
-  const handleButtonClick = (block: PromoBlock) => {
-    if (block.linkType === "whatsapp" && tenantPhone) {
-      const phone = tenantPhone.replace(/\D/g, "");
-      const message = encodeURIComponent(block.title || "Здравствуйте! Хочу узнать подробнее");
-      window.open(`https://wa.me/${phone}?text=${message}`, "_blank");
-    } else if (block.linkType === "crm" && block.linkUrl) {
-      window.open(block.linkUrl, "_blank");
-    }
-  };
-
   if (!promoBlocks || promoBlocks.length === 0) return null;
 
   return (
@@ -580,15 +569,23 @@ function PromoCarousel({
             data-testid="container-promo-slides"
           >
             {promoBlocks.map((block, index) => (
-              <motion.div
+              <Link
                 key={block.id}
-                className="flex-shrink-0 w-full snap-center"
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.4, delay: index * 0.1 }}
-                data-testid={`promo-block-${block.id}`}
+                href={`/c/${tenantSlug}/promo/${block.id}`}
+                className="flex-shrink-0 w-full snap-center cursor-pointer"
+                data-testid={`link-promo-block-${block.id}`}
+                onClick={() => {
+                  fetch(`/api/catalog/${tenantSlug}/promo/${block.id}/banner-click`, {
+                    method: "POST",
+                  }).catch(() => {});
+                }}
               >
-                <div className="relative aspect-[21/9] md:aspect-[3/1] rounded-lg overflow-hidden">
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.4, delay: index * 0.1 }}
+                  className="relative aspect-[21/9] md:aspect-[3/1] rounded-lg overflow-hidden hover:shadow-lg transition-shadow"
+                >
                   <img
                     src={normalizeImageUrl(block.imageUrl)}
                     alt={block.title || "Promo"}
@@ -596,40 +593,8 @@ function PromoCarousel({
                     loading={index === 0 ? "eager" : "lazy"}
                     data-testid={`img-promo-${block.id}`}
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
-                  <div className="absolute bottom-0 left-0 right-0 p-4 md:p-6">
-                    <AnimatePresence>
-                      {block.title && (
-                        <motion.h3
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          className="text-white text-lg md:text-2xl font-bold mb-1 md:mb-2 line-clamp-2"
-                          data-testid={`heading-promo-title-${block.id}`}
-                        >
-                          {block.title}
-                        </motion.h3>
-                      )}
-                    </AnimatePresence>
-                    {block.description && (
-                      <p
-                        className="text-white/90 text-sm md:text-base mb-3 line-clamp-2 max-w-2xl"
-                        data-testid={`text-promo-description-${block.id}`}
-                      >
-                        {block.description}
-                      </p>
-                    )}
-                    <Button
-                      onClick={() => handleButtonClick(block)}
-                      className="bg-white hover:bg-white/90 text-black"
-                      data-testid={`button-promo-action-${block.id}`}
-                    >
-                      {block.linkType === "crm" && <ExternalLink className="h-4 w-4 mr-2" />}
-                      {block.linkType === "whatsapp" && <MessageCircle className="h-4 w-4 mr-2" />}
-                      {block.buttonText || "Подробнее"}
-                    </Button>
-                  </div>
-                </div>
-              </motion.div>
+                </motion.div>
+              </Link>
             ))}
           </div>
 

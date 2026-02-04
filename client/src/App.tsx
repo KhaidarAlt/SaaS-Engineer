@@ -49,6 +49,7 @@ import CatalogHome from "@/pages/catalog/CatalogHome";
 import ProductDetailPage from "@/pages/catalog/ProductDetailPage";
 import CartPage from "@/pages/catalog/CartPage";
 import CheckoutPage from "@/pages/catalog/CheckoutPage";
+import PromoPage from "@/pages/catalog/PromoPage";
 import LinksPage from "@/pages/dashboard/LinksPage";
 import LinksPublicPage from "@/pages/public/LinksPublicPage";
 import IntegrationsPage from "@/pages/dashboard/IntegrationsPage";
@@ -260,6 +261,7 @@ function Router() {
       <Route path="/c/:slug/cart" component={CartPage} />
       <Route path="/c/:slug/checkout" component={CheckoutPage} />
       <Route path="/c/:slug/product/:id" component={ProductDetailPage} />
+      <Route path="/c/:slug/promo/:promoId" component={PromoPage} />
 
       <Route component={NotFound} />
     </Switch>

@@ -1,9 +1,9 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { Plus, Pencil, Trash2, Image as ImageIcon, MoreHorizontal, Upload, X, GripVertical } from "lucide-react";
+import { Plus, Pencil, Trash2, Image as ImageIcon, MoreHorizontal, Upload, X, GripVertical, MousePointer, MessageCircle, Bot, Save, Loader2 } from "lucide-react";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,6 +45,94 @@ function normalizeImageUrl(url: string | null | undefined): string {
     return url;
   }
   return `/objects/${url}`;
+}
+
+function AiDescriptionBlock({ block }: { block: PromoBlock }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [description, setDescription] = useState(block.aiDescription || "");
+  const [isSaving, setIsSaving] = useState(false);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    setDescription(block.aiDescription || "");
+  }, [block.aiDescription]);
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      const res = await fetch(`/api/promo-blocks/${block.id}/ai-description`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ aiDescription: description }),
+      });
+      if (!res.ok) throw new Error("Ошибка сохранения");
+      toast({ title: "Сохранено", description: "Описание для ИИ обновлено" });
+      queryClient.invalidateQueries({ queryKey: ["/api/promo-blocks"] });
+      setIsOpen(false);
+    } catch (e) {
+      toast({ title: "Ошибка", description: "Не удалось сохранить", variant: "destructive" });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="border-t pt-3">
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full justify-start gap-2"
+        data-testid={`button-ai-train-${block.id}`}
+      >
+        <Bot className="h-4 w-4" />
+        {block.aiDescription ? "Редактировать описание для ИИ" : "Обучить ИИ"}
+      </Button>
+      {isOpen && (
+        <div className="mt-3 space-y-3">
+          <div className="space-y-2">
+            <Label className="text-sm text-muted-foreground">
+              Опишите суть акции для ИИ-ассистента
+            </Label>
+            <Textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Например: Скидка 20% на все зимние куртки до конца января. Акция действует только на товары из категории 'Верхняя одежда'. Минимальная сумма заказа 15000 тенге."
+              rows={4}
+              data-testid={`textarea-ai-description-${block.id}`}
+            />
+            <p className="text-xs text-muted-foreground">
+              ИИ будет использовать это описание для ответов клиентам об акции
+            </p>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setIsOpen(false)}
+            >
+              Отмена
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleSave}
+              disabled={isSaving}
+              data-testid={`button-save-ai-${block.id}`}
+            >
+              {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+              Сохранить
+            </Button>
+          </div>
+        </div>
+      )}
+      {block.aiDescription && !isOpen && (
+        <p className="text-xs text-muted-foreground mt-2 line-clamp-2">
+          {block.aiDescription}
+        </p>
+      )}
+    </div>
+  );
 }
 
 const promoBlockFormSchema = z.object({
@@ -323,7 +411,7 @@ export default function PromoZonePage() {
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </CardHeader>
-                  <CardContent className="pt-0">
+                  <CardContent className="pt-0 space-y-4">
                     <div className="flex items-center gap-4 text-sm">
                       <div className="flex items-center gap-2">
                         <span className="text-muted-foreground">Кнопка:</span>
@@ -334,6 +422,21 @@ export default function PromoZonePage() {
                         <Badge variant="outline">{getLinkTypeLabel(block.linkType)}</Badge>
                       </div>
                     </div>
+
+                    <div className="flex items-center gap-6 text-sm border-t pt-3">
+                      <div className="flex items-center gap-2" data-testid={`stat-banner-clicks-${block.id}`}>
+                        <MousePointer className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-muted-foreground">Клики по баннеру:</span>
+                        <span className="font-medium">{block.bannerClicks || 0}</span>
+                      </div>
+                      <div className="flex items-center gap-2" data-testid={`stat-cta-clicks-${block.id}`}>
+                        <MessageCircle className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-muted-foreground">Клики CTA:</span>
+                        <span className="font-medium">{block.ctaClicks || 0}</span>
+                      </div>
+                    </div>
+
+                    <AiDescriptionBlock block={block} />
                   </CardContent>
                 </Card>
               </motion.div>
