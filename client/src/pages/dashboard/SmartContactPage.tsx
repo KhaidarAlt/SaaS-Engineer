@@ -16,8 +16,9 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { 
   MessageCircle, Users, Send, Settings, BarChart3, 
   Clock, Shield, AlertTriangle, CheckCircle, XCircle,
-  RefreshCw, Sparkles, Phone
+  RefreshCw, Sparkles, Phone, ArrowLeft
 } from "lucide-react";
+import { Link } from "wouter";
 
 interface HealthStatus {
   status: 'safe' | 'caution' | 'stop';
@@ -191,9 +192,16 @@ export default function SmartContactPage() {
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Умный повторный контакт</h1>
-          <p className="text-muted-foreground">Безопасная система реактивации клиентов</p>
+        <div className="flex items-center gap-4">
+          <Link href="/dashboard/ai-assistant">
+            <Button variant="ghost" size="icon" data-testid="button-back">
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+          </Link>
+          <div>
+            <h1 className="text-2xl font-bold">Умный повторный контакт</h1>
+            <p className="text-muted-foreground">Безопасная система реактивации клиентов</p>
+          </div>
         </div>
         <div className="flex items-center gap-4">
           {stats?.healthStatus && (
