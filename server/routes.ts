@@ -1767,6 +1767,70 @@ export async function registerRoutes(
     }
   });
 
+  // Get single promo block for public catalog
+  app.get("/api/catalog/:slug/promo/:promoId", async (req, res) => {
+    try {
+      const tenant = await storage.getTenantBySlug(req.params.slug);
+      if (!tenant || tenant.status !== "active") {
+        return res.status(404).json({ message: "Каталог не найден" });
+      }
+
+      const blocks = await storage.getPromoBlocks(tenant.id);
+      const block = blocks.find(b => b.id === req.params.promoId && b.isActive);
+      
+      if (!block) {
+        return res.status(404).json({ message: "Акция не найдена" });
+      }
+      
+      res.json(block);
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка загрузки акции" });
+    }
+  });
+
+  // Track banner click
+  app.post("/api/catalog/:slug/promo/:promoId/banner-click", async (req, res) => {
+    try {
+      const tenant = await storage.getTenantBySlug(req.params.slug);
+      if (!tenant) {
+        return res.status(404).json({ message: "Каталог не найден" });
+      }
+
+      await storage.incrementPromoBlockBannerClick(req.params.promoId, tenant.id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка" });
+    }
+  });
+
+  // Track CTA click
+  app.post("/api/catalog/:slug/promo/:promoId/cta-click", async (req, res) => {
+    try {
+      const tenant = await storage.getTenantBySlug(req.params.slug);
+      if (!tenant) {
+        return res.status(404).json({ message: "Каталог не найден" });
+      }
+
+      await storage.incrementPromoBlockCtaClick(req.params.promoId, tenant.id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка" });
+    }
+  });
+
+  // Update promo block AI description
+  app.put("/api/promo-blocks/:id/ai-description", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as any;
+      const { aiDescription } = req.body;
+      
+      await storage.updatePromoBlockAiDescription(req.params.id, user.tenantId, aiDescription);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка сохранения описания" });
+    }
+  });
+
   // Get single product for public catalog with computed price
   app.get("/api/catalog/:slug/product/:productId", async (req, res) => {
     try {

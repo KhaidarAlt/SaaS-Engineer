@@ -110,6 +110,9 @@ export interface IStorage {
   createPromoBlock(data: InsertPromoBlock): Promise<PromoBlock>;
   updatePromoBlock(id: string, data: Partial<InsertPromoBlock>): Promise<PromoBlock | undefined>;
   deletePromoBlock(id: string): Promise<void>;
+  incrementPromoBlockBannerClick(id: string, tenantId: string): Promise<void>;
+  incrementPromoBlockCtaClick(id: string, tenantId: string): Promise<void>;
+  updatePromoBlockAiDescription(id: string, tenantId: string, aiDescription: string): Promise<void>;
   
   getOrders(tenantId: string): Promise<Order[]>;
   getOrder(id: string, tenantId: string): Promise<(Order & { items?: OrderItem[] }) | undefined>;
@@ -596,6 +599,24 @@ export class DatabaseStorage implements IStorage {
 
   async deletePromoBlock(id: string): Promise<void> {
     await db.delete(promoBlocks).where(eq(promoBlocks.id, id));
+  }
+
+  async incrementPromoBlockBannerClick(id: string, tenantId: string): Promise<void> {
+    await db.update(promoBlocks)
+      .set({ bannerClicks: sql`${promoBlocks.bannerClicks} + 1` })
+      .where(and(eq(promoBlocks.id, id), eq(promoBlocks.tenantId, tenantId)));
+  }
+
+  async incrementPromoBlockCtaClick(id: string, tenantId: string): Promise<void> {
+    await db.update(promoBlocks)
+      .set({ ctaClicks: sql`${promoBlocks.ctaClicks} + 1` })
+      .where(and(eq(promoBlocks.id, id), eq(promoBlocks.tenantId, tenantId)));
+  }
+
+  async updatePromoBlockAiDescription(id: string, tenantId: string, aiDescription: string): Promise<void> {
+    await db.update(promoBlocks)
+      .set({ aiDescription, updatedAt: new Date() })
+      .where(and(eq(promoBlocks.id, id), eq(promoBlocks.tenantId, tenantId)));
   }
 
   async getOrders(tenantId: string): Promise<Order[]> {

@@ -334,6 +334,9 @@ export const promoBlocks = pgTable("promo_blocks", {
   linkUrl: text("link_url"), // для CRM ссылки
   sortOrder: integer("sort_order").notNull().default(0),
   isActive: boolean("is_active").notNull().default(true),
+  bannerClicks: integer("banner_clicks").notNull().default(0),
+  ctaClicks: integer("cta_clicks").notNull().default(0),
+  aiDescription: text("ai_description"), // описание акции для AI ассистента
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -345,7 +348,7 @@ export const promoBlocksRelations = relations(promoBlocks, ({ one }) => ({
   }),
 }));
 
-export const insertPromoBlockSchema = createInsertSchema(promoBlocks).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertPromoBlockSchema = createInsertSchema(promoBlocks).omit({ id: true, createdAt: true, updatedAt: true, bannerClicks: true, ctaClicks: true });
 export type InsertPromoBlock = z.infer<typeof insertPromoBlockSchema>;
 export type PromoBlock = typeof promoBlocks.$inferSelect;
 
