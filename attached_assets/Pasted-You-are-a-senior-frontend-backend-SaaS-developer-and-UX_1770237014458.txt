@@ -1,0 +1,184 @@
+You are a senior frontend + backend SaaS developer and UX engineer.
+
+We are upgrading the CLIENT CATALOG part of the SmartCatalog platform.
+Use the CURRENT cabinet structure shown in screenshots.
+
+LANGUAGE: Russian only  
+STYLE: clean, minimal, consistent with existing UI  
+ALL SETTINGS must be available from ADMIN CABINET
+
+────────────────────────────────
+1. УТП В ШАПКЕ КАТАЛОГА
+────────────────────────────────
+Location in cabinet:
+Раздел → «Настройки магазина» (новый блок “УТП в шапке”)
+
+Logic:
+- Field: text input
+- Limit: 120 symbols max
+- Counter of symbols
+- If field is empty → do NOT show block in catalog
+- If filled → show as single line under shop name in catalog header
+
+UI text in cabinet:
+Заголовок: “УТП в шапке каталога”
+Подсказка: “Короткая фраза, которая объясняет выгоду магазина: доставка, гарантия, Kaspi и т.д.”
+
+────────────────────────────────
+2. ТЕГИ / БЕЙДЖИ ТОВАРОВ
+────────────────────────────────
+Location:
+Раздел → «Товары» → карточка редактирования товара
+
+Add block “Теги товара”:
+
+Available tags (selectable):
+- Хит продаж
+- Новинка
+- Лучшая цена
+- Скидка
+- Доставка сегодня
+- В наличии
+- Осталось мало
+
+Rules:
+- max 2 tags per product
+- color predefined
+- if not activated → not shown in catalog
+- show on product card top-left
+
+────────────────────────────────
+3. ИИ-КОНСУЛЬТАНТ В КАРТОЧКЕ
+────────────────────────────────
+DEFAULT: ENABLED
+
+Show on every product card:
+Button:
+“Спросить у ИИ про товар”
+
+Logic:
+- click generates event with product data
+- opens WhatsApp dialog
+- passes:
+  - product name
+  - price
+  - link
+  - main attributes
+
+User has NO settings here (by default ON)
+
+────────────────────────────────
+4. ПРОМО-ЗОНА (НОВЫЙ РАЗДЕЛ)
+────────────────────────────────
+Create NEW section in menu:
+
+Place:
+под разделом «Скидки»
+
+Name:
+“Промо-зона”
+
+Functionality:
+
+User can create promo blocks:
+
+Fields:
+- Image upload
+- Show required resolution hint:
+  “Рекомендуемый размер 1200×400, JPG/PNG, до 2MB”
+
+- Text description (up to 300 symbols)
+- Button name (editable by user)
+  Default: “Купить”
+
+- Link type:
+  → create lead to WhatsApp
+  → create order in CRM
+
+Catalog view:
+- carousel under header
+- click opens promo page
+- button press → generate request to messenger/CRM
+
+────────────────────────────────
+5. ИЗБРАННОЕ ❤️
+────────────────────────────────
+DEFAULT: ENABLED
+
+- heart icon on product card
+- save to favorites
+- user can view favorites list
+- persistent per session/user
+
+────────────────────────────────
+6. УСИЛЕНИЕ КАРТОЧКИ ТОВАРА
+────────────────────────────────
+Location:
+Настройки магазина → блок “Карточка товара”
+
+User can toggle:
+
+[ ] Показывать ключевые характеристики  
+[ ] Показывать наличие  
+[ ] Показывать способы оплаты  
+[ ] Показывать кнопку WhatsApp рядом с корзиной
+
+If disabled → element not rendered
+
+────────────────────────────────
+7. БЫСТРЫЙ ПРОСМОТР
+────────────────────────────────
+DEFAULT: ENABLED
+
+- modal preview without leaving page
+- actions inside modal:
+  - в корзину
+  - спросить у ИИ
+  - в избранное
+
+────────────────────────────────
+8. ЭЛЕМЕНТЫ ДОВЕРИЯ
+────────────────────────────────
+NOT IMPLEMENT NOW
+(hidden feature flag)
+
+────────────────────────────────
+9. КРОСС-ПРОДАЖИ
+────────────────────────────────
+DEFAULT: ENABLED
+
+Block:
+“С этим товаром берут”
+
+────────────────────────────────
+10. ФИЛЬТРЫ И НАВИГАЦИЯ
+────────────────────────────────
+DEFAULT: ENABLED
+
+- price filter
+- attributes filter
+- categories
+
+────────────────────────────────
+11. ПЛАВАЮЩАЯ КНОПКА WHATSAPP
+────────────────────────────────
+DEFAULT: ENABLED
+
+────────────────────────────────
+TECH REQUIREMENTS
+────────────────────────────────
+- Use current design system
+- Mobile first
+- No breaking existing logic
+- All settings stored per tenant
+- Feature flags support
+
+────────────────────────────────
+OUTPUT REQUIRED
+────────────────────────────────
+- DB schema changes
+- Admin UI components
+- Catalog UI components
+- API endpoints
+- Validation rules
+- Russian UX texts
