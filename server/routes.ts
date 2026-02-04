@@ -3047,6 +3047,39 @@ export async function registerRoutes(
   // ============ SMART CONTACT (SAFE BULK MESSAGING) ============
   const { smartContactService, TRIGGER_TYPES } = await import("./services/smart-contact.service");
 
+  // Validation schemas for Smart Contact
+  const smartContactSettingsUpdateSchema = z.object({
+    enabled: z.boolean().optional(),
+    quietHoursStart: z.number().min(0).max(23).optional(),
+    quietHoursEnd: z.number().min(0).max(23).optional(),
+    maxFollowUpsPerClient: z.number().min(1).max(10).optional(),
+    minHoursBetweenMessages: z.number().min(1).max(168).optional(),
+    dailyMessageLimit: z.number().min(10).max(1000).optional(),
+    autoStopOnNegativeSignals: z.boolean().optional()
+  });
+
+  const smartContactMessageSchema = z.object({
+    contactId: z.string().min(1),
+    triggerType: z.enum(['abandoned_cart', 'unpaid_order', 'reactivation', 'inactivity', 'manual']),
+    messageText: z.string().min(1).max(1000),
+    scheduledAt: z.string().datetime().optional().nullable()
+  });
+
+  const smartContactBatchSchema = z.object({
+    triggerType: z.enum(['abandoned_cart', 'unpaid_order', 'reactivation', 'inactivity', 'manual']),
+    maxMessages: z.number().min(1).max(100).default(10)
+  });
+
+  const smartContactGenerateSchema = z.object({
+    triggerType: z.enum(['abandoned_cart', 'unpaid_order', 'reactivation', 'inactivity', 'manual']),
+    context: z.object({
+      clientName: z.string().optional(),
+      productName: z.string().optional(),
+      orderNumber: z.string().optional(),
+      lastInteraction: z.string().optional()
+    }).optional()
+  });
+
   // Get Smart Contact settings
   app.get("/api/smart-contact/settings", requireAuth, requireAiAccess, async (req, res) => {
     try {
@@ -3068,9 +3101,13 @@ export async function registerRoutes(
   // Update Smart Contact settings
   app.put("/api/smart-contact/settings", requireAuth, requireAiAccess, async (req, res) => {
     try {
-      const settings = await smartContactService.updateSettings(req.user!.tenantId!, req.body);
+      const validated = smartContactSettingsUpdateSchema.parse(req.body);
+      const settings = await smartContactService.updateSettings(req.user!.tenantId!, validated);
       res.json(settings);
     } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Неверные данные", errors: error.errors });
+      }
       res.status(500).json({ message: "Ошибка сохранения настроек" });
     }
   });
@@ -3126,10 +3163,13 @@ export async function registerRoutes(
   // Generate AI message preview
   app.post("/api/smart-contact/generate-message", requireAuth, requireAiAccess, async (req, res) => {
     try {
-      const { triggerType, context } = req.body;
-      const message = await smartContactService.generateMessage(req.user!.tenantId!, triggerType, context || {});
+      const validated = smartContactGenerateSchema.parse(req.body);
+      const message = await smartContactService.generateMessage(req.user!.tenantId!, validated.triggerType, validated.context || {});
       res.json({ message });
     } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Неверные данные", errors: error.errors });
+      }
       res.status(500).json({ message: "Ошибка генерации сообщения" });
     }
   });
@@ -3138,11 +3178,11 @@ export async function registerRoutes(
   app.post("/api/smart-contact/messages", requireAuth, requireAiAccess, async (req, res) => {
     try {
       const tenantId = req.user!.tenantId!;
-      const { contactId, triggerType, messageText, scheduledAt } = req.body;
+      const validated = smartContactMessageSchema.parse(req.body);
       
       // Check if quiet hours
       const isQuiet = await smartContactService.isQuietHours(tenantId);
-      if (isQuiet && !scheduledAt) {
+      if (isQuiet && !validated.scheduledAt) {
         return res.status(400).json({ message: "Сейчас тихие часы. Сообщение будет отправлено позже." });
       }
       
@@ -3152,17 +3192,31 @@ export async function registerRoutes(
         return res.status(400).json({ message: health.message });
       }
       
+      // Check daily limit
+      if (health.sentToday >= health.dailyLimit) {
+        return res.status(400).json({ message: "Достигнут дневной лимит сообщений" });
+      }
+      
+      // Check contact eligibility (cooldown and max follow-ups)
+      const canSend = await smartContactService.canSendToContact(tenantId, validated.contactId);
+      if (!canSend.allowed) {
+        return res.status(400).json({ message: canSend.reason });
+      }
+      
       const message = await smartContactService.createMessage({
         tenantId,
-        contactId,
-        triggerType,
-        messageText,
+        contactId: validated.contactId,
+        triggerType: validated.triggerType,
+        messageText: validated.messageText,
         status: 'pending',
-        scheduledAt: scheduledAt ? new Date(scheduledAt) : null
+        scheduledAt: validated.scheduledAt ? new Date(validated.scheduledAt) : null
       });
       
       res.json(message);
     } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Неверные данные", errors: error.errors });
+      }
       res.status(500).json({ message: "Ошибка создания сообщения" });
     }
   });
@@ -3215,7 +3269,7 @@ export async function registerRoutes(
   app.post("/api/smart-contact/batch-send", requireAuth, requireAiAccess, async (req, res) => {
     try {
       const tenantId = req.user!.tenantId!;
-      const { triggerType, maxMessages = 10 } = req.body;
+      const validated = smartContactBatchSchema.parse(req.body);
       
       // Get settings and check if enabled
       const settings = await smartContactService.getSettings(tenantId);
@@ -3235,18 +3289,30 @@ export async function registerRoutes(
         return res.status(400).json({ message: health.message });
       }
       
-      // Get eligible contacts
+      // Check remaining daily quota
+      const remainingQuota = Math.max(0, settings.dailyMessageLimit - health.sentToday);
+      if (remainingQuota === 0) {
+        return res.status(400).json({ message: "Достигнут дневной лимит сообщений" });
+      }
+      
+      // Get eligible contacts (already filtered by cooldown)
       const eligibleContacts = await smartContactService.getEligibleContacts(
         tenantId, 
         settings.minHoursBetweenMessages
       );
       
-      const contactsToMessage = eligibleContacts.slice(0, Math.min(maxMessages, settings.dailyMessageLimit - health.sentToday));
+      // Apply hard cap: min of requested, remaining quota, and 100 max per batch
+      const batchSize = Math.min(validated.maxMessages, remainingQuota, 100);
+      const contactsToMessage = eligibleContacts.slice(0, batchSize);
       
       // Create messages for each contact
       const createdMessages = [];
       for (const contact of contactsToMessage) {
-        const messageText = await smartContactService.generateMessage(tenantId, triggerType, {
+        // Double-check eligibility (max follow-ups)
+        const canSend = await smartContactService.canSendToContact(tenantId, contact.id);
+        if (!canSend.allowed) continue;
+        
+        const messageText = await smartContactService.generateMessage(tenantId, validated.triggerType, {
           clientName: contact.name || undefined,
           lastInteraction: contact.lastClientReplyAt?.toISOString()
         });
@@ -3254,7 +3320,7 @@ export async function registerRoutes(
         const message = await smartContactService.createMessage({
           tenantId,
           contactId: contact.id,
-          triggerType,
+          triggerType: validated.triggerType,
           messageText,
           status: 'queued'
         });
@@ -3267,6 +3333,9 @@ export async function registerRoutes(
         message: `Поставлено в очередь: ${createdMessages.length} сообщений`
       });
     } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Неверные данные", errors: error.errors });
+      }
       res.status(500).json({ message: "Ошибка создания рассылки" });
     }
   });

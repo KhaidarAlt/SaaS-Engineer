@@ -219,6 +219,70 @@ export class SmartContactService {
       .where(eq(smartMessages.id, messageId));
   }
   
+  // ============ CONTACT ELIGIBILITY CHECK ============
+  
+  async canSendToContact(tenantId: string, contactId: string): Promise<{ allowed: boolean; reason?: string }> {
+    const settings = await this.getSettings(tenantId);
+    const minHours = settings?.minHoursBetweenMessages || 24;
+    const maxFollowUps = settings?.maxFollowUpsPerClient || 3;
+    
+    // Get contact
+    const [contact] = await db
+      .select()
+      .from(smartContacts)
+      .where(
+        and(
+          eq(smartContacts.tenantId, tenantId),
+          eq(smartContacts.id, contactId)
+        )
+      );
+    
+    if (!contact) {
+      return { allowed: false, reason: 'Контакт не найден' };
+    }
+    
+    // Check if blocked or do-not-disturb
+    if (contact.isBlocked) {
+      return { allowed: false, reason: 'Контакт заблокирован' };
+    }
+    
+    if (contact.doNotDisturb) {
+      return { allowed: false, reason: 'Контакт запросил не беспокоить' };
+    }
+    
+    // Check if no dialog history
+    if (!contact.hasDialogHistory) {
+      return { allowed: false, reason: 'Нет истории диалога (холодный контакт)' };
+    }
+    
+    // Check cooldown (min hours between messages)
+    if (contact.lastMessageSentAt) {
+      const hoursSinceLastMessage = (Date.now() - new Date(contact.lastMessageSentAt).getTime()) / (1000 * 60 * 60);
+      if (hoursSinceLastMessage < minHours) {
+        return { allowed: false, reason: `Подождите ${Math.ceil(minHours - hoursSinceLastMessage)} часов до следующего сообщения` };
+      }
+    }
+    
+    // Check max follow-ups (count pending/sent messages without reply)
+    const [unrepliedCount] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(smartMessages)
+      .where(
+        and(
+          eq(smartMessages.tenantId, tenantId),
+          eq(smartMessages.contactId, contactId),
+          eq(smartMessages.replyReceived, false),
+          sql`${smartMessages.status} IN ('sent', 'delivered', 'read')`
+        )
+      );
+    
+    if ((unrepliedCount?.count || 0) >= maxFollowUps) {
+      return { allowed: false, reason: `Достигнут лимит повторных сообщений (${maxFollowUps})` };
+    }
+    
+    return { allowed: true };
+  }
+  
   // ============ RATE METRICS ============
   
   async getTodayMetrics(tenantId: string): Promise<SmartRateMetric | null> {
