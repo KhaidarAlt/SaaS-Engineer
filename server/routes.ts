@@ -1262,6 +1262,19 @@ export async function registerRoutes(
 
   app.post("/api/promo-blocks", requireAuth, async (req, res) => {
     try {
+      // Set image as public if it's an object storage path
+      if (req.body.imageUrl) {
+        const objectPath = req.body.imageUrl.replace(/^\/objects\//, '');
+        try {
+          const promoObjectStorage = new ObjectStorageService();
+          await promoObjectStorage.trySetObjectEntityAclPolicy(objectPath, {
+            owner: req.user!.id,
+            visibility: "public",
+          });
+        } catch (e) {
+          console.error("Failed to set promo image public:", e);
+        }
+      }
       const block = await storage.createPromoBlock({
         ...req.body,
         tenantId: req.user!.tenantId!,
@@ -1278,6 +1291,19 @@ export async function registerRoutes(
       const block = await storage.getPromoBlock(req.params.id);
       if (!block || block.tenantId !== req.user!.tenantId!) {
         return res.status(404).json({ message: "Промо-блок не найден" });
+      }
+      // Set new image as public if changed
+      if (req.body.imageUrl && req.body.imageUrl !== block.imageUrl) {
+        const objectPath = req.body.imageUrl.replace(/^\/objects\//, '');
+        try {
+          const promoObjectStorage = new ObjectStorageService();
+          await promoObjectStorage.trySetObjectEntityAclPolicy(objectPath, {
+            owner: req.user!.id,
+            visibility: "public",
+          });
+        } catch (e) {
+          console.error("Failed to set promo image public:", e);
+        }
       }
       const updated = await storage.updatePromoBlock(req.params.id, req.body);
       res.json(updated);
@@ -1296,6 +1322,33 @@ export async function registerRoutes(
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ message: "Ошибка удаления промо-блока" });
+    }
+  });
+
+  // Fix existing promo blocks images to be public
+  app.post("/api/promo-blocks/fix-images", requireAuth, async (req, res) => {
+    try {
+      const promoObjectStorage = new ObjectStorageService();
+      const blocks = await storage.getPromoBlocks(req.user!.tenantId!);
+      let fixed = 0;
+      for (const block of blocks) {
+        if (block.imageUrl) {
+          const objectPath = block.imageUrl.replace(/^\/objects\//, '');
+          try {
+            await promoObjectStorage.trySetObjectEntityAclPolicy(objectPath, {
+              owner: req.user!.id,
+              visibility: "public",
+            });
+            fixed++;
+          } catch (e) {
+            console.error(`Failed to fix image for block ${block.id}:`, e);
+          }
+        }
+      }
+      res.json({ success: true, fixed });
+    } catch (error) {
+      console.error("Fix promo images error:", error);
+      res.status(500).json({ message: "Ошибка исправления изображений" });
     }
   });
 
