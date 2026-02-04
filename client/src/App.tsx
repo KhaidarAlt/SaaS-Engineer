@@ -52,6 +52,13 @@ import LinksPage from "@/pages/dashboard/LinksPage";
 import LinksPublicPage from "@/pages/public/LinksPublicPage";
 import IntegrationsPage from "@/pages/dashboard/IntegrationsPage";
 import WhatsAppCloudPage from "@/pages/dashboard/WhatsAppCloudPage";
+import PrivacyPage from "@/pages/legal/PrivacyPage";
+import PrivacyPageKz from "@/pages/legal/PrivacyPageKz";
+import TermsPage from "@/pages/legal/TermsPage";
+import TermsPageKz from "@/pages/legal/TermsPageKz";
+import RefundPage from "@/pages/legal/RefundPage";
+import RefundPageKz from "@/pages/legal/RefundPageKz";
+import ContactsPage from "@/pages/legal/ContactsPage";
 
 function ProtectedRoute({ 
   component: Component,
@@ -102,6 +109,14 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={LandingPage} />
+      
+      <Route path="/privacy" component={PrivacyPage} />
+      <Route path="/privacy-kz" component={PrivacyPageKz} />
+      <Route path="/terms" component={TermsPage} />
+      <Route path="/terms-kz" component={TermsPageKz} />
+      <Route path="/refund" component={RefundPage} />
+      <Route path="/refund-kz" component={RefundPageKz} />
+      <Route path="/contacts" component={ContactsPage} />
       
       <Route path="/login">
         <PublicRoute component={LoginPage} />

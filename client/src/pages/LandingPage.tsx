@@ -747,13 +747,16 @@ export default function LandingPage() {
                 +7 777 387 53 55
               </a>
             </div>
-            <div className="flex items-center gap-6 text-sm text-muted-foreground">
-              <a href="#" className="hover:text-foreground transition-colors" data-testid="link-contacts">Контакты</a>
-              <a href="#" className="hover:text-foreground transition-colors" data-testid="link-privacy">Политика конфиденциальности</a>
+            <div className="flex flex-wrap items-center justify-center gap-4 md:gap-6 text-sm text-muted-foreground">
+              <Link href="/contacts" className="hover:text-foreground transition-colors" data-testid="link-contacts">Контакты</Link>
+              <Link href="/privacy" className="hover:text-foreground transition-colors" data-testid="link-privacy">Конфиденциальность</Link>
+              <Link href="/terms" className="hover:text-foreground transition-colors" data-testid="link-terms">Условия</Link>
+              <Link href="/refund" className="hover:text-foreground transition-colors" data-testid="link-refund">Возвраты</Link>
             </div>
           </div>
           <div className="mt-8 pt-8 border-t text-center text-sm text-muted-foreground">
-            © {new Date().getFullYear()} BotFactory. Все права защищены.
+            <p>ИП Альтаев Г.Т. | г. Алматы, пр. Гагарина 132</p>
+            <p className="mt-1">© {new Date().getFullYear()} BotFactory. Все права защищены.</p>
           </div>
         </div>
       </footer>
