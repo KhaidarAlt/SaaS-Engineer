@@ -52,6 +52,18 @@ const settingsFormSchema = z.object({
   telegramBotToken: z.string().optional(),
   telegramChatId: z.string().optional(),
   customDomain: z.string().optional(),
+  // Catalog settings
+  catalogUsp: z.string().max(120, "Максимум 120 символов").optional(),
+  showProductSpecs: z.boolean().optional(),
+  showProductStock: z.boolean().optional(),
+  showPaymentMethods: z.boolean().optional(),
+  showWhatsAppButton: z.boolean().optional(),
+  showQuickView: z.boolean().optional(),
+  showFavorites: z.boolean().optional(),
+  showCrossSell: z.boolean().optional(),
+  showFilters: z.boolean().optional(),
+  showFloatingWhatsApp: z.boolean().optional(),
+  showAiConsultant: z.boolean().optional(),
 });
 
 type SettingsFormData = z.infer<typeof settingsFormSchema>;
@@ -245,6 +257,18 @@ export default function SettingsPage() {
         telegramBotToken: tenant.telegramBotToken || "",
         telegramChatId: tenant.telegramChatId || "",
         customDomain: (tenant as any).customDomain || "",
+        // Catalog settings
+        catalogUsp: (tenant as any).catalogUsp || "",
+        showProductSpecs: (tenant as any).showProductSpecs ?? true,
+        showProductStock: (tenant as any).showProductStock ?? true,
+        showPaymentMethods: (tenant as any).showPaymentMethods ?? true,
+        showWhatsAppButton: (tenant as any).showWhatsAppButton ?? true,
+        showQuickView: (tenant as any).showQuickView ?? true,
+        showFavorites: (tenant as any).showFavorites ?? true,
+        showCrossSell: (tenant as any).showCrossSell ?? true,
+        showFilters: (tenant as any).showFilters ?? true,
+        showFloatingWhatsApp: (tenant as any).showFloatingWhatsApp ?? true,
+        showAiConsultant: (tenant as any).showAiConsultant ?? true,
       });
       setLogoPreview(tenant.logoUrl || "");
       setOgImagePreview((tenant as any).ogImageUrl || "");
@@ -502,6 +526,170 @@ export default function SettingsPage() {
                     placeholder="Пн-Сб: 10:00-20:00, Вс: выходной"
                     {...form.register("workingHours")}
                   />
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+
+          {/* Catalog Settings */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.025 }}
+          >
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Store className="h-5 w-5" />
+                  Настройки каталога
+                </CardTitle>
+                <CardDescription>
+                  Настройте отображение элементов в клиентском каталоге
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* УТП в шапке */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="catalogUsp">УТП в шапке каталога</Label>
+                    <span className="text-xs text-muted-foreground">
+                      {form.watch("catalogUsp")?.length || 0}/120
+                    </span>
+                  </div>
+                  <Input
+                    id="catalogUsp"
+                    placeholder="Короткая фраза: доставка, гарантия, Kaspi и т.д."
+                    maxLength={120}
+                    {...form.register("catalogUsp")}
+                    data-testid="input-catalog-usp"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Отображается под названием магазина в шапке каталога
+                  </p>
+                </div>
+
+                {/* Карточка товара */}
+                <div className="space-y-3">
+                  <Label className="text-base font-medium">Карточка товара</Label>
+                  <div className="grid gap-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium">Ключевые характеристики</p>
+                        <p className="text-xs text-muted-foreground">Показывать спецификации товара</p>
+                      </div>
+                      <Switch
+                        checked={form.watch("showProductSpecs") ?? true}
+                        onCheckedChange={(checked) => form.setValue("showProductSpecs", checked)}
+                        data-testid="switch-product-specs"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium">Наличие</p>
+                        <p className="text-xs text-muted-foreground">Показывать статус наличия товара</p>
+                      </div>
+                      <Switch
+                        checked={form.watch("showProductStock") ?? true}
+                        onCheckedChange={(checked) => form.setValue("showProductStock", checked)}
+                        data-testid="switch-product-stock"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium">Способы оплаты</p>
+                        <p className="text-xs text-muted-foreground">Показывать доступные способы оплаты</p>
+                      </div>
+                      <Switch
+                        checked={form.watch("showPaymentMethods") ?? true}
+                        onCheckedChange={(checked) => form.setValue("showPaymentMethods", checked)}
+                        data-testid="switch-payment-methods"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium">Кнопка WhatsApp</p>
+                        <p className="text-xs text-muted-foreground">Показывать рядом с корзиной</p>
+                      </div>
+                      <Switch
+                        checked={form.watch("showWhatsAppButton") ?? true}
+                        onCheckedChange={(checked) => form.setValue("showWhatsAppButton", checked)}
+                        data-testid="switch-whatsapp-button"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Функции каталога */}
+                <div className="space-y-3">
+                  <Label className="text-base font-medium">Функции каталога</Label>
+                  <div className="grid gap-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium">Быстрый просмотр</p>
+                        <p className="text-xs text-muted-foreground">Модальное окно предпросмотра товара</p>
+                      </div>
+                      <Switch
+                        checked={form.watch("showQuickView") ?? true}
+                        onCheckedChange={(checked) => form.setValue("showQuickView", checked)}
+                        data-testid="switch-quick-view"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium">Избранное</p>
+                        <p className="text-xs text-muted-foreground">Сердечко для добавления в избранное</p>
+                      </div>
+                      <Switch
+                        checked={form.watch("showFavorites") ?? true}
+                        onCheckedChange={(checked) => form.setValue("showFavorites", checked)}
+                        data-testid="switch-favorites"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium">Кросс-продажи</p>
+                        <p className="text-xs text-muted-foreground">Блок «С этим товаром берут»</p>
+                      </div>
+                      <Switch
+                        checked={form.watch("showCrossSell") ?? true}
+                        onCheckedChange={(checked) => form.setValue("showCrossSell", checked)}
+                        data-testid="switch-cross-sell"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium">Фильтры и навигация</p>
+                        <p className="text-xs text-muted-foreground">Фильтры по цене, атрибутам, категориям</p>
+                      </div>
+                      <Switch
+                        checked={form.watch("showFilters") ?? true}
+                        onCheckedChange={(checked) => form.setValue("showFilters", checked)}
+                        data-testid="switch-filters"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium">Плавающая кнопка WhatsApp</p>
+                        <p className="text-xs text-muted-foreground">Кнопка в углу экрана для быстрой связи</p>
+                      </div>
+                      <Switch
+                        checked={form.watch("showFloatingWhatsApp") ?? true}
+                        onCheckedChange={(checked) => form.setValue("showFloatingWhatsApp", checked)}
+                        data-testid="switch-floating-whatsapp"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium">AI-консультант</p>
+                        <p className="text-xs text-muted-foreground">Кнопка "Спросить AI" на странице товара</p>
+                      </div>
+                      <Switch
+                        checked={form.watch("showAiConsultant") ?? true}
+                        onCheckedChange={(checked) => form.setValue("showAiConsultant", checked)}
+                        data-testid="switch-ai-consultant"
+                      />
+                    </div>
+                  </div>
                 </div>
               </CardContent>
             </Card>

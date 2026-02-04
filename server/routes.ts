@@ -1250,6 +1250,55 @@ export async function registerRoutes(
     }
   });
 
+  // ============ PROMO BLOCKS ============
+  app.get("/api/promo-blocks", requireAuth, async (req, res) => {
+    try {
+      const blocks = await storage.getPromoBlocks(req.user!.tenantId!);
+      res.json(blocks);
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка получения промо-блоков" });
+    }
+  });
+
+  app.post("/api/promo-blocks", requireAuth, async (req, res) => {
+    try {
+      const block = await storage.createPromoBlock({
+        ...req.body,
+        tenantId: req.user!.tenantId!,
+      });
+      res.json(block);
+    } catch (error) {
+      console.error("Create promo block error:", error);
+      res.status(500).json({ message: "Ошибка создания промо-блока" });
+    }
+  });
+
+  app.put("/api/promo-blocks/:id", requireAuth, async (req, res) => {
+    try {
+      const block = await storage.getPromoBlock(req.params.id);
+      if (!block || block.tenantId !== req.user!.tenantId!) {
+        return res.status(404).json({ message: "Промо-блок не найден" });
+      }
+      const updated = await storage.updatePromoBlock(req.params.id, req.body);
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка обновления промо-блока" });
+    }
+  });
+
+  app.delete("/api/promo-blocks/:id", requireAuth, async (req, res) => {
+    try {
+      const block = await storage.getPromoBlock(req.params.id);
+      if (!block || block.tenantId !== req.user!.tenantId!) {
+        return res.status(404).json({ message: "Промо-блок не найден" });
+      }
+      await storage.deletePromoBlock(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка удаления промо-блока" });
+    }
+  });
+
   app.get("/api/orders", requireAuth, async (req, res) => {
     try {
       const orders = await storage.getOrders(req.user!.tenantId!);
@@ -1675,6 +1724,23 @@ export async function registerRoutes(
     }
   });
 
+  // Get promo blocks for public catalog
+  app.get("/api/catalog/:slug/promo-blocks", async (req, res) => {
+    try {
+      const tenant = await storage.getTenantBySlug(req.params.slug);
+      if (!tenant || tenant.status !== "active") {
+        return res.status(404).json({ message: "Каталог не найден" });
+      }
+
+      const blocks = await storage.getPromoBlocks(tenant.id);
+      const activeBlocks = blocks.filter(b => b.isActive);
+      
+      res.json(activeBlocks);
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка загрузки промо-блоков" });
+    }
+  });
+
   // Get single product for public catalog with computed price
   app.get("/api/catalog/:slug/product/:productId", async (req, res) => {
     try {
@@ -1807,6 +1873,88 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error fetching product:", error);
       res.status(500).json({ message: "Ошибка загрузки товара" });
+    }
+  });
+
+  // AI Chat for product consultation (public endpoint)
+  app.post("/api/catalog/:slug/product/:productId/ai-chat", async (req, res) => {
+    try {
+      const { message } = req.body;
+      if (!message || typeof message !== "string") {
+        return res.status(400).json({ message: "Сообщение обязательно" });
+      }
+
+      const tenant = await storage.getTenantBySlug(req.params.slug);
+      if (!tenant || tenant.status !== "active") {
+        return res.status(404).json({ message: "Каталог не найден" });
+      }
+
+      const product = await storage.getProduct(req.params.productId, tenant.id);
+      if (!product || !product.isActive) {
+        return res.status(404).json({ message: "Товар не найден" });
+      }
+
+      const categories = await storage.getCategories(tenant.id);
+      const category = categories.find(c => c.id === product.categoryId);
+
+      // Import the OpenAI service
+      const { generateAiResponse, isOpenAiConfigured } = await import("./services/openai");
+      
+      if (!isOpenAiConfigured()) {
+        return res.status(503).json({ 
+          message: "AI сервис временно недоступен",
+          response: "Извините, AI-консультант временно недоступен. Пожалуйста, свяжитесь с нами по телефону или через WhatsApp."
+        });
+      }
+
+      // Build product context for AI
+      const productContext = {
+        storeName: tenant.name,
+        slug: tenant.slug,
+        storeDescription: tenant.description || undefined,
+        contactPhone: tenant.contactPhone || undefined,
+        products: [{
+          name: product.name,
+          price: parseFloat(product.price),
+          description: product.description || undefined,
+          category: category?.name,
+        }],
+        policies: {
+          answerOnlyFromData: true,
+          neverInventPrices: true,
+        },
+      };
+
+      // Build system message for product-specific consultation
+      const systemContext = `Ты — AI-консультант по товару "${product.name}" в магазине "${tenant.name}".
+
+ИНФОРМАЦИЯ О ТОВАРЕ:
+- Название: ${product.name}
+- Цена: ${parseFloat(product.price).toLocaleString()} ₸
+${product.description ? `- Описание: ${product.description}` : ''}
+${category ? `- Категория: ${category.name}` : ''}
+${product.sku ? `- Артикул: ${product.sku}` : ''}
+
+ПРАВИЛА:
+1. Отвечай только на вопросы об этом конкретном товаре
+2. Будь дружелюбен и профессионален
+3. Если не знаешь ответа — честно скажи об этом
+4. Отвечай кратко, максимум 2-3 предложения
+5. Отвечай на том же языке, на котором задан вопрос`;
+
+      const result = await generateAiResponse(
+        message,
+        [{ role: "system", content: systemContext }],
+        productContext
+      );
+
+      res.json({ response: result.content });
+    } catch (error) {
+      console.error("Error in AI chat:", error);
+      res.status(500).json({ 
+        message: "Ошибка AI сервиса",
+        response: "Извините, произошла ошибка. Попробуйте ещё раз."
+      });
     }
   });
 

@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation, useRoute } from "wouter";
 import { motion } from "framer-motion";
-import { ArrowLeft, Save, Package, Wand2, Plus, X, Palette, Users } from "lucide-react";
+import { ArrowLeft, Save, Package, Wand2, Plus, X, Palette, Users, Tag } from "lucide-react";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -65,6 +65,16 @@ const PRESET_COLORS = [
   { name: "Голубой", hex: "#87CEEB" },
 ];
 
+const PRODUCT_TAGS = [
+  { id: "hit", label: "Хит продаж", color: "bg-orange-500" },
+  { id: "new", label: "Новинка", color: "bg-green-500" },
+  { id: "best_price", label: "Лучшая цена", color: "bg-blue-500" },
+  { id: "sale", label: "Скидка", color: "bg-red-500" },
+  { id: "delivery_today", label: "Доставка сегодня", color: "bg-purple-500" },
+  { id: "in_stock", label: "В наличии", color: "bg-emerald-500" },
+  { id: "low_stock", label: "Осталось мало", color: "bg-amber-500" },
+];
+
 const productFormSchema = z.object({
   sku: z.string().min(1, "Артикул обязателен"),
   name: z.string().min(1, "Название обязательно"),
@@ -79,6 +89,7 @@ const productFormSchema = z.object({
   gender: z.string().optional(),
   sizes: z.array(z.object({ size: z.string(), qty: z.number() })).optional(),
   colors: z.array(z.object({ name: z.string(), hex: z.string() })).optional(),
+  tags: z.array(z.string()).optional(),
 });
 
 type ProductFormData = z.infer<typeof productFormSchema>;
@@ -116,6 +127,7 @@ export default function ProductFormPage() {
   const [customColorName, setCustomColorName] = useState("");
   const [customColorHex, setCustomColorHex] = useState("#000000");
   const [sizeType, setSizeType] = useState<"clothing" | "shoes" | "kids_clothing" | "kids_shoes" | "baby" | "kids_height">("clothing");
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
 
   const { data: product, isLoading: productLoading } = useQuery<Product>({
     queryKey: ["/api/products", productId],
@@ -151,11 +163,13 @@ export default function ProductFormPage() {
       const productColors = (product as any).colors || [];
       const productGender = (product as any).gender || "";
       const productSizeColorStock = (product as any).sizeColorStock || [];
+      const productTags = (product as any).tags || [];
       
       setSelectedSizes(productSizes);
       setSelectedColors(productColors);
       setSelectedGender(productGender);
       setSizeColorStock(productSizeColorStock);
+      setSelectedTags(productTags);
       
       form.reset({
         sku: product.sku,
@@ -171,6 +185,7 @@ export default function ProductFormPage() {
         gender: productGender,
         sizes: productSizes,
         colors: productColors,
+        tags: productTags,
       });
     }
   }, [product, form]);
@@ -183,6 +198,7 @@ export default function ProductFormPage() {
         sizes: selectedSizes,
         colors: selectedColors,
         sizeColorStock: sizeColorStock,
+        tags: selectedTags,
       };
       if (isEdit && productId) {
         return apiRequest("PUT", `/api/products/${productId}`, payload);
@@ -766,6 +782,77 @@ export default function ProductFormPage() {
                         </button>
                       </Badge>
                     ))}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Tags Section */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Tag className="h-5 w-5" />
+                Теги товара
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Выберите до 2 тегов для отображения на карточке товара
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {PRODUCT_TAGS.map((tag) => {
+                  const isSelected = selectedTags.includes(tag.id);
+                  const canSelect = isSelected || selectedTags.length < 2;
+                  return (
+                    <button
+                      key={tag.id}
+                      type="button"
+                      disabled={!canSelect && !isSelected}
+                      onClick={() => {
+                        if (isSelected) {
+                          setSelectedTags(selectedTags.filter(t => t !== tag.id));
+                        } else if (selectedTags.length < 2) {
+                          setSelectedTags([...selectedTags, tag.id]);
+                        }
+                      }}
+                      className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
+                        isSelected
+                          ? `${tag.color} text-white ring-2 ring-offset-2 ring-primary`
+                          : canSelect
+                            ? "bg-muted hover:bg-muted/80 text-foreground"
+                            : "bg-muted/50 text-muted-foreground cursor-not-allowed"
+                      }`}
+                      data-testid={`button-tag-${tag.id}`}
+                    >
+                      {tag.label}
+                    </button>
+                  );
+                })}
+              </div>
+              {selectedTags.length > 0 && (
+                <div className="pt-2">
+                  <Label className="text-xs text-muted-foreground">Выбранные теги:</Label>
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {selectedTags.map((tagId) => {
+                      const tag = PRODUCT_TAGS.find(t => t.id === tagId);
+                      if (!tag) return null;
+                      return (
+                        <Badge
+                          key={tagId}
+                          className={`${tag.color} text-white flex items-center gap-1 pr-1`}
+                        >
+                          {tag.label}
+                          <button
+                            type="button"
+                            onClick={() => setSelectedTags(selectedTags.filter(t => t !== tagId))}
+                            className="hover:text-white/80"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </Badge>
+                      );
+                    })}
                   </div>
                 </div>
               )}

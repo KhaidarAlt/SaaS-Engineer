@@ -1,12 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 import { useRoute, Link } from "wouter";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Search,
   ShoppingCart,
   Filter,
   ChevronRight,
   ChevronDown,
+  ChevronLeft,
   Tag,
   Sparkles,
   Package,
@@ -15,6 +16,9 @@ import {
   MapPin,
   Clock,
   MessageCircle,
+  Heart,
+  Eye,
+  ExternalLink,
 } from "lucide-react";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
@@ -34,12 +38,27 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { useMediaQuery } from "@/hooks/use-mobile";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { CardSkeleton } from "@/components/LoadingSpinner";
 import { useCart } from "@/contexts/CartContext";
 import { useToast } from "@/hooks/use-toast";
 import { trackEvent, updateCartSession } from "@/lib/analytics";
-import type { Tenant, Product, Category, Promotion } from "@shared/schema";
+import type { Tenant, Product, Category, Promotion, PromoBlock } from "@shared/schema";
 
 interface ProductWithPrice extends Product {
   computedPrice: string;
@@ -51,6 +70,16 @@ interface ProductWithPrice extends Product {
   discountName?: string;
 }
 
+const TAG_CONFIG: Record<string, { label: string; color: string }> = {
+  hit: { label: "Хит", color: "bg-amber-500" },
+  new: { label: "Новинка", color: "bg-blue-500" },
+  best_price: { label: "Лучшая цена", color: "bg-green-500" },
+  sale: { label: "Распродажа", color: "bg-red-500" },
+  delivery_today: { label: "Доставка сегодня", color: "bg-purple-500" },
+  in_stock: { label: "В наличии", color: "bg-teal-500" },
+  low_stock: { label: "Заканчивается", color: "bg-orange-500" },
+};
+
 interface CatalogData {
   tenant: Tenant;
   products: ProductWithPrice[];
@@ -58,7 +87,49 @@ interface CatalogData {
   promotions: Promotion[];
 }
 
-function ProductCard({ product, tenantSlug }: { product: ProductWithPrice; tenantSlug: string }) {
+function useFavorites(tenantSlug: string) {
+  const storageKey = `favorites_${tenantSlug}`;
+  const [favorites, setFavorites] = useState<string[]>(() => {
+    try {
+      const stored = localStorage.getItem(storageKey);
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const toggleFavorite = (productId: string) => {
+    setFavorites((prev) => {
+      const newFavorites = prev.includes(productId)
+        ? prev.filter((id) => id !== productId)
+        : [...prev, productId];
+      localStorage.setItem(storageKey, JSON.stringify(newFavorites));
+      return newFavorites;
+    });
+  };
+
+  const isFavorite = (productId: string) => favorites.includes(productId);
+
+  return { favorites, toggleFavorite, isFavorite };
+}
+
+function ProductCard({ 
+  product, 
+  tenantSlug, 
+  isFavorite, 
+  onToggleFavorite,
+  onQuickView,
+  showFavorites,
+  showQuickView
+}: { 
+  product: ProductWithPrice; 
+  tenantSlug: string;
+  isFavorite: boolean;
+  onToggleFavorite: (id: string) => void;
+  onQuickView: (product: ProductWithPrice) => void;
+  showFavorites: boolean;
+  showQuickView: boolean;
+}) {
   const { addItem } = useCart();
   const { toast } = useToast();
   
@@ -122,11 +193,59 @@ function ProductCard({ product, tenantSlug }: { product: ProductWithPrice; tenan
                 </Badge>
               )}
             </div>
-            <div className="absolute top-2 right-2 flex flex-col gap-1">
+            <div className="absolute top-2 right-2 flex flex-col gap-1 items-end">
+              {showFavorites && (
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className={`rounded-full bg-background/80 backdrop-blur-sm ${isFavorite ? 'text-red-500' : 'text-muted-foreground'}`}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onToggleFavorite(product.id);
+                  }}
+                  data-testid={`button-favorite-${product.id}`}
+                >
+                  <Heart className={`h-4 w-4 ${isFavorite ? 'fill-current' : ''}`} />
+                </Button>
+              )}
               {!isInStock && (
                 <Badge variant="destructive">Нет в наличии</Badge>
               )}
             </div>
+            {showQuickView && (
+              <div className="hidden md:flex absolute inset-0 items-center justify-center bg-black/40 opacity-0 hover:opacity-100 transition-opacity cursor-pointer rounded-lg">
+                <Button
+                  size="icon"
+                  variant="secondary"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onQuickView(product);
+                  }}
+                  data-testid={`button-quick-view-${product.id}`}
+                >
+                  <Eye className="h-5 w-5" />
+                </Button>
+              </div>
+            )}
+            {product.tags && product.tags.length > 0 && (
+              <div className="absolute bottom-2 left-2 flex flex-wrap gap-1">
+                {product.tags.slice(0, 2).map((tag: string) => {
+                  const config = TAG_CONFIG[tag];
+                  if (!config) return null;
+                  return (
+                    <Badge 
+                      key={tag} 
+                      className={`${config.color} text-white text-xs`}
+                      data-testid={`badge-tag-${tag}-${product.id}`}
+                    >
+                      {config.label}
+                    </Badge>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </Link>
         <CardContent className="p-4">
@@ -165,6 +284,386 @@ function ProductCard({ product, tenantSlug }: { product: ProductWithPrice; tenan
   );
 }
 
+function QuickViewModal({
+  product,
+  isOpen,
+  tenantSlug,
+  onClose,
+  isMobile,
+}: {
+  product: ProductWithPrice | null;
+  isOpen: boolean;
+  tenantSlug: string;
+  onClose: () => void;
+  isMobile: boolean;
+}) {
+  const { addItem } = useCart();
+  const { toast } = useToast();
+
+  if (!product) return null;
+
+  const isInStock = product.alwaysInStock || product.stockQty > 0;
+  const shortDescription = product.description
+    ? product.description.substring(0, 200) + (product.description.length > 200 ? "..." : "")
+    : "";
+
+  const formatPrice = (value: number | string) => {
+    const num = typeof value === "string" ? parseFloat(value) : value;
+    return new Intl.NumberFormat("ru-KZ").format(num) + " ₸";
+  };
+
+  const handleAddToCart = () => {
+    addItem(product);
+    toast({
+      title: "Добавлено в корзину",
+      description: (
+        <div className="flex items-center justify-between gap-4">
+          <span className="truncate">{product.name}</span>
+          <a
+            href={`/c/${tenantSlug}/cart`}
+            className="shrink-0 text-primary font-medium hover:underline"
+          >
+            Оформить
+          </a>
+        </div>
+      ),
+    });
+    onClose();
+  };
+
+  const modalContent = (
+    <div className="space-y-4">
+      <div className="w-full aspect-square bg-muted rounded-lg overflow-hidden">
+        {product.mainImageUrl ? (
+          <img
+            src={product.mainImageUrl}
+            alt={product.name}
+            className="w-full h-full object-cover"
+            data-testid={`img-quick-view-product-${product.id}`}
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center">
+            <Package className="h-16 w-16 text-muted-foreground/30" />
+          </div>
+        )}
+      </div>
+
+      <div>
+        <h2 className="text-xl font-bold mb-2" data-testid={`heading-product-name-${product.id}`}>
+          {product.name}
+        </h2>
+
+        {product.tags && product.tags.length > 0 && (
+          <div className="flex flex-wrap gap-2 mb-3">
+            {product.tags.slice(0, 3).map((tag: string) => {
+              const config = TAG_CONFIG[tag];
+              if (!config) return null;
+              return (
+                <Badge
+                  key={tag}
+                  className={`${config.color} text-white text-xs`}
+                  data-testid={`badge-qv-tag-${tag}-${product.id}`}
+                >
+                  {config.label}
+                </Badge>
+              );
+            })}
+          </div>
+        )}
+
+        <div className="mb-4">
+          {product.hasDiscount ? (
+            <div className="flex items-center gap-2">
+              <p
+                className="text-2xl font-bold text-red-500"
+                data-testid={`text-qv-price-${product.id}`}
+              >
+                {formatPrice(product.computedPrice)}
+              </p>
+              <p
+                className="text-lg text-muted-foreground line-through"
+                data-testid={`text-qv-original-price-${product.id}`}
+              >
+                {formatPrice(product.originalPrice)}
+              </p>
+              {product.discountPercent && (
+                <Badge className="bg-red-500 text-white" data-testid={`badge-qv-discount-${product.id}`}>
+                  -{Math.round(product.discountPercent)}%
+                </Badge>
+              )}
+            </div>
+          ) : (
+            <p className="text-2xl font-bold" data-testid={`text-qv-price-${product.id}`}>
+              {formatPrice(product.computedPrice)}
+            </p>
+          )}
+        </div>
+
+        {!isInStock && (
+          <Badge variant="destructive" className="mb-3" data-testid={`badge-qv-out-of-stock-${product.id}`}>
+            Нет в наличии
+          </Badge>
+        )}
+
+        {shortDescription && (
+          <p
+            className="text-sm text-muted-foreground mb-4"
+            data-testid={`text-qv-description-${product.id}`}
+          >
+            {shortDescription}
+          </p>
+        )}
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <Button
+          size="lg"
+          disabled={!isInStock}
+          onClick={handleAddToCart}
+          className="w-full"
+          data-testid={`button-qv-add-cart-${product.id}`}
+        >
+          <ShoppingCart className="h-4 w-4 mr-2" />
+          Добавить в корзину
+        </Button>
+        <Link href={`/c/${tenantSlug}/product/${product.id}`}>
+          <Button
+            variant="outline"
+            size="lg"
+            className="w-full"
+            data-testid={`button-qv-view-details-${product.id}`}
+            onClick={onClose}
+          >
+            Подробнее о товаре
+          </Button>
+        </Link>
+      </div>
+    </div>
+  );
+
+  if (isMobile) {
+    return (
+      <Sheet open={isOpen} onOpenChange={onClose} data-testid={`sheet-quick-view-${product.id}`}>
+        <SheetContent side="bottom" className="max-h-[90vh] overflow-y-auto">
+          <SheetHeader className="mb-6">
+            <SheetTitle data-testid={`sheet-title-quick-view-${product.id}`}>
+              Быстрый просмотр
+            </SheetTitle>
+          </SheetHeader>
+          {modalContent}
+        </SheetContent>
+      </Sheet>
+    );
+  }
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose} data-testid={`dialog-quick-view-${product.id}`}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle data-testid={`dialog-title-quick-view-${product.id}`}>
+            Быстрый просмотр
+          </DialogTitle>
+        </DialogHeader>
+        <div className="grid grid-cols-2 gap-6">
+          <div className="w-full aspect-square bg-muted rounded-lg overflow-hidden">
+            {product.mainImageUrl ? (
+              <img
+                src={product.mainImageUrl}
+                alt={product.name}
+                className="w-full h-full object-cover"
+                data-testid={`img-dialog-quick-view-product-${product.id}`}
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center">
+                <Package className="h-16 w-16 text-muted-foreground/30" />
+              </div>
+            )}
+          </div>
+          {modalContent}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function PromoCarousel({
+  promoBlocks,
+  tenantSlug,
+  tenantPhone,
+}: {
+  promoBlocks: PromoBlock[];
+  tenantSlug: string;
+  tenantPhone?: string | null;
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [isAutoScrollPaused, setIsAutoScrollPaused] = useState(false);
+
+  const scrollToIndex = useCallback((index: number) => {
+    if (!scrollRef.current) return;
+    const scrollContainer = scrollRef.current;
+    const items = scrollContainer.children;
+    if (items[index]) {
+      const item = items[index] as HTMLElement;
+      scrollContainer.scrollTo({
+        left: item.offsetLeft - scrollContainer.offsetLeft,
+        behavior: "smooth",
+      });
+    }
+    setCurrentIndex(index);
+  }, []);
+
+  useEffect(() => {
+    if (promoBlocks.length <= 1 || isAutoScrollPaused) return;
+    const interval = setInterval(() => {
+      const nextIndex = (currentIndex + 1) % promoBlocks.length;
+      scrollToIndex(nextIndex);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [currentIndex, promoBlocks.length, isAutoScrollPaused, scrollToIndex]);
+
+  useEffect(() => {
+    const scrollContainer = scrollRef.current;
+    if (!scrollContainer) return;
+
+    const handleScroll = () => {
+      const scrollLeft = scrollContainer.scrollLeft;
+      const itemWidth = scrollContainer.offsetWidth;
+      const newIndex = Math.round(scrollLeft / itemWidth);
+      if (newIndex !== currentIndex && newIndex >= 0 && newIndex < promoBlocks.length) {
+        setCurrentIndex(newIndex);
+      }
+    };
+
+    scrollContainer.addEventListener("scroll", handleScroll);
+    return () => scrollContainer.removeEventListener("scroll", handleScroll);
+  }, [currentIndex, promoBlocks.length]);
+
+  const handleButtonClick = (block: PromoBlock) => {
+    if (block.linkType === "whatsapp" && tenantPhone) {
+      const phone = tenantPhone.replace(/\D/g, "");
+      const message = encodeURIComponent(block.title || "Здравствуйте! Хочу узнать подробнее");
+      window.open(`https://wa.me/${phone}?text=${message}`, "_blank");
+    } else if (block.linkType === "crm" && block.linkUrl) {
+      window.open(block.linkUrl, "_blank");
+    }
+  };
+
+  if (!promoBlocks || promoBlocks.length === 0) return null;
+
+  return (
+    <section 
+      className="w-full" 
+      data-testid="section-promo-carousel"
+      onMouseEnter={() => setIsAutoScrollPaused(true)}
+      onMouseLeave={() => setIsAutoScrollPaused(false)}
+      onTouchStart={() => setIsAutoScrollPaused(true)}
+      onTouchEnd={() => setTimeout(() => setIsAutoScrollPaused(false), 3000)}
+    >
+      <div className="max-w-7xl mx-auto px-4 md:px-6 lg:px-8 py-4">
+        <div className="relative">
+          <div
+            ref={scrollRef}
+            className="flex overflow-x-auto snap-x snap-mandatory scrollbar-hide gap-4"
+            style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+            data-testid="container-promo-slides"
+          >
+            {promoBlocks.map((block, index) => (
+              <motion.div
+                key={block.id}
+                className="flex-shrink-0 w-full snap-center"
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.4, delay: index * 0.1 }}
+                data-testid={`promo-block-${block.id}`}
+              >
+                <div className="relative aspect-[21/9] md:aspect-[3/1] rounded-lg overflow-hidden">
+                  <img
+                    src={block.imageUrl}
+                    alt={block.title || "Promo"}
+                    className="w-full h-full object-cover"
+                    loading={index === 0 ? "eager" : "lazy"}
+                    data-testid={`img-promo-${block.id}`}
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+                  <div className="absolute bottom-0 left-0 right-0 p-4 md:p-6">
+                    <AnimatePresence>
+                      {block.title && (
+                        <motion.h3
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className="text-white text-lg md:text-2xl font-bold mb-1 md:mb-2 line-clamp-2"
+                          data-testid={`heading-promo-title-${block.id}`}
+                        >
+                          {block.title}
+                        </motion.h3>
+                      )}
+                    </AnimatePresence>
+                    {block.description && (
+                      <p
+                        className="text-white/90 text-sm md:text-base mb-3 line-clamp-2 max-w-2xl"
+                        data-testid={`text-promo-description-${block.id}`}
+                      >
+                        {block.description}
+                      </p>
+                    )}
+                    <Button
+                      onClick={() => handleButtonClick(block)}
+                      className="bg-white hover:bg-white/90 text-black"
+                      data-testid={`button-promo-action-${block.id}`}
+                    >
+                      {block.linkType === "crm" && <ExternalLink className="h-4 w-4 mr-2" />}
+                      {block.linkType === "whatsapp" && <MessageCircle className="h-4 w-4 mr-2" />}
+                      {block.buttonText || "Подробнее"}
+                    </Button>
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+
+          {promoBlocks.length > 1 && (
+            <>
+              <button
+                onClick={() => scrollToIndex((currentIndex - 1 + promoBlocks.length) % promoBlocks.length)}
+                className="absolute left-2 top-1/2 -translate-y-1/2 hidden md:flex items-center justify-center w-10 h-10 rounded-full bg-white/80 hover:bg-white text-black shadow-lg transition-all"
+                aria-label="Previous slide"
+                data-testid="button-promo-prev"
+              >
+                <ChevronLeft className="h-5 w-5" />
+              </button>
+              <button
+                onClick={() => scrollToIndex((currentIndex + 1) % promoBlocks.length)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 hidden md:flex items-center justify-center w-10 h-10 rounded-full bg-white/80 hover:bg-white text-black shadow-lg transition-all"
+                aria-label="Next slide"
+                data-testid="button-promo-next"
+              >
+                <ChevronRight className="h-5 w-5" />
+              </button>
+
+              <div className="flex justify-center gap-2 mt-3" data-testid="container-promo-dots">
+                {promoBlocks.map((_, index) => (
+                  <button
+                    key={index}
+                    onClick={() => scrollToIndex(index)}
+                    className={`w-2 h-2 rounded-full transition-all ${
+                      index === currentIndex
+                        ? "bg-primary w-6"
+                        : "bg-muted-foreground/30 hover:bg-muted-foreground/50"
+                    }`}
+                    aria-label={`Go to slide ${index + 1}`}
+                    data-testid={`button-promo-dot-${index}`}
+                  />
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export default function CatalogHome() {
   const [, params] = useRoute("/c/:slug");
   const slug = params?.slug || "";
@@ -174,7 +673,10 @@ export default function CatalogHome() {
   const [sizeFilter, setSizeFilter] = useState<string>("all");
   const [colorFilter, setColorFilter] = useState<string>("all");
   const { items, totalItems, lastAddedAt } = useCart();
+  const { isFavorite, toggleFavorite } = useFavorites(slug);
   const [isCartPulsing, setIsCartPulsing] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<ProductWithPrice | null>(null);
+  const isMobile = useMediaQuery("(max-width: 768px)");
   
   useEffect(() => {
     if (lastAddedAt > 0) {
@@ -186,6 +688,11 @@ export default function CatalogHome() {
 
   const { data, isLoading, error } = useQuery<CatalogData>({
     queryKey: ["/api/catalog", slug],
+    enabled: !!slug,
+  });
+
+  const { data: promoBlocks = [] } = useQuery<PromoBlock[]>({
+    queryKey: ["/api/catalog", slug, "promo-blocks"],
     enabled: !!slug,
   });
 
@@ -329,17 +836,24 @@ export default function CatalogHome() {
         <div className="max-w-7xl mx-auto px-4 md:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16 gap-4">
             <Link href={`/c/${slug}`}>
-              <div className="flex items-center gap-3 cursor-pointer">
-                {data?.tenant?.logoUrl && (
-                  <img 
-                    src={data.tenant.logoUrl} 
-                    alt={data.tenant.name} 
-                    className="h-10 w-10 object-contain rounded-lg"
-                  />
+              <div className="flex flex-col cursor-pointer">
+                <div className="flex items-center gap-3">
+                  {data?.tenant?.logoUrl && (
+                    <img 
+                      src={data.tenant.logoUrl} 
+                      alt={data.tenant.name} 
+                      className="h-10 w-10 object-contain rounded-lg"
+                    />
+                  )}
+                  <h1 className="text-xl font-bold tracking-tight">
+                    {data?.tenant?.name || "Каталог"}
+                  </h1>
+                </div>
+                {(data?.tenant as any)?.catalogUsp && (
+                  <p className="text-sm text-muted-foreground mt-0.5 line-clamp-1" data-testid="text-catalog-usp">
+                    {(data.tenant as any).catalogUsp}
+                  </p>
                 )}
-                <h1 className="text-xl font-bold tracking-tight">
-                  {data?.tenant?.name || "Каталог"}
-                </h1>
               </div>
             </Link>
             <div className="hidden md:flex items-center gap-4 text-sm text-muted-foreground">
@@ -431,6 +945,14 @@ export default function CatalogHome() {
           )}
         </div>
       </header>
+
+      {promoBlocks.length > 0 && (
+        <PromoCarousel
+          promoBlocks={promoBlocks}
+          tenantSlug={slug}
+          tenantPhone={data?.tenant?.contactPhone}
+        />
+      )}
 
       {/* Demo banner for testing */}
       {slug === "demo" && (
@@ -657,7 +1179,16 @@ export default function CatalogHome() {
         ) : filteredProducts && filteredProducts.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {filteredProducts.map((product) => (
-              <ProductCard key={product.id} product={product} tenantSlug={slug} />
+              <ProductCard 
+                key={product.id} 
+                product={product} 
+                tenantSlug={slug} 
+                isFavorite={isFavorite(product.id)}
+                onToggleFavorite={toggleFavorite}
+                onQuickView={setSelectedProduct}
+                showFavorites={(data?.tenant as any)?.showFavorites !== false}
+                showQuickView={(data?.tenant as any)?.showQuickView !== false}
+              />
             ))}
           </div>
         ) : (
@@ -722,6 +1253,36 @@ export default function CatalogHome() {
         </div>
       </footer>
 
+      <QuickViewModal
+        product={selectedProduct}
+        isOpen={!!selectedProduct}
+        tenantSlug={slug}
+        onClose={() => setSelectedProduct(null)}
+        isMobile={isMobile}
+      />
+
+      {/* Floating WhatsApp Button */}
+      {data?.tenant?.contactPhone && data.tenant.showFloatingWhatsApp && (
+        <motion.div
+          initial={{ scale: 0, opacity: 0, y: 20 }}
+          animate={{ scale: 1, opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, ease: "easeOut" }}
+          className="fixed bottom-6 right-6 z-50"
+        >
+          <Button
+            className="h-14 w-14 rounded-full shadow-lg bg-[#25D366] hover:bg-[#25D366]/90 text-white group flex items-center justify-center"
+            onClick={() => {
+              const phone = data.tenant.contactPhone!.replace(/\D/g, "");
+              const message = encodeURIComponent("Здравствуйте! Хочу узнать подробнее");
+              window.open(`https://wa.me/${phone}?text=${message}`, "_blank");
+            }}
+            data-testid="button-floating-whatsapp"
+          >
+            <MessageCircle className="h-6 w-6 group-hover:animate-pulse" />
+          </Button>
+        </motion.div>
+      )}
+
       {/* Floating Cart Button for Mobile */}
       {totalItems > 0 && (
         <Link href={`/c/${slug}/cart`}>
@@ -729,7 +1290,7 @@ export default function CatalogHome() {
             initial={{ scale: 0, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0, opacity: 0 }}
-            className={`fixed bottom-6 right-6 z-50 md:hidden ${isCartPulsing ? 'animate-bounce' : ''}`}
+            className={`fixed bottom-24 right-6 z-50 md:hidden ${isCartPulsing ? 'animate-bounce' : ''}`}
           >
             <Button 
               size="lg" 

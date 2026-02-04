@@ -49,6 +49,7 @@ const tenantNavItems: NavItem[] = [
   { href: "/dashboard/orders", label: "Заказы", icon: ShoppingCart },
   { href: "/dashboard/payments", label: "Платежи", icon: Wallet },
   { href: "/dashboard/discounts", label: "Скидки", icon: Percent },
+  { href: "/dashboard/promo-zone", label: "Промо-зона", icon: Gift },
   { href: "/dashboard/import", label: "Импорт", icon: Upload, lockForPlans: ["Старт"] },
   { href: "/dashboard/ai", label: "AI-ассистент", icon: Bot, lockForPlans: ["Старт", "Каталог"] },
   { href: "/dashboard/smart-contact", label: "Умный контакт", icon: MessageCircle, lockForPlans: ["Старт", "Каталог"] },

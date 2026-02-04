@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { useRoute, Link } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -11,6 +11,12 @@ import {
   Plus,
   ChevronLeft,
   ChevronRight,
+  Bot,
+  Send,
+  Loader2,
+  X,
+  Heart,
+  Eye,
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
@@ -18,10 +24,21 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { PageLoader } from "@/components/LoadingSpinner";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { useCart } from "@/contexts/CartContext";
 import { useToast } from "@/hooks/use-toast";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { trackEvent } from "@/lib/analytics";
+import { apiRequest } from "@/lib/queryClient";
 import type { Product, Category, Promotion, Tenant } from "@shared/schema";
+
+interface ChatMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+}
 
 interface ProductWithPrice extends Product {
   computedPrice: string;
@@ -43,6 +60,13 @@ interface ProductDetailData {
   };
 }
 
+interface CatalogData {
+  tenant: Tenant;
+  products: ProductWithPrice[];
+  categories: Category[];
+  promotions: Promotion[];
+}
+
 export default function ProductDetailPage() {
   const [, params] = useRoute("/c/:slug/product/:id");
   const slug = params?.slug || "";
@@ -52,12 +76,58 @@ export default function ProductDetailPage() {
   const [addedToCart, setAddedToCart] = useState(false);
   const [selectedSize, setSelectedSize] = useState<string | null>(null);
   const [selectedColor, setSelectedColor] = useState<string | null>(null);
+  const [aiChatOpen, setAiChatOpen] = useState(false);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const chatScrollRef = useRef<HTMLDivElement>(null);
   const { addItem, totalItems } = useCart();
   const { toast } = useToast();
+
+  const aiChatMutation = useMutation({
+    mutationFn: async (message: string) => {
+      const res = await apiRequest("POST", `/api/catalog/${slug}/product/${productId}/ai-chat`, { message });
+      return res.json() as Promise<{ response: string }>;
+    },
+    onSuccess: (data) => {
+      setChatMessages((prev) => [
+        ...prev,
+        { id: Date.now().toString(), role: "assistant", content: data.response },
+      ]);
+    },
+    onError: () => {
+      setChatMessages((prev) => [
+        ...prev,
+        { id: Date.now().toString(), role: "assistant", content: "Извините, произошла ошибка. Попробуйте ещё раз." },
+      ]);
+    },
+  });
+
+  const handleSendMessage = () => {
+    const message = chatInput.trim();
+    if (!message || aiChatMutation.isPending) return;
+    
+    setChatMessages((prev) => [
+      ...prev,
+      { id: Date.now().toString(), role: "user", content: message },
+    ]);
+    setChatInput("");
+    aiChatMutation.mutate(message);
+  };
+
+  useEffect(() => {
+    if (chatScrollRef.current) {
+      chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
+    }
+  }, [chatMessages]);
 
   const { data, isLoading, error } = useQuery<ProductDetailData>({
     queryKey: ["/api/catalog", slug, "product", productId],
     enabled: !!slug && !!productId,
+  });
+
+  const { data: catalogData } = useQuery<CatalogData>({
+    queryKey: ["/api/catalog", slug],
+    enabled: !!slug,
   });
 
   const trackedRef = useRef(false);
@@ -74,9 +144,119 @@ export default function ProductDetailPage() {
     }
   }, [slug, productId]);
 
+  const isMobile = useIsMobile();
+
   const formatPrice = (value: number | string) => {
     const num = typeof value === "string" ? parseFloat(value) : value;
     return new Intl.NumberFormat("ru-KZ").format(num) + " ₸";
+  };
+
+  const getRelatedProducts = () => {
+    if (!data?.product || !catalogData?.products) return [];
+    
+    const relatedProducts = catalogData.products.filter(
+      (p) => 
+        p.categoryId === data.product.categoryId && 
+        p.id !== data.product.id &&
+        p.isActive
+    );
+    
+    return relatedProducts.slice(0, 4);
+  };
+
+  const CompactProductCard = ({ 
+    product, 
+    onAddToCart 
+  }: { 
+    product: ProductWithPrice;
+    onAddToCart: (product: ProductWithPrice) => void;
+  }) => {
+    const isInStock = product.alwaysInStock || product.stockQty > 0;
+
+    return (
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.3 }}
+        className="flex-shrink-0 w-40 md:w-48"
+      >
+        <Card className="overflow-hidden h-full hover-elevate flex flex-col">
+          <Link href={`/c/${slug}/product/${product.id}`}>
+            <div className="aspect-square relative overflow-hidden bg-muted cursor-pointer">
+              {product.mainImageUrl ? (
+                <img
+                  src={product.mainImageUrl}
+                  alt={product.name}
+                  className="w-full h-full object-cover"
+                  loading="lazy"
+                  data-testid={`img-cross-sell-${product.id}`}
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center">
+                  <Package className="h-12 w-12 text-muted-foreground/30" />
+                </div>
+              )}
+              {product.hasDiscount && product.discountPercent && (
+                <div className="absolute top-2 left-2">
+                  <Badge className="bg-red-500 text-white">
+                    -{Math.round(product.discountPercent)}%
+                  </Badge>
+                </div>
+              )}
+            </div>
+          </Link>
+          <CardContent className="p-3 flex flex-col flex-1">
+            <Link href={`/c/${slug}/product/${product.id}`}>
+              <h3 className="font-medium line-clamp-2 text-sm cursor-pointer text-foreground hover:text-primary mb-2" data-testid={`heading-cross-sell-${product.id}`}>
+                {product.name}
+              </h3>
+            </Link>
+            <div className="mt-auto">
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <div className="flex flex-col">
+                  {product.hasDiscount ? (
+                    <>
+                      <p className="text-sm font-bold text-red-500">
+                        {formatPrice(product.computedPrice)}
+                      </p>
+                      <p className="text-xs text-muted-foreground line-through">
+                        {formatPrice(product.originalPrice)}
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-sm font-bold">{formatPrice(product.computedPrice)}</p>
+                  )}
+                </div>
+              </div>
+              <Button
+                size="sm"
+                disabled={!isInStock}
+                onClick={() => onAddToCart(product)}
+                className="w-full"
+                data-testid={`button-cross-sell-add-cart-${product.id}`}
+              >
+                <ShoppingCart className="h-3 w-3" />
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </motion.div>
+    );
+  };
+
+  const handleCrossSellAddToCart = (product: ProductWithPrice) => {
+    addItem(product);
+    toast({
+      title: "Добавлено в корзину",
+      description: `${product.name}`,
+    });
+    
+    trackEvent({
+      tenantSlug: slug,
+      eventType: 'add_to_cart',
+      productId: product.id,
+      metadata: { price: product.computedPrice },
+    });
   };
 
   const handleAddToCart = () => {
@@ -505,7 +685,129 @@ export default function ProductDetailPage() {
                 </AnimatePresence>
               </Button>
             </div>
+
+            {(catalogData?.tenant as any)?.showAiConsultant !== false && (
+            <Sheet open={aiChatOpen} onOpenChange={setAiChatOpen}>
+              <SheetTrigger asChild>
+                <Button
+                  variant="outline"
+                  className="w-full gap-2"
+                  data-testid="button-ai-consultant"
+                >
+                  <Bot className="h-5 w-5" />
+                  Спросить AI об этом товаре
+                </Button>
+              </SheetTrigger>
+              <SheetContent className="flex flex-col w-full sm:max-w-md">
+                <SheetHeader>
+                  <SheetTitle className="flex items-center gap-2">
+                    <Bot className="h-5 w-5 text-primary" />
+                    AI-консультант
+                  </SheetTitle>
+                </SheetHeader>
+                <div className="flex-1 flex flex-col min-h-0">
+                  <ScrollArea className="flex-1 pr-4" ref={chatScrollRef as any}>
+                    <div className="space-y-4 py-4">
+                      {chatMessages.length === 0 && (
+                        <div className="text-center text-muted-foreground py-8">
+                          <Bot className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                          <p className="text-sm">
+                            Привет! Я AI-консультант.
+                            <br />
+                            Задайте вопрос о товаре "{product.name}"
+                          </p>
+                        </div>
+                      )}
+                      {chatMessages.map((msg) => (
+                        <div
+                          key={msg.id}
+                          className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+                        >
+                          <div
+                            className={`max-w-[85%] rounded-lg px-4 py-2 ${
+                              msg.role === "user"
+                                ? "bg-primary text-primary-foreground"
+                                : "bg-muted"
+                            }`}
+                            data-testid={`chat-message-${msg.role}`}
+                          >
+                            <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                          </div>
+                        </div>
+                      ))}
+                      {aiChatMutation.isPending && (
+                        <div className="flex justify-start">
+                          <div className="bg-muted rounded-lg px-4 py-2 flex items-center gap-2">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            <span className="text-sm text-muted-foreground">AI думает...</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </ScrollArea>
+                  <div className="flex gap-2 pt-4 border-t">
+                    <Input
+                      placeholder="Задайте вопрос о товаре..."
+                      value={chatInput}
+                      onChange={(e) => setChatInput(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSendMessage()}
+                      disabled={aiChatMutation.isPending}
+                      data-testid="input-ai-chat"
+                    />
+                    <Button
+                      size="icon"
+                      onClick={handleSendMessage}
+                      disabled={!chatInput.trim() || aiChatMutation.isPending}
+                      data-testid="button-send-ai-message"
+                    >
+                      <Send className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              </SheetContent>
+            </Sheet>
+            )}
           </motion.div>
+
+          {(catalogData?.tenant as any)?.showCrossSell !== false && getRelatedProducts().length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, delay: 0.2 }}
+              className="col-span-full"
+              data-testid="section-cross-sell"
+            >
+              <div className="mt-16 pt-8 border-t border-border">
+                <h2 className="text-2xl font-bold mb-6" data-testid="heading-cross-sell">
+                  С этим товаром берут
+                </h2>
+                
+                {isMobile ? (
+                  <ScrollArea className="pb-4">
+                    <div className="flex gap-4">
+                      {getRelatedProducts().map((product) => (
+                        <CompactProductCard
+                          key={product.id}
+                          product={product}
+                          onAddToCart={handleCrossSellAddToCart}
+                        />
+                      ))}
+                    </div>
+                  </ScrollArea>
+                ) : (
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {getRelatedProducts().map((product) => (
+                      <CompactProductCard
+                        key={product.id}
+                        product={product}
+                        onAddToCart={handleCrossSellAddToCart}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          )}
         </div>
       </main>
 

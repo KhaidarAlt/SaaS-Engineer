@@ -22,6 +22,7 @@ import OrdersPage from "@/pages/dashboard/OrdersPage";
 import OrderDetailPage from "@/pages/dashboard/OrderDetailPage";
 import PaymentsPage from "@/pages/dashboard/PaymentsPage";
 import DiscountsPage from "@/pages/dashboard/DiscountsPage";
+import PromoZonePage from "@/pages/dashboard/PromoZonePage";
 import AnalyticsPage from "@/pages/dashboard/AnalyticsPage";
 import BillingPage from "@/pages/dashboard/BillingPage";
 import SettingsPage from "@/pages/dashboard/SettingsPage";
@@ -164,6 +165,9 @@ function Router() {
       </Route>
       <Route path="/dashboard/discounts/new">
         <ProtectedRoute component={DiscountsPage} />
+      </Route>
+      <Route path="/dashboard/promo-zone">
+        <ProtectedRoute component={PromoZonePage} />
       </Route>
       <Route path="/dashboard/analytics">
         <ProtectedRoute component={AnalyticsPage} />

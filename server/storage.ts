@@ -9,7 +9,7 @@ import {
   wahaInstances, aiResponseCorrections, leads, passwordResetTokens, tenantLinks,
   crmIntegrations, crmSyncLogs, orderStatusLogs, kaspiIntegrations, payments,
   waCloudIntegrations, waCloudPhoneNumbers, waCloudTemplates, waCloudCampaigns,
-  waCloudWarmupStatus, waCloudAnalytics, waCloudRiskEvents,
+  waCloudWarmupStatus, waCloudAnalytics, waCloudRiskEvents, promoBlocks,
   type User, type InsertUser, type Tenant, type InsertTenant,
   type Subscription, type InsertSubscription, type Plan, type InsertPlan,
   type Product, type InsertProduct, type Category, type InsertCategory,
@@ -46,6 +46,7 @@ import {
   type WaCloudWarmupStatus, type InsertWaCloudWarmupStatus,
   type WaCloudAnalytics, type InsertWaCloudAnalytics,
   type WaCloudRiskEvent, type InsertWaCloudRiskEvent,
+  type PromoBlock, type InsertPromoBlock,
 } from "@shared/schema";
 import bcrypt from "bcryptjs";
 
@@ -102,6 +103,13 @@ export interface IStorage {
   deleteDiscount(id: string, tenantId: string): Promise<boolean>;
   
   getPromotions(tenantId: string): Promise<Promotion[]>;
+  
+  // Promo Blocks
+  getPromoBlocks(tenantId: string): Promise<PromoBlock[]>;
+  getPromoBlock(id: string): Promise<PromoBlock | undefined>;
+  createPromoBlock(data: InsertPromoBlock): Promise<PromoBlock>;
+  updatePromoBlock(id: string, data: Partial<InsertPromoBlock>): Promise<PromoBlock | undefined>;
+  deletePromoBlock(id: string): Promise<void>;
   
   getOrders(tenantId: string): Promise<Order[]>;
   getOrder(id: string, tenantId: string): Promise<(Order & { items?: OrderItem[] }) | undefined>;
@@ -559,6 +567,35 @@ export class DatabaseStorage implements IStorage {
 
   async getPromotions(tenantId: string): Promise<Promotion[]> {
     return db.select().from(promotions).where(eq(promotions.tenantId, tenantId)).orderBy(desc(promotions.priority));
+  }
+
+  // Promo Blocks
+  async getPromoBlocks(tenantId: string): Promise<PromoBlock[]> {
+    return db.select().from(promoBlocks)
+      .where(eq(promoBlocks.tenantId, tenantId))
+      .orderBy(promoBlocks.sortOrder);
+  }
+
+  async getPromoBlock(id: string): Promise<PromoBlock | undefined> {
+    const [block] = await db.select().from(promoBlocks).where(eq(promoBlocks.id, id));
+    return block;
+  }
+
+  async createPromoBlock(data: InsertPromoBlock): Promise<PromoBlock> {
+    const [block] = await db.insert(promoBlocks).values(data).returning();
+    return block;
+  }
+
+  async updatePromoBlock(id: string, data: Partial<InsertPromoBlock>): Promise<PromoBlock | undefined> {
+    const [block] = await db.update(promoBlocks)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(promoBlocks.id, id))
+      .returning();
+    return block;
+  }
+
+  async deletePromoBlock(id: string): Promise<void> {
+    await db.delete(promoBlocks).where(eq(promoBlocks.id, id));
   }
 
   async getOrders(tenantId: string): Promise<Order[]> {

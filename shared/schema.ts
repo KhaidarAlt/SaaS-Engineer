@@ -57,6 +57,18 @@ export const tenants = pgTable("tenants", {
   aiSystemPrompt: text("ai_system_prompt"),
   aiTypingDelay: integer("ai_typing_delay").default(0),
   customDomain: text("custom_domain"),
+  // Catalog settings
+  catalogUsp: text("catalog_usp"), // УТП в шапке (макс 120 символов)
+  showProductSpecs: boolean("show_product_specs").notNull().default(true),
+  showProductStock: boolean("show_product_stock").notNull().default(true),
+  showPaymentMethods: boolean("show_payment_methods").notNull().default(true),
+  showWhatsAppButton: boolean("show_whatsapp_button").notNull().default(true),
+  showQuickView: boolean("show_quick_view").notNull().default(true),
+  showFavorites: boolean("show_favorites").notNull().default(true),
+  showCrossSell: boolean("show_cross_sell").notNull().default(true),
+  showFilters: boolean("show_filters").notNull().default(true),
+  showFloatingWhatsApp: boolean("show_floating_whatsapp").notNull().default(true),
+  showAiConsultant: boolean("show_ai_consultant").notNull().default(true),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -176,6 +188,7 @@ export const products = pgTable("products", {
   sizes: jsonb("sizes").$type<{size: string; qty: number}[]>(),
   colors: jsonb("colors").$type<{name: string; hex: string}[]>(),
   sizeColorStock: jsonb("size_color_stock").$type<{size: string; colorHex: string; qty: number}[]>(),
+  tags: text("tags").array().default(sql`'{}'::text[]`), // Теги: hit, new, best_price, sale, delivery_today, in_stock, low_stock
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -308,6 +321,33 @@ export const promotionsRelations = relations(promotions, ({ one }) => ({
 export const insertPromotionSchema = createInsertSchema(promotions).omit({ id: true, createdAt: true });
 export type InsertPromotion = z.infer<typeof insertPromotionSchema>;
 export type Promotion = typeof promotions.$inferSelect;
+
+// ============ PROMO BLOCKS ============
+export const promoBlocks = pgTable("promo_blocks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  imageUrl: text("image_url").notNull(),
+  title: text("title"),
+  description: text("description"), // до 300 символов
+  buttonText: text("button_text").notNull().default("Купить"),
+  linkType: text("link_type").notNull().default("whatsapp"), // whatsapp, crm
+  linkUrl: text("link_url"), // для CRM ссылки
+  sortOrder: integer("sort_order").notNull().default(0),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const promoBlocksRelations = relations(promoBlocks, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [promoBlocks.tenantId],
+    references: [tenants.id],
+  }),
+}));
+
+export const insertPromoBlockSchema = createInsertSchema(promoBlocks).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertPromoBlock = z.infer<typeof insertPromoBlockSchema>;
+export type PromoBlock = typeof promoBlocks.$inferSelect;
 
 // ============ ORDERS ============
 export const orders = pgTable("orders", {
