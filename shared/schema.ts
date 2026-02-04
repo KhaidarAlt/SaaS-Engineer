@@ -1443,6 +1443,166 @@ export const insertWaCloudRiskEventSchema = createInsertSchema(waCloudRiskEvents
 export type InsertWaCloudRiskEvent = z.infer<typeof insertWaCloudRiskEventSchema>;
 export type WaCloudRiskEvent = typeof waCloudRiskEvents.$inferSelect;
 
+// ============ SMART CONTACT (SAFE BULK MESSAGING) ============
+export const smartContacts = pgTable("smart_contacts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  phone: text("phone").notNull(),
+  name: text("name"),
+  
+  // Dialog flags
+  hasDialogHistory: boolean("has_dialog_history").notNull().default(false),
+  doNotDisturb: boolean("do_not_disturb").notNull().default(false),
+  isBlocked: boolean("is_blocked").notNull().default(false),
+  
+  // Interaction tracking
+  lastClientReplyAt: timestamp("last_client_reply_at"),
+  lastMessageSentAt: timestamp("last_message_sent_at"),
+  totalMessagesSent: integer("total_messages_sent").notNull().default(0),
+  totalRepliesReceived: integer("total_replies_received").notNull().default(0),
+  interactionScore: integer("interaction_score").notNull().default(50), // 0-100
+  
+  // Context for AI
+  lastOrderId: varchar("last_order_id"),
+  lastProductViewed: text("last_product_viewed"),
+  tags: text("tags").array().default(sql`ARRAY[]::text[]`),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const smartContactsRelations = relations(smartContacts, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [smartContacts.tenantId],
+    references: [tenants.id],
+  }),
+}));
+
+export const insertSmartContactSchema = createInsertSchema(smartContacts).omit({ 
+  id: true, createdAt: true, updatedAt: true 
+});
+export type InsertSmartContact = z.infer<typeof insertSmartContactSchema>;
+export type SmartContact = typeof smartContacts.$inferSelect;
+
+// Smart Messages - Individual message tracking
+export const smartMessages = pgTable("smart_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  contactId: varchar("contact_id").notNull().references(() => smartContacts.id),
+  
+  // Message details
+  triggerType: text("trigger_type").notNull(), // abandoned_cart, unpaid_order, reactivation, inactivity, manual
+  messageText: text("message_text").notNull(),
+  wahaMessageId: text("waha_message_id"),
+  
+  // Status
+  status: text("status").notNull().default("pending"), // pending, queued, sent, delivered, read, failed, cancelled
+  scheduledAt: timestamp("scheduled_at"),
+  sentAt: timestamp("sent_at"),
+  deliveredAt: timestamp("delivered_at"),
+  readAt: timestamp("read_at"),
+  
+  // Response tracking
+  replyReceived: boolean("reply_received").notNull().default(false),
+  replyAt: timestamp("reply_at"),
+  
+  // Error handling
+  errorMessage: text("error_message"),
+  retryCount: integer("retry_count").notNull().default(0),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const smartMessagesRelations = relations(smartMessages, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [smartMessages.tenantId],
+    references: [tenants.id],
+  }),
+  contact: one(smartContacts, {
+    fields: [smartMessages.contactId],
+    references: [smartContacts.id],
+  }),
+}));
+
+export const insertSmartMessageSchema = createInsertSchema(smartMessages).omit({ 
+  id: true, createdAt: true 
+});
+export type InsertSmartMessage = z.infer<typeof insertSmartMessageSchema>;
+export type SmartMessage = typeof smartMessages.$inferSelect;
+
+// Rate Metrics - Daily rate tracking for dynamic limits
+export const smartRateMetrics = pgTable("smart_rate_metrics", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  date: timestamp("date").notNull(),
+  
+  // Counts
+  sentCount: integer("sent_count").notNull().default(0),
+  deliveredCount: integer("delivered_count").notNull().default(0),
+  replyCount: integer("reply_count").notNull().default(0),
+  ignoreCount: integer("ignore_count").notNull().default(0),
+  errorCount: integer("error_count").notNull().default(0),
+  
+  // Calculated rates (%)
+  replyRate: integer("reply_rate").default(0),
+  deliveryRate: integer("delivery_rate").default(0),
+  
+  // Calculated limit for next period
+  calculatedLimit: integer("calculated_limit").notNull().default(100),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const smartRateMetricsRelations = relations(smartRateMetrics, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [smartRateMetrics.tenantId],
+    references: [tenants.id],
+  }),
+}));
+
+export const insertSmartRateMetricSchema = createInsertSchema(smartRateMetrics).omit({ 
+  id: true, createdAt: true 
+});
+export type InsertSmartRateMetric = z.infer<typeof insertSmartRateMetricSchema>;
+export type SmartRateMetric = typeof smartRateMetrics.$inferSelect;
+
+// Smart Contact Settings - Tenant-level configuration
+export const smartContactSettings = pgTable("smart_contact_settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id).unique(),
+  
+  // Module status
+  enabled: boolean("enabled").notNull().default(false),
+  
+  // Quiet hours
+  quietHoursStart: integer("quiet_hours_start").notNull().default(22), // 22:00
+  quietHoursEnd: integer("quiet_hours_end").notNull().default(9), // 09:00
+  
+  // Limits
+  maxFollowUpsPerClient: integer("max_follow_ups_per_client").notNull().default(3),
+  minHoursBetweenMessages: integer("min_hours_between_messages").notNull().default(24),
+  dailyMessageLimit: integer("daily_message_limit").notNull().default(100),
+  
+  // Safety
+  autoStopOnNegativeSignals: boolean("auto_stop_on_negative_signals").notNull().default(true),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const smartContactSettingsRelations = relations(smartContactSettings, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [smartContactSettings.tenantId],
+    references: [tenants.id],
+  }),
+}));
+
+export const insertSmartContactSettingsSchema = createInsertSchema(smartContactSettings).omit({ 
+  id: true, createdAt: true, updatedAt: true 
+});
+export type InsertSmartContactSettings = z.infer<typeof insertSmartContactSettingsSchema>;
+export type SmartContactSettings = typeof smartContactSettings.$inferSelect;
+
 // ============ FORM VALIDATION SCHEMAS ============
 export const loginSchema = z.object({
   email: z.string().email("Введите корректный email"),
