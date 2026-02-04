@@ -218,8 +218,8 @@ export default function PromoZonePage() {
           variant: "destructive" 
         });
       }
-      // Store full URL path for display
-      form.setValue("imageUrl", `/objects/${result.objectPath}`);
+      // Store full URL path for display (objectPath already includes /objects/ prefix)
+      form.setValue("imageUrl", result.objectPath);
     }
 
     if (fileInputRef.current) {
