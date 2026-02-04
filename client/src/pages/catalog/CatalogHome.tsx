@@ -45,7 +45,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { useMediaQuery } from "@/hooks/use-mobile";
+import { useIsMobile } from "@/hooks/use-mobile";
 import {
   Sheet,
   SheetContent,
@@ -676,7 +676,7 @@ export default function CatalogHome() {
   const { isFavorite, toggleFavorite } = useFavorites(slug);
   const [isCartPulsing, setIsCartPulsing] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<ProductWithPrice | null>(null);
-  const isMobile = useMediaQuery("(max-width: 768px)");
+  const isMobile = useIsMobile();
   
   useEffect(() => {
     if (lastAddedAt > 0) {
