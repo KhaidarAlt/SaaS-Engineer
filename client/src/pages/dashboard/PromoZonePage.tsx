@@ -175,20 +175,6 @@ export default function PromoZonePage() {
     }
   };
 
-  const fixImagesMutation = useMutation({
-    mutationFn: async () => {
-      const response = await apiRequest("/api/promo-blocks/fix-images", { method: "POST" });
-      return response;
-    },
-    onSuccess: (data: any) => {
-      toast({ title: "Готово", description: `Исправлено изображений: ${data.fixed}` });
-      queryClient.invalidateQueries({ queryKey: ["/api/promo-blocks"] });
-    },
-    onError: () => {
-      toast({ title: "Ошибка", description: "Не удалось исправить изображения", variant: "destructive" });
-    },
-  });
-
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -208,13 +194,29 @@ export default function PromoZonePage() {
     if (result) {
       // Make the file publicly accessible
       try {
-        await fetch("/api/uploads/set-public", {
+        const response = await fetch("/api/uploads/set-public", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ objectPath: result.objectPath }),
+          credentials: "include",
         });
+        
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({}));
+          console.error("Failed to set public access:", error);
+          toast({ 
+            title: "Предупреждение", 
+            description: "Изображение загружено, но могут быть проблемы с отображением", 
+            variant: "destructive" 
+          });
+        }
       } catch (e) {
         console.error("Failed to set public access:", e);
+        toast({ 
+          title: "Предупреждение", 
+          description: "Изображение загружено, но могут быть проблемы с отображением", 
+          variant: "destructive" 
+        });
       }
       // Store full URL path for display
       form.setValue("imageUrl", `/objects/${result.objectPath}`);
@@ -243,20 +245,10 @@ export default function PromoZonePage() {
               Управляйте промо-блоками для главной страницы каталога
             </p>
           </div>
-          <div className="flex gap-2">
-            <Button 
-              variant="outline" 
-              onClick={() => fixImagesMutation.mutate()}
-              disabled={fixImagesMutation.isPending}
-              data-testid="button-fix-images"
-            >
-              {fixImagesMutation.isPending ? "Исправление..." : "Исправить изображения"}
-            </Button>
-            <Button onClick={openCreateDialog} data-testid="button-add-promo-block">
-              <Plus className="h-4 w-4 mr-2" />
-              Создать промо-блок
-            </Button>
-          </div>
+          <Button onClick={openCreateDialog} data-testid="button-add-promo-block">
+            <Plus className="h-4 w-4 mr-2" />
+            Создать промо-блок
+          </Button>
         </div>
 
         {isLoading ? (

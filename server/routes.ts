@@ -1325,33 +1325,6 @@ export async function registerRoutes(
     }
   });
 
-  // Fix existing promo blocks images to be public
-  app.post("/api/promo-blocks/fix-images", requireAuth, async (req, res) => {
-    try {
-      const promoObjectStorage = new ObjectStorageService();
-      const blocks = await storage.getPromoBlocks(req.user!.tenantId!);
-      let fixed = 0;
-      for (const block of blocks) {
-        if (block.imageUrl) {
-          const objectPath = block.imageUrl.replace(/^\/objects\//, '');
-          try {
-            await promoObjectStorage.trySetObjectEntityAclPolicy(objectPath, {
-              owner: req.user!.id,
-              visibility: "public",
-            });
-            fixed++;
-          } catch (e) {
-            console.error(`Failed to fix image for block ${block.id}:`, e);
-          }
-        }
-      }
-      res.json({ success: true, fixed });
-    } catch (error) {
-      console.error("Fix promo images error:", error);
-      res.status(500).json({ message: "Ошибка исправления изображений" });
-    }
-  });
-
   app.get("/api/orders", requireAuth, async (req, res) => {
     try {
       const orders = await storage.getOrders(req.user!.tenantId!);
