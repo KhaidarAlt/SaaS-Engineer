@@ -3044,6 +3044,233 @@ export async function registerRoutes(
     }
   });
 
+  // ============ SMART CONTACT (SAFE BULK MESSAGING) ============
+  const { smartContactService, TRIGGER_TYPES } = await import("./services/smart-contact.service");
+
+  // Get Smart Contact settings
+  app.get("/api/smart-contact/settings", requireAuth, requireAiAccess, async (req, res) => {
+    try {
+      const settings = await smartContactService.getSettings(req.user!.tenantId!);
+      res.json(settings || {
+        enabled: false,
+        quietHoursStart: 22,
+        quietHoursEnd: 9,
+        maxFollowUpsPerClient: 3,
+        minHoursBetweenMessages: 24,
+        dailyMessageLimit: 100,
+        autoStopOnNegativeSignals: true
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка получения настроек" });
+    }
+  });
+
+  // Update Smart Contact settings
+  app.put("/api/smart-contact/settings", requireAuth, requireAiAccess, async (req, res) => {
+    try {
+      const settings = await smartContactService.updateSettings(req.user!.tenantId!, req.body);
+      res.json(settings);
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка сохранения настроек" });
+    }
+  });
+
+  // Get Smart Contact stats
+  app.get("/api/smart-contact/stats", requireAuth, requireAiAccess, async (req, res) => {
+    try {
+      const stats = await smartContactService.getStats(req.user!.tenantId!);
+      res.json(stats);
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка получения статистики" });
+    }
+  });
+
+  // Get contacts list
+  app.get("/api/smart-contact/contacts", requireAuth, requireAiAccess, async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 50;
+      const offset = parseInt(req.query.offset as string) || 0;
+      const contacts = await smartContactService.getContacts(req.user!.tenantId!, limit, offset);
+      res.json(contacts);
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка получения контактов" });
+    }
+  });
+
+  // Get eligible contacts
+  app.get("/api/smart-contact/contacts/eligible", requireAuth, requireAiAccess, async (req, res) => {
+    try {
+      const contacts = await smartContactService.getEligibleContacts(req.user!.tenantId!);
+      res.json(contacts);
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка получения доступных контактов" });
+    }
+  });
+
+  // Get messages history
+  app.get("/api/smart-contact/messages", requireAuth, requireAiAccess, async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 50;
+      const messages = await smartContactService.getMessages(req.user!.tenantId!, limit);
+      res.json(messages);
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка получения сообщений" });
+    }
+  });
+
+  // Get trigger types
+  app.get("/api/smart-contact/triggers", requireAuth, requireAiAccess, async (_req, res) => {
+    res.json(TRIGGER_TYPES);
+  });
+
+  // Generate AI message preview
+  app.post("/api/smart-contact/generate-message", requireAuth, requireAiAccess, async (req, res) => {
+    try {
+      const { triggerType, context } = req.body;
+      const message = await smartContactService.generateMessage(req.user!.tenantId!, triggerType, context || {});
+      res.json({ message });
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка генерации сообщения" });
+    }
+  });
+
+  // Create and queue message
+  app.post("/api/smart-contact/messages", requireAuth, requireAiAccess, async (req, res) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const { contactId, triggerType, messageText, scheduledAt } = req.body;
+      
+      // Check if quiet hours
+      const isQuiet = await smartContactService.isQuietHours(tenantId);
+      if (isQuiet && !scheduledAt) {
+        return res.status(400).json({ message: "Сейчас тихие часы. Сообщение будет отправлено позже." });
+      }
+      
+      // Check health status
+      const health = await smartContactService.getHealthStatus(tenantId);
+      if (health.status === 'stop') {
+        return res.status(400).json({ message: health.message });
+      }
+      
+      const message = await smartContactService.createMessage({
+        tenantId,
+        contactId,
+        triggerType,
+        messageText,
+        status: 'pending',
+        scheduledAt: scheduledAt ? new Date(scheduledAt) : null
+      });
+      
+      res.json(message);
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка создания сообщения" });
+    }
+  });
+
+  // Send message now (via WAHA)
+  app.post("/api/smart-contact/messages/:id/send", requireAuth, requireAiAccess, async (req, res) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const messageId = req.params.id;
+      
+      // Get tenant WAHA settings
+      const tenant = await storage.getTenant(tenantId);
+      if (!tenant?.wahaBaseUrl || !tenant?.wahaInstanceName) {
+        return res.status(400).json({ message: "WhatsApp не настроен" });
+      }
+      
+      // Get message and contact
+      const messages = await smartContactService.getMessages(tenantId, 1000);
+      const message = messages.find(m => m.id === messageId);
+      if (!message) {
+        return res.status(404).json({ message: "Сообщение не найдено" });
+      }
+      
+      const contacts = await smartContactService.getContacts(tenantId, 1000);
+      const contact = contacts.find(c => c.id === message.contactId);
+      if (!contact) {
+        return res.status(404).json({ message: "Контакт не найден" });
+      }
+      
+      const result = await smartContactService.sendViaWaha(
+        tenantId,
+        messageId,
+        contact.phone,
+        message.messageText,
+        tenant.wahaBaseUrl,
+        tenant.wahaInstanceName
+      );
+      
+      if (result.success) {
+        res.json({ success: true, wahaMessageId: result.wahaMessageId });
+      } else {
+        res.status(500).json({ message: result.error });
+      }
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка отправки сообщения" });
+    }
+  });
+
+  // Batch send to eligible contacts
+  app.post("/api/smart-contact/batch-send", requireAuth, requireAiAccess, async (req, res) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const { triggerType, maxMessages = 10 } = req.body;
+      
+      // Get settings and check if enabled
+      const settings = await smartContactService.getSettings(tenantId);
+      if (!settings?.enabled) {
+        return res.status(400).json({ message: "Модуль отключён" });
+      }
+      
+      // Check quiet hours
+      const isQuiet = await smartContactService.isQuietHours(tenantId);
+      if (isQuiet) {
+        return res.status(400).json({ message: "Сейчас тихие часы" });
+      }
+      
+      // Check health
+      const health = await smartContactService.getHealthStatus(tenantId);
+      if (health.status === 'stop') {
+        return res.status(400).json({ message: health.message });
+      }
+      
+      // Get eligible contacts
+      const eligibleContacts = await smartContactService.getEligibleContacts(
+        tenantId, 
+        settings.minHoursBetweenMessages
+      );
+      
+      const contactsToMessage = eligibleContacts.slice(0, Math.min(maxMessages, settings.dailyMessageLimit - health.sentToday));
+      
+      // Create messages for each contact
+      const createdMessages = [];
+      for (const contact of contactsToMessage) {
+        const messageText = await smartContactService.generateMessage(tenantId, triggerType, {
+          clientName: contact.name || undefined,
+          lastInteraction: contact.lastClientReplyAt?.toISOString()
+        });
+        
+        const message = await smartContactService.createMessage({
+          tenantId,
+          contactId: contact.id,
+          triggerType,
+          messageText,
+          status: 'queued'
+        });
+        
+        createdMessages.push(message);
+      }
+      
+      res.json({ 
+        queued: createdMessages.length,
+        message: `Поставлено в очередь: ${createdMessages.length} сообщений`
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка создания рассылки" });
+    }
+  });
+
   // ============ WAHA INTEGRATION ============
   const { wahaService } = await import("./services/waha");
 

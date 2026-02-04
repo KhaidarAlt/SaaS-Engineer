@@ -52,6 +52,7 @@ import LinksPage from "@/pages/dashboard/LinksPage";
 import LinksPublicPage from "@/pages/public/LinksPublicPage";
 import IntegrationsPage from "@/pages/dashboard/IntegrationsPage";
 import WhatsAppCloudPage from "@/pages/dashboard/WhatsAppCloudPage";
+import SmartContactPage from "@/pages/dashboard/SmartContactPage";
 import PrivacyPage from "@/pages/legal/PrivacyPage";
 import PrivacyPageKz from "@/pages/legal/PrivacyPageKz";
 import TermsPage from "@/pages/legal/TermsPage";
@@ -184,6 +185,9 @@ function Router() {
       </Route>
       <Route path="/dashboard/whatsapp-cloud">
         <ProtectedRoute component={WhatsAppCloudPage} />
+      </Route>
+      <Route path="/dashboard/smart-contact">
+        <ProtectedRoute component={SmartContactPage} />
       </Route>
 
       <Route path="/dashboard/ai">

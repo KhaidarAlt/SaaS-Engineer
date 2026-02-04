@@ -7,7 +7,9 @@ import {
 import { eq, and, desc, gte, lte, sql, isNull, or } from "drizzle-orm";
 import OpenAI from "openai";
 
-const openai = new OpenAI();
+function getOpenAI() {
+  return new OpenAI({ apiKey: process.env.OPENAI_API_KEY || process.env.AI_INTEGRATIONS_OPENAI_API_KEY });
+}
 
 // Stop words that indicate client doesn't want messages
 const STOP_WORDS = [
@@ -355,6 +357,7 @@ ${context.lastInteraction ? `Последнее взаимодействие: ${
 Напиши только текст сообщения, без кавычек и пояснений.`;
 
     try {
+      const openai = getOpenAI();
       const response = await openai.chat.completions.create({
         model: "gpt-4o-mini",
         messages: [

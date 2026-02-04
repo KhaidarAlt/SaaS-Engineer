@@ -51,6 +51,7 @@ const tenantNavItems: NavItem[] = [
   { href: "/dashboard/discounts", label: "Скидки", icon: Percent },
   { href: "/dashboard/import", label: "Импорт", icon: Upload, lockForPlans: ["Старт"] },
   { href: "/dashboard/ai", label: "AI-ассистент", icon: Bot, lockForPlans: ["Старт", "Каталог"] },
+  { href: "/dashboard/smart-contact", label: "Умный контакт", icon: MessageCircle, lockForPlans: ["Старт", "Каталог"] },
   { href: "/dashboard/integrations", label: "Интеграции", icon: Link2, lockForPlans: ["Старт", "Каталог", "Каталог + AI"] },
   { href: "/dashboard/whatsapp-cloud", label: "WhatsApp Meta", icon: MessageCircle, lockForPlans: ["Старт", "Каталог"] },
   { href: "/dashboard/catalog-health", label: "Здоровье каталога", icon: Activity },
