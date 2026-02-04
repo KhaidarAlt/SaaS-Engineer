@@ -157,6 +157,7 @@ export class ObjectStorageService {
   }
 
   // Gets the object entity file from the object path.
+  // Searches in both private and public directories.
   async getObjectEntityFile(objectPath: string): Promise<File> {
     if (!objectPath.startsWith("/objects/")) {
       throw new ObjectNotFoundError();
@@ -168,19 +169,38 @@ export class ObjectStorageService {
     }
 
     const entityId = parts.slice(1).join("/");
+    
+    // Try private directory first
     let entityDir = this.getPrivateObjectDir();
     if (!entityDir.endsWith("/")) {
       entityDir = `${entityDir}/`;
     }
-    const objectEntityPath = `${entityDir}${entityId}`;
-    const { bucketName, objectName } = parseObjectPath(objectEntityPath);
-    const bucket = objectStorageClient.bucket(bucketName);
-    const objectFile = bucket.file(objectName);
-    const [exists] = await objectFile.exists();
-    if (!exists) {
-      throw new ObjectNotFoundError();
+    const privateObjectPath = `${entityDir}${entityId}`;
+    const { bucketName: privateBucket, objectName: privateObject } = parseObjectPath(privateObjectPath);
+    const privateBucketObj = objectStorageClient.bucket(privateBucket);
+    const privateFile = privateBucketObj.file(privateObject);
+    const [privateExists] = await privateFile.exists();
+    if (privateExists) {
+      return privateFile;
     }
-    return objectFile;
+    
+    // Try public directories
+    for (const searchPath of this.getPublicObjectSearchPaths()) {
+      let publicDir = searchPath;
+      if (!publicDir.endsWith("/")) {
+        publicDir = `${publicDir}/`;
+      }
+      const publicObjectPath = `${publicDir}${entityId}`;
+      const { bucketName: publicBucket, objectName: publicObject } = parseObjectPath(publicObjectPath);
+      const publicBucketObj = objectStorageClient.bucket(publicBucket);
+      const publicFile = publicBucketObj.file(publicObject);
+      const [publicExists] = await publicFile.exists();
+      if (publicExists) {
+        return publicFile;
+      }
+    }
+    
+    throw new ObjectNotFoundError();
   }
 
   normalizeObjectEntityPath(
