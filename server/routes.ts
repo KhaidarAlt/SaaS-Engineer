@@ -5116,6 +5116,287 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
     }
   });
 
+  // ============ TELEGRAM BOT INTEGRATION ============
+  
+  app.get("/api/telegram/integration", requireAuth, async (req, res) => {
+    try {
+      const integration = await storage.getTelegramIntegration(req.user!.tenantId!);
+      res.json(integration || null);
+    } catch (error) {
+      console.error("Get Telegram integration error:", error);
+      res.status(500).json({ error: "Ошибка получения интеграции" });
+    }
+  });
+
+  app.post("/api/telegram/connect", requireAuth, async (req, res) => {
+    try {
+      const { botToken } = req.body;
+      if (!botToken || typeof botToken !== "string" || botToken.length < 40) {
+        return res.status(400).json({ error: "Некорректный токен бота" });
+      }
+
+      const { telegramService } = await import("./services/telegram/telegram.service");
+      const baseUrl = process.env.BASE_URL || `https://${process.env.REPLIT_DEV_DOMAIN}`;
+      
+      const result = await telegramService.connectBot(req.user!.tenantId!, botToken, baseUrl);
+      
+      if (!result.success) {
+        return res.status(400).json({ error: result.error });
+      }
+      
+      res.json(result.integration);
+    } catch (error) {
+      console.error("Connect Telegram bot error:", error);
+      res.status(500).json({ error: "Ошибка подключения бота" });
+    }
+  });
+
+  app.delete("/api/telegram/integration", requireAuth, async (req, res) => {
+    try {
+      const { telegramService } = await import("./services/telegram/telegram.service");
+      const result = await telegramService.disconnectBot(req.user!.tenantId!);
+      
+      if (!result.success) {
+        return res.status(400).json({ error: result.error });
+      }
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Disconnect Telegram bot error:", error);
+      res.status(500).json({ error: "Ошибка отключения бота" });
+    }
+  });
+
+  app.get("/api/telegram/messages", requireAuth, async (req, res) => {
+    try {
+      const messages = await storage.getTelegramMessages(req.user!.tenantId!);
+      res.json(messages);
+    } catch (error) {
+      console.error("Get Telegram messages error:", error);
+      res.status(500).json({ error: "Ошибка получения сообщений" });
+    }
+  });
+
+  app.post("/api/telegram/webhook/:botId", async (req, res) => {
+    try {
+      const { botId } = req.params;
+      const secretToken = req.headers["x-telegram-bot-api-secret-token"] as string;
+      
+      const { telegramService } = await import("./services/telegram/telegram.service");
+      const integration = await telegramService.findIntegrationByBotId(botId);
+      
+      if (!integration) {
+        return res.status(404).json({ error: "Bot not found" });
+      }
+      
+      if (!telegramService.verifyWebhookRequest(secretToken, integration.webhookSecret || "")) {
+        return res.status(401).json({ error: "Invalid secret" });
+      }
+      
+      const tenant = await storage.getTenant(integration.tenantId);
+      if (!tenant) {
+        return res.status(404).json({ error: "Tenant not found" });
+      }
+      
+      await telegramService.processWebhookUpdate(req.body, integration, tenant);
+      
+      res.json({ ok: true });
+    } catch (error) {
+      console.error("Telegram webhook error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // ============ WIDGET INTEGRATION ============
+  
+  app.get("/api/widget/integration", requireAuth, async (req, res) => {
+    try {
+      const integration = await storage.getWidgetIntegration(req.user!.tenantId!);
+      res.json(integration || null);
+    } catch (error) {
+      console.error("Get Widget integration error:", error);
+      res.status(500).json({ error: "Ошибка получения интеграции" });
+    }
+  });
+
+  app.post("/api/widget/create", requireAuth, async (req, res) => {
+    try {
+      const { name, primaryColor, position, welcomeMessage, placeholder, allowedDomains } = req.body;
+      
+      const { widgetService } = await import("./services/widget/widget.service");
+      const result = await widgetService.createWidget(req.user!.tenantId!, {
+        name,
+        primaryColor,
+        position,
+        welcomeMessage,
+        placeholder,
+        allowedDomains,
+      });
+      
+      if (!result.success) {
+        return res.status(400).json({ error: result.error });
+      }
+      
+      res.json(result.widget);
+    } catch (error) {
+      console.error("Create Widget error:", error);
+      res.status(500).json({ error: "Ошибка создания виджета" });
+    }
+  });
+
+  app.put("/api/widget/integration", requireAuth, async (req, res) => {
+    try {
+      const { name, primaryColor, position, welcomeMessage, placeholder, allowedDomains, isActive } = req.body;
+      
+      const { widgetService } = await import("./services/widget/widget.service");
+      const result = await widgetService.updateWidget(req.user!.tenantId!, {
+        name,
+        primaryColor,
+        position,
+        welcomeMessage,
+        placeholder,
+        allowedDomains,
+        isActive,
+      });
+      
+      if (!result.success) {
+        return res.status(400).json({ error: result.error });
+      }
+      
+      res.json(result.widget);
+    } catch (error) {
+      console.error("Update Widget error:", error);
+      res.status(500).json({ error: "Ошибка обновления виджета" });
+    }
+  });
+
+  app.delete("/api/widget/integration", requireAuth, async (req, res) => {
+    try {
+      const { widgetService } = await import("./services/widget/widget.service");
+      const result = await widgetService.deleteWidget(req.user!.tenantId!);
+      
+      if (!result.success) {
+        return res.status(400).json({ error: result.error });
+      }
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Delete Widget error:", error);
+      res.status(500).json({ error: "Ошибка удаления виджета" });
+    }
+  });
+
+  app.get("/api/widget/embed-code", requireAuth, async (req, res) => {
+    try {
+      const integration = await storage.getWidgetIntegration(req.user!.tenantId!);
+      if (!integration) {
+        return res.status(404).json({ error: "Виджет не создан" });
+      }
+      
+      const { widgetService } = await import("./services/widget/widget.service");
+      const baseUrl = process.env.BASE_URL || `https://${process.env.REPLIT_DEV_DOMAIN}`;
+      const embedCode = widgetService.generateEmbedScript(integration.widgetKey, baseUrl);
+      
+      res.json({ embedCode, widgetKey: integration.widgetKey });
+    } catch (error) {
+      console.error("Get embed code error:", error);
+      res.status(500).json({ error: "Ошибка получения кода виджета" });
+    }
+  });
+
+  // Public widget API routes
+  app.get("/api/public/widget/:widgetKey/config", async (req, res) => {
+    try {
+      const { widgetKey } = req.params;
+      const origin = req.headers.origin || "";
+      
+      const { widgetService } = await import("./services/widget/widget.service");
+      const widget = await widgetService.getWidgetByKey(widgetKey);
+      
+      if (!widget || !widget.isActive) {
+        return res.status(404).json({ error: "Widget not found" });
+      }
+      
+      if (!widgetService.validateDomain(new URL(origin).hostname, widget.allowedDomains)) {
+        return res.status(403).json({ error: "Domain not allowed" });
+      }
+      
+      res.json({
+        name: widget.name,
+        primaryColor: widget.primaryColor,
+        position: widget.position,
+        welcomeMessage: widget.welcomeMessage,
+        placeholder: widget.placeholder,
+      });
+    } catch (error) {
+      console.error("Get widget config error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.post("/api/public/widget/:widgetKey/conversation", async (req, res) => {
+    try {
+      const { widgetKey } = req.params;
+      const { sessionId } = req.body;
+      
+      if (!sessionId) {
+        return res.status(400).json({ error: "sessionId required" });
+      }
+      
+      const { widgetService } = await import("./services/widget/widget.service");
+      const result = await widgetService.getOrCreateConversation(widgetKey, sessionId);
+      
+      if (!result.success) {
+        return res.status(400).json({ error: result.error });
+      }
+      
+      res.json({
+        conversationId: result.conversation!.id,
+        welcomeMessage: result.widget!.welcomeMessage,
+      });
+    } catch (error) {
+      console.error("Create widget conversation error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.post("/api/public/widget/:widgetKey/message", async (req, res) => {
+    try {
+      const { widgetKey } = req.params;
+      const { conversationId, message } = req.body;
+      
+      if (!conversationId || !message) {
+        return res.status(400).json({ error: "conversationId and message required" });
+      }
+      
+      const { widgetService } = await import("./services/widget/widget.service");
+      const result = await widgetService.sendMessage(conversationId, widgetKey, message);
+      
+      if (!result.success) {
+        return res.status(400).json({ error: result.error });
+      }
+      
+      res.json({ reply: result.reply });
+    } catch (error) {
+      console.error("Widget message error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.get("/api/public/widget/:widgetKey/messages/:conversationId", async (req, res) => {
+    try {
+      const { conversationId } = req.params;
+      
+      const { widgetService } = await import("./services/widget/widget.service");
+      const messages = await widgetService.getMessages(conversationId);
+      
+      res.json(messages);
+    } catch (error) {
+      console.error("Get widget messages error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   // ============ CRM INTEGRATIONS ============
   
   // Get CRM integrations
