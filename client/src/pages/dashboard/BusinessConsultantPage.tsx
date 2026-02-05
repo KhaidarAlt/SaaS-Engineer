@@ -89,6 +89,7 @@ export default function BusinessConsultantPage() {
   };
 
   const handleQuickTemplate = (prompt: string) => {
+    if (chatMutation.isPending) return;
     setMessages(prev => [...prev, { role: "user", content: prompt }]);
     chatMutation.mutate(prompt);
   };
@@ -173,6 +174,7 @@ export default function BusinessConsultantPage() {
                         variant="outline"
                         size="sm"
                         onClick={() => handleQuickTemplate(template.prompt)}
+                        disabled={chatMutation.isPending}
                         data-testid={`template-${template.id}`}
                       >
                         {template.label}
