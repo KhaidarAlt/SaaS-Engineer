@@ -18,7 +18,7 @@ import DashboardOverview from "@/pages/dashboard/DashboardOverview";
 import ProductsPage from "@/pages/dashboard/ProductsPage";
 import ProductFormPage from "@/pages/dashboard/ProductFormPage";
 import CategoriesPage from "@/pages/dashboard/CategoriesPage";
-import OrdersPage from "@/pages/dashboard/OrdersPage";
+import CRMPage from "@/pages/dashboard/CRMPage";
 import OrderDetailPage from "@/pages/dashboard/OrderDetailPage";
 import PaymentsPage from "@/pages/dashboard/PaymentsPage";
 import DiscountsPage from "@/pages/dashboard/DiscountsPage";
@@ -153,11 +153,17 @@ function Router() {
       <Route path="/dashboard/categories/new">
         <ProtectedRoute component={CategoriesPage} />
       </Route>
+      <Route path="/dashboard/crm">
+        <ProtectedRoute component={CRMPage} />
+      </Route>
+      <Route path="/dashboard/crm/:id">
+        <ProtectedRoute component={OrderDetailPage} />
+      </Route>
       <Route path="/dashboard/orders">
-        <ProtectedRoute component={OrdersPage} />
+        {() => <Redirect to="/dashboard/crm" />}
       </Route>
       <Route path="/dashboard/orders/:id">
-        <ProtectedRoute component={OrderDetailPage} />
+        {(params) => <Redirect to={`/dashboard/crm/${params.id}`} />}
       </Route>
       <Route path="/dashboard/payments">
         <ProtectedRoute component={PaymentsPage} />

@@ -356,6 +356,7 @@ export type PromoBlock = typeof promoBlocks.$inferSelect;
 export const orders = pgTable("orders", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  clientId: varchar("client_id"),
   orderNumber: text("order_number").notNull(),
   customerName: text("customer_name").notNull(),
   customerPhone: text("customer_phone").notNull(),
@@ -365,8 +366,8 @@ export const orders = pgTable("orders", {
   subtotal: decimal("subtotal", { precision: 12, scale: 2 }).notNull(),
   discountTotal: decimal("discount_total", { precision: 12, scale: 2 }).notNull().default("0"),
   total: decimal("total", { precision: 12, scale: 2 }).notNull(),
-  status: text("status").notNull().default("new"), // new, awaiting_payment, paid, in_progress, completed, cancelled
-  paymentStatus: text("payment_status").default("pending"), // pending, paid, failed, expired, manual
+  status: text("status").notNull().default("new"), // new, in_progress, awaiting_payment, paid, completed, cancelled
+  paymentStatus: text("payment_status").default("pending"), // pending, paid, cancelled
   paymentId: text("payment_id"),
   paymentProvider: text("payment_provider"), // kaspi, manual, etc
   paidAt: timestamp("paid_at"),
@@ -374,6 +375,7 @@ export const orders = pgTable("orders", {
   whatsappSent: boolean("whatsapp_sent").notNull().default(false),
   whatsappSentAt: timestamp("whatsapp_sent_at"),
   whatsappError: text("whatsapp_error"),
+  assignedManagerId: varchar("assigned_manager_id").references(() => users.id),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -447,6 +449,125 @@ export const orderStatusLogsRelations = relations(orderStatusLogs, ({ one }) => 
 export const insertOrderStatusLogSchema = createInsertSchema(orderStatusLogs).omit({ id: true, createdAt: true });
 export type InsertOrderStatusLog = z.infer<typeof insertOrderStatusLogSchema>;
 export type OrderStatusLog = typeof orderStatusLogs.$inferSelect;
+
+// ============ CRM CLIENTS ============
+export const clients = pgTable("clients", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  name: text("name").notNull(),
+  phone: text("phone").notNull(),
+  email: text("email"),
+  totalOrders: integer("total_orders").notNull().default(0),
+  totalSpent: decimal("total_spent", { precision: 12, scale: 2 }).notNull().default("0"),
+  notes: text("notes"),
+  lastOrderAt: timestamp("last_order_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const clientsRelations = relations(clients, ({ one, many }) => ({
+  tenant: one(tenants, {
+    fields: [clients.tenantId],
+    references: [tenants.id],
+  }),
+}));
+
+export const insertClientSchema = createInsertSchema(clients).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertClient = z.infer<typeof insertClientSchema>;
+export type Client = typeof clients.$inferSelect;
+
+// ============ ORDER TAGS ============
+export const orderTags = pgTable("order_tags", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  name: text("name").notNull(),
+  color: text("color").notNull().default("#6366f1"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const orderTagsRelations = relations(orderTags, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [orderTags.tenantId],
+    references: [tenants.id],
+  }),
+}));
+
+export const insertOrderTagSchema = createInsertSchema(orderTags).omit({ id: true, createdAt: true });
+export type InsertOrderTag = z.infer<typeof insertOrderTagSchema>;
+export type OrderTag = typeof orderTags.$inferSelect;
+
+// ============ ORDER TAG ASSIGNMENTS ============
+export const orderTagAssignments = pgTable("order_tag_assignments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orderId: varchar("order_id").notNull().references(() => orders.id),
+  tagId: varchar("tag_id").notNull().references(() => orderTags.id),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const orderTagAssignmentsRelations = relations(orderTagAssignments, ({ one }) => ({
+  order: one(orders, {
+    fields: [orderTagAssignments.orderId],
+    references: [orders.id],
+  }),
+  tag: one(orderTags, {
+    fields: [orderTagAssignments.tagId],
+    references: [orderTags.id],
+  }),
+}));
+
+export const insertOrderTagAssignmentSchema = createInsertSchema(orderTagAssignments).omit({ id: true, createdAt: true });
+export type InsertOrderTagAssignment = z.infer<typeof insertOrderTagAssignmentSchema>;
+export type OrderTagAssignment = typeof orderTagAssignments.$inferSelect;
+
+// ============ ORDER NOTES ============
+export const orderNotes = pgTable("order_notes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orderId: varchar("order_id").notNull().references(() => orders.id),
+  userId: varchar("user_id").references(() => users.id),
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const orderNotesRelations = relations(orderNotes, ({ one }) => ({
+  order: one(orders, {
+    fields: [orderNotes.orderId],
+    references: [orders.id],
+  }),
+  user: one(users, {
+    fields: [orderNotes.userId],
+    references: [users.id],
+  }),
+}));
+
+export const insertOrderNoteSchema = createInsertSchema(orderNotes).omit({ id: true, createdAt: true });
+export type InsertOrderNote = z.infer<typeof insertOrderNoteSchema>;
+export type OrderNote = typeof orderNotes.$inferSelect;
+
+// ============ ORDER TIMELINE EVENTS ============
+export const orderTimelineEvents = pgTable("order_timeline_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orderId: varchar("order_id").notNull().references(() => orders.id),
+  eventType: text("event_type").notNull(), // created, status_changed, payment_status_changed, whatsapp_sent, payment_link_sent, note_added, tag_added, ai_analysis
+  description: text("description").notNull(),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+  userId: varchar("user_id").references(() => users.id),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const orderTimelineEventsRelations = relations(orderTimelineEvents, ({ one }) => ({
+  order: one(orders, {
+    fields: [orderTimelineEvents.orderId],
+    references: [orders.id],
+  }),
+  user: one(users, {
+    fields: [orderTimelineEvents.userId],
+    references: [users.id],
+  }),
+}));
+
+export const insertOrderTimelineEventSchema = createInsertSchema(orderTimelineEvents).omit({ id: true, createdAt: true });
+export type InsertOrderTimelineEvent = z.infer<typeof insertOrderTimelineEventSchema>;
+export type OrderTimelineEvent = typeof orderTimelineEvents.$inferSelect;
 
 // ============ ANALYTICS EVENTS ============
 export const analyticsEvents = pgTable("analytics_events", {
