@@ -3283,6 +3283,47 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
     }
   });
 
+  // ============ BUSINESS CONSULTANT ============
+  const { chat: consultantChat, CONSULTANT_MODES, QUICK_TEMPLATES } = await import("./services/business-consultant/consultant.service");
+
+  const consultantChatSchema = z.object({
+    mode: z.enum(['analyst', 'marketer', 'rop', 'finance', 'support']),
+    messages: z.array(z.object({
+      role: z.enum(['user', 'assistant']),
+      content: z.string(),
+    })),
+    userMessage: z.string().min(1).max(2000),
+  });
+
+  app.get("/api/consultant/modes", requireAuth, async (_req, res) => {
+    res.json({
+      modes: Object.values(CONSULTANT_MODES),
+      quickTemplates: QUICK_TEMPLATES,
+    });
+  });
+
+  app.post("/api/consultant/chat", requireAuth, async (req, res) => {
+    try {
+      const tenantId = req.user?.tenantId;
+      if (!tenantId) {
+        return res.status(403).json({ message: "Доступ запрещён" });
+      }
+
+      const parsed = consultantChatSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Неверные данные", errors: parsed.error.errors });
+      }
+
+      const { mode, messages, userMessage } = parsed.data;
+      const result = await consultantChat(tenantId, mode, messages, userMessage);
+
+      res.json(result);
+    } catch (error) {
+      console.error("Business consultant error:", error);
+      res.status(500).json({ message: "Ошибка консультанта" });
+    }
+  });
+
   // ============ SMART CONTACT (SAFE BULK MESSAGING) ============
   const { smartContactService, TRIGGER_TYPES } = await import("./services/smart-contact.service");
 
