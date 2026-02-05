@@ -1,0 +1,157 @@
+You are implementing a NEW section in SmartCatalog:
+
+📌 “Бизнес-консультант”
+
+IMPORTANT REQUIREMENT:
+You must AUTO-GENERATE the Knowledge Base yourself
+based on EXISTING SmartCatalog project code, database schema,
+UI structure and current functionality.
+
+You (Replit) created this system, therefore you must extract
+the most accurate product knowledge automatically.
+
+────────────────────────────────
+STEP 1 – AUTO KNOWLEDGE BASE CREATION
+────────────────────────────────
+
+On first run:
+
+1. Scan project:
+- routes
+- database schema
+- UI sections
+- feature flags
+- integrations
+- settings structure
+
+2. Generate internal KB:
+- what sections exist
+- how each feature works
+- real navigation paths
+- real field names
+- current limitations
+
+3. Store as:
+smartcatalog_product_kb
+
+This KB must be used ONLY in:
+🛟 SUPPORT SMARTCATALOG MODE
+
+DO NOT invent features outside codebase.
+
+────────────────────────────────
+INTERFACE
+────────────────────────────────
+
+Simple chat window (like ChatGPT)
+Russian language only
+
+Mode selector:
+
+• Аналитик  
+• Маркетолог  
+• РОП  
+• Финансист  
+• 🛟 ПОДДЕРЖКА SMARTCATALOG (primary, highlighted)
+
+────────────────────────────────
+GENERAL BEHAVIOR RULES
+────────────────────────────────
+
+1. Russian only  
+2. No general ChatGPT answers  
+3. No weather, politics, coding help  
+4. Business modes → ONLY real tenant data  
+5. Support mode → ONLY generated KB  
+6. If data absent → say directly  
+7. Every business answer structure:
+
+- Данные  
+- Вывод  
+- Причины  
+- Действия
+
+────────────────────────────────
+BUSINESS MODES
+────────────────────────────────
+
+Allowed data sources:
+- orders
+- payments
+- catalog
+- WhatsApp dialogs
+- CRM statuses
+- promos
+- analytics
+
+Tasks:
+- reports by period
+- funnel analysis
+- anomalies
+- WhatsApp efficiency
+- risks
+
+────────────────────────────────
+🛟 SUPPORT SMARTCATALOG MODE
+────────────────────────────────
+
+SOURCE: auto-generated KB only.
+
+Tasks:
+
+- explain where section located  
+- how to connect Cloud API  
+- how to enable promo zone  
+- how tags work  
+- how payments work  
+- troubleshooting
+
+Style:
+
+Step-by-step with REAL navigation:
+
+Example format:
+
+“Откройте:  
+Настройки → Каталог → УТП  
+Введите текст до 120 символов → Сохранить.”
+
+Rules:
+
+- NEVER invent features  
+- NEVER reference external docs  
+- Use only project reality  
+- Propose next action buttons
+
+────────────────────────────────
+QUICK TEMPLATES
+────────────────────────────────
+
+Show buttons:
+
+• Отчёт за сегодня  
+• Отчёт за месяц  
+• Топ товаров  
+• Анализ WhatsApp  
+• Риски  
+• План действий
+
+────────────────────────────────
+SAFETY
+────────────────────────────────
+
+If off-topic:
+
+“Я — Бизнес-консультант SmartCatalog и работаю только
+с данными вашего бизнеса и функционалом платформы.”
+
+────────────────────────────────
+OUTPUT REQUIRED
+────────────────────────────────
+
+- Chat UI  
+- Mode switcher  
+- Auto KB generator  
+- Guardrails  
+- Russian UX texts  
+- API layer
