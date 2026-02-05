@@ -1424,7 +1424,16 @@ export async function registerRoutes(
         return res.status(400).json({ message: "AI не настроен" });
       }
 
-      const { template } = req.body;
+      const templateSchema = z.object({
+        template: z.enum(["payment_reminder", "delivery_confirmation", "cart_followup", "thank_you"])
+      });
+      
+      const validation = templateSchema.safeParse(req.body);
+      if (!validation.success) {
+        return res.status(400).json({ message: "Неверный шаблон сообщения" });
+      }
+
+      const { template } = validation.data;
       const tenantId = req.user!.tenantId!;
       const order = await storage.getOrder(req.params.id, tenantId);
       if (!order) {

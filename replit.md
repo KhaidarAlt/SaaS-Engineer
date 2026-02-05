@@ -75,6 +75,16 @@ Preferred communication style: Simple, everyday language.
   - API: POST /api/kaspi/request-verification, /api/kaspi/confirm-verification, /api/payments/kaspi-business/create
 - Stripe (scaffolded)
 
-### CRM Integrations
+### CRM System (Internal)
+- **CRM Dashboard**: Dual-view interface with Kanban board and Table view at `/dashboard/crm`
+- **Deal Stages**: 6 statuses (new, in_progress, awaiting_payment, paid, completed, cancelled)
+- **Payment Statuses**: 3 statuses (pending, paid, cancelled)
+- **AI Integration**:
+  - POST /api/crm/deals/:id/ai-analyze - AI analysis with recommendations
+  - POST /api/crm/deals/:id/generate-message - AI message generation (4 templates: payment_reminder, delivery_confirmation, cart_followup, thank_you)
+- **Order Detail Page**: Enhanced with AI analysis panel, message generator, WhatsApp integration
+- **Stats Dashboard**: Real-time deal counts by status
+
+### CRM Integrations (External)
 - Bitrix24
 - amoCRM

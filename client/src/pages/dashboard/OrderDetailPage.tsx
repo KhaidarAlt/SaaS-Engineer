@@ -51,12 +51,12 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Order, OrderItem } from "@shared/schema";
 
 const dealStatusOptions = [
-  { value: "new", label: "Новый", color: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200" },
-  { value: "in_progress", label: "В работе", color: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200" },
-  { value: "awaiting_payment", label: "Ожидает оплаты", color: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200" },
-  { value: "paid", label: "Оплачен", color: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" },
-  { value: "completed", label: "Выполнен", color: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200" },
-  { value: "cancelled", label: "Отменён", color: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200" },
+  { value: "new", label: "Новый", variant: "default" as const },
+  { value: "in_progress", label: "В работе", variant: "secondary" as const },
+  { value: "awaiting_payment", label: "Ожидает оплаты", variant: "outline" as const },
+  { value: "paid", label: "Оплачен", variant: "default" as const },
+  { value: "completed", label: "Выполнен", variant: "secondary" as const },
+  { value: "cancelled", label: "Отменён", variant: "destructive" as const },
 ];
 
 const paymentStatusOptions = [
@@ -166,7 +166,7 @@ export default function OrderDetailPage() {
 
   const getStatusBadge = (status: string) => {
     const option = dealStatusOptions.find((s) => s.value === status);
-    return option || { label: status, color: "bg-gray-100 text-gray-800" };
+    return option || { label: status, variant: "secondary" as const };
   };
 
   const getPaymentBadge = (paymentStatus: string | null | undefined) => {
@@ -268,7 +268,7 @@ export default function OrderDetailPage() {
               Спросить ИИ
             </Button>
             <Button
-              className="gap-2 bg-green-600 hover:bg-green-700"
+              variant="default" className="gap-2"
               onClick={() => window.open(createWhatsAppLink(order), "_blank")}
               data-testid="button-whatsapp"
             >
@@ -436,7 +436,7 @@ export default function OrderDetailPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex items-center gap-2">
-                  <Badge className={getStatusBadge(order.status).color}>
+                  <Badge variant={getStatusBadge(order.status).variant}>
                     {getStatusBadge(order.status).label}
                   </Badge>
                 </div>
@@ -450,7 +450,7 @@ export default function OrderDetailPage() {
                   <SelectContent>
                     {dealStatusOptions.map((status) => (
                       <SelectItem key={status.value} value={status.value}>
-                        <Badge className={status.color}>{status.label}</Badge>
+                        <Badge variant={status.variant}>{status.label}</Badge>
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -585,7 +585,7 @@ export default function OrderDetailPage() {
               Копировать
             </Button>
             <Button
-              className="gap-2 bg-green-600 hover:bg-green-700"
+              variant="default" className="gap-2"
               onClick={() => {
                 openWhatsAppWithMessage(generatedMessage);
                 setMessageDialogOpen(false);
