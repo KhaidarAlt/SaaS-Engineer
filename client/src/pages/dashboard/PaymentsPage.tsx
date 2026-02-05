@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
@@ -14,6 +14,11 @@ import {
   Link as LinkIcon,
   ExternalLink,
   Loader2,
+  Smartphone,
+  Users,
+  Key,
+  CheckCircle2,
+  Copy,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,6 +52,8 @@ import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { KaspiIntegration, Payment } from "@shared/schema";
 
+const SMARTCATALOG_KASPI_PHONE = "+7 700 123 45 67";
+
 const paymentStatusConfig = {
   pending: { label: "Ожидает оплаты", icon: Clock, color: "text-yellow-600", bgColor: "bg-yellow-100" },
   paid: { label: "Оплачен", icon: CheckCircle, color: "text-green-600", bgColor: "bg-green-100" },
@@ -59,11 +66,12 @@ export default function PaymentsPage() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [currentStep, setCurrentStep] = useState(1);
   
   const [kaspiForm, setKaspiForm] = useState({
-    merchantId: "",
-    apiToken: "",
-    webhookSecret: "",
+    iinBin: "",
+    organizationName: "",
+    apiKey: "",
   });
 
   const { data: kaspiIntegration, isLoading: kaspiLoading } = useQuery<KaspiIntegration | null>({
@@ -74,16 +82,48 @@ export default function PaymentsPage() {
     queryKey: ["/api/payments"],
   });
 
-  const saveKaspiMutation = useMutation({
-    mutationFn: async (data: typeof kaspiForm) => {
-      return apiRequest("POST", "/api/kaspi/integration", data);
+  useEffect(() => {
+    if (kaspiIntegration) {
+      if (kaspiIntegration.verificationStatus === "verified") {
+        setCurrentStep(3);
+      } else if (kaspiIntegration.verificationStatus === "pending" || kaspiIntegration.iinBin) {
+        setCurrentStep(2);
+      } else {
+        setCurrentStep(1);
+      }
+    }
+  }, [kaspiIntegration]);
+
+  const requestVerificationMutation = useMutation({
+    mutationFn: async (data: { iinBin: string; organizationName: string }) => {
+      return apiRequest("POST", "/api/kaspi/request-verification", data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/kaspi/integration"] });
-      toast({ title: "Kaspi подключен" });
+      toast({ title: "Запрос на верификацию отправлен" });
+      setCurrentStep(2);
     },
     onError: () => {
-      toast({ title: "Ошибка подключения", variant: "destructive" });
+      toast({ title: "Ошибка отправки запроса", variant: "destructive" });
+    },
+  });
+
+  const confirmVerificationMutation = useMutation({
+    mutationFn: async (data: { apiKey: string }) => {
+      const res = await apiRequest("POST", "/api/kaspi/confirm-verification", data);
+      return res.json() as Promise<{ success: boolean; message?: string }>;
+    },
+    onSuccess: (data) => {
+      if (data.success) {
+        queryClient.invalidateQueries({ queryKey: ["/api/kaspi/integration"] });
+        toast({ title: "Kaspi Business подключен!" });
+        setCurrentStep(3);
+      } else {
+        toast({ title: data.message || "Ошибка верификации", variant: "destructive" });
+      }
+    },
+    onError: () => {
+      toast({ title: "Ошибка подтверждения", variant: "destructive" });
     },
   });
 
@@ -109,6 +149,7 @@ export default function PaymentsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/kaspi/integration"] });
       toast({ title: "Kaspi отключен" });
+      setCurrentStep(1);
     },
   });
 
@@ -121,6 +162,11 @@ export default function PaymentsPage() {
       toast({ title: "Настройки сохранены" });
     },
   });
+
+  const copyPhone = () => {
+    navigator.clipboard.writeText("77001234567");
+    toast({ title: "Номер скопирован" });
+  };
 
   const filteredPayments = payments?.filter((payment) => {
     if (statusFilter === "all") return true;
@@ -156,16 +202,40 @@ export default function PaymentsPage() {
     if (!kaspiIntegration) {
       return { label: "Не подключено", color: "text-red-600", bg: "bg-red-100", icon: XCircle };
     }
-    if (kaspiIntegration.status === "connected") {
+    if (kaspiIntegration.status === "connected" && kaspiIntegration.verificationStatus === "verified") {
       return { label: "Подключено", color: "text-green-600", bg: "bg-green-100", icon: CheckCircle };
     }
-    if (kaspiIntegration.status === "error") {
-      return { label: "Требуется переподключение", color: "text-yellow-600", bg: "bg-yellow-100", icon: AlertCircle };
+    if (kaspiIntegration.status === "pending_verification" || kaspiIntegration.verificationStatus === "pending") {
+      return { label: "Ожидает верификации", color: "text-yellow-600", bg: "bg-yellow-100", icon: Clock };
     }
-    return { label: "Не подключено", color: "text-red-600", bg: "bg-red-100", icon: XCircle };
+    if (kaspiIntegration.status === "error" || kaspiIntegration.verificationStatus === "failed") {
+      return { label: "Ошибка верификации", color: "text-red-600", bg: "bg-red-100", icon: AlertCircle };
+    }
+    return { label: "Не подключено", color: "text-muted-foreground", bg: "bg-muted", icon: XCircle };
   };
 
   const connectionStatus = getConnectionStatus();
+
+  const verificationSteps = [
+    { 
+      step: 1, 
+      title: "Добавьте сотрудника в Kaspi Business",
+      icon: Smartphone,
+      description: "Откройте приложение Kaspi Business на телефоне"
+    },
+    { 
+      step: 2, 
+      title: "Подтвердите в Kaspi Business",
+      icon: CheckCircle2,
+      description: "Подтвердите запрос на добавление сотрудника"
+    },
+    { 
+      step: 3, 
+      title: "Введите API ключ",
+      icon: Key,
+      description: "Получите API ключ и введите его для завершения"
+    },
+  ];
 
   return (
     <DashboardLayout>
@@ -205,19 +275,26 @@ export default function PaymentsPage() {
                   Подключите ваш аккаунт Kaspi Business для приёма платежей
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                {kaspiIntegration?.status === "connected" ? (
+              <CardContent className="space-y-6">
+                {kaspiIntegration?.verificationStatus === "verified" ? (
                   <div className="space-y-4">
                     <div className="flex items-center gap-4 p-4 rounded-lg bg-green-50 dark:bg-green-900/20">
                       <CheckCircle className="h-8 w-8 text-green-600" />
                       <div>
-                        <p className="font-medium">Kaspi подключен</p>
-                        <p className="text-sm text-muted-foreground">
-                          Merchant ID: {kaspiIntegration.merchantId}
-                        </p>
-                        {kaspiIntegration.lastCheckedAt && (
+                        <p className="font-medium">Kaspi Business подключен</p>
+                        {kaspiIntegration.organizationName && (
+                          <p className="text-sm text-muted-foreground">
+                            Организация: {kaspiIntegration.organizationName}
+                          </p>
+                        )}
+                        {kaspiIntegration.iinBin && (
+                          <p className="text-sm text-muted-foreground">
+                            ИИН/БИН: {kaspiIntegration.iinBin}
+                          </p>
+                        )}
+                        {kaspiIntegration.verifiedAt && (
                           <p className="text-xs text-muted-foreground">
-                            Последняя проверка: {formatDate(kaspiIntegration.lastCheckedAt)}
+                            Верифицирован: {formatDate(kaspiIntegration.verifiedAt)}
                           </p>
                         )}
                       </div>
@@ -258,59 +335,200 @@ export default function PaymentsPage() {
                     </div>
                   </div>
                 ) : (
-                  <form
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      saveKaspiMutation.mutate(kaspiForm);
-                    }}
-                    className="space-y-4"
-                  >
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <div className="space-y-2">
-                        <Label htmlFor="merchantId">Merchant ID</Label>
-                        <Input
-                          id="merchantId"
-                          placeholder="ID магазина из кабинета Kaspi"
-                          value={kaspiForm.merchantId}
-                          onChange={(e) => setKaspiForm({ ...kaspiForm, merchantId: e.target.value })}
-                          data-testid="input-merchant-id"
-                        />
-                        <p className="text-xs text-muted-foreground">Опционально, для идентификации</p>
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="apiToken">X-Auth-Token</Label>
-                        <Input
-                          id="apiToken"
-                          type="password"
-                          placeholder="Токен из кабинета мерчанта Kaspi"
-                          value={kaspiForm.apiToken}
-                          onChange={(e) => setKaspiForm({ ...kaspiForm, apiToken: e.target.value })}
-                          required
-                          data-testid="input-api-token"
-                        />
-                        <p className="text-xs text-muted-foreground">Получите в shop.kaspi.kz/merchantcabinet</p>
-                      </div>
+                  <div className="space-y-6">
+                    <div className="flex items-center gap-2 mb-4">
+                      {verificationSteps.map((s, idx) => (
+                        <div key={s.step} className="flex items-center">
+                          <div className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-medium ${
+                            currentStep > s.step 
+                              ? "bg-green-100 text-green-700 dark:bg-green-900/30" 
+                              : currentStep === s.step 
+                                ? "bg-primary text-primary-foreground" 
+                                : "bg-muted text-muted-foreground"
+                          }`}>
+                            {currentStep > s.step ? <CheckCircle className="h-4 w-4" /> : s.step}
+                          </div>
+                          {idx < verificationSteps.length - 1 && (
+                            <div className={`w-8 h-0.5 mx-1 ${currentStep > s.step ? "bg-green-500" : "bg-muted"}`} />
+                          )}
+                        </div>
+                      ))}
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="webhookSecret">Webhook Secret (опционально)</Label>
-                      <Input
-                        id="webhookSecret"
-                        type="password"
-                        placeholder="Секретный ключ для вебхуков"
-                        value={kaspiForm.webhookSecret}
-                        onChange={(e) => setKaspiForm({ ...kaspiForm, webhookSecret: e.target.value })}
-                        data-testid="input-webhook-secret"
-                      />
-                    </div>
-                    <Button
-                      type="submit"
-                      disabled={saveKaspiMutation.isPending}
-                      data-testid="button-connect-kaspi"
-                    >
-                      {saveKaspiMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                      Подключить Kaspi
-                    </Button>
-                  </form>
+
+                    {currentStep === 1 && (
+                      <div className="space-y-4">
+                        <div className="p-4 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+                          <h4 className="font-medium flex items-center gap-2 mb-3">
+                            <Smartphone className="h-5 w-5 text-blue-600" />
+                            Шаг 1: Добавьте сотрудника в Kaspi Business
+                          </h4>
+                          <ol className="list-decimal list-inside space-y-2 text-sm text-muted-foreground">
+                            <li>Откройте приложение <strong>Kaspi Business</strong> на телефоне</li>
+                            <li>Перейдите в <strong>Настройки → Сотрудники → Добавить сотрудника</strong></li>
+                            <li>Введите номер телефона SmartCatalog:</li>
+                          </ol>
+                          <div className="flex items-center gap-2 mt-3 p-3 bg-white dark:bg-background rounded border">
+                            <span className="font-mono text-lg font-medium">{SMARTCATALOG_KASPI_PHONE}</span>
+                            <Button 
+                              size="icon" 
+                              variant="ghost" 
+                              onClick={copyPhone}
+                              data-testid="button-copy-phone"
+                            >
+                              <Copy className="h-4 w-4" />
+                            </Button>
+                          </div>
+                          <p className="text-sm text-muted-foreground mt-2">
+                            Выберите права доступа: <strong>"Бухгалтер"</strong>
+                          </p>
+                        </div>
+
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          <div className="space-y-2">
+                            <Label htmlFor="iinBin">ИИН или БИН организации *</Label>
+                            <Input
+                              id="iinBin"
+                              placeholder="123456789012"
+                              value={kaspiForm.iinBin}
+                              onChange={(e) => setKaspiForm({ ...kaspiForm, iinBin: e.target.value.replace(/\D/g, "").slice(0, 12) })}
+                              maxLength={12}
+                              required
+                              data-testid="input-iin-bin"
+                            />
+                            <p className="text-xs text-muted-foreground">12 цифр</p>
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="organizationName">Название организации</Label>
+                            <Input
+                              id="organizationName"
+                              placeholder="ИП Иванов И.И."
+                              value={kaspiForm.organizationName}
+                              onChange={(e) => setKaspiForm({ ...kaspiForm, organizationName: e.target.value })}
+                              data-testid="input-org-name"
+                            />
+                          </div>
+                        </div>
+
+                        <Button
+                          onClick={() => {
+                            if (kaspiForm.iinBin.length === 12) {
+                              requestVerificationMutation.mutate({
+                                iinBin: kaspiForm.iinBin,
+                                organizationName: kaspiForm.organizationName,
+                              });
+                            }
+                          }}
+                          disabled={kaspiForm.iinBin.length !== 12 || requestVerificationMutation.isPending}
+                          data-testid="button-request-verification"
+                        >
+                          {requestVerificationMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                          Далее
+                        </Button>
+                      </div>
+                    )}
+
+                    {currentStep === 2 && (
+                      <div className="space-y-4">
+                        <div className="p-4 rounded-lg bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800">
+                          <h4 className="font-medium flex items-center gap-2 mb-3">
+                            <CheckCircle2 className="h-5 w-5 text-yellow-600" />
+                            Шаг 2: Подтвердите в Kaspi Business
+                          </h4>
+                          <p className="text-sm text-muted-foreground">
+                            В течение 2 минут в приложении Kaspi Business появится запрос на добавление сотрудника. 
+                            Подтвердите его, чтобы продолжить.
+                          </p>
+                        </div>
+
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            onClick={() => setCurrentStep(1)}
+                          >
+                            Назад
+                          </Button>
+                          <Button
+                            onClick={() => setCurrentStep(3)}
+                            data-testid="button-next-step"
+                          >
+                            Я подтвердил, продолжить
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
+                    {currentStep === 3 && (
+                      <div className="space-y-4">
+                        <div className="p-4 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
+                          <h4 className="font-medium flex items-center gap-2 mb-3">
+                            <Key className="h-5 w-5 text-green-600" />
+                            Шаг 3: Введите API ключ
+                          </h4>
+                          <p className="text-sm text-muted-foreground mb-3">
+                            Получите API ключ в личном кабинете ApiPay.kz или введите ключ, если он у вас уже есть.
+                          </p>
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label htmlFor="apiKey">API ключ *</Label>
+                          <Input
+                            id="apiKey"
+                            type="password"
+                            placeholder="Ваш API ключ"
+                            value={kaspiForm.apiKey}
+                            onChange={(e) => setKaspiForm({ ...kaspiForm, apiKey: e.target.value })}
+                            required
+                            data-testid="input-api-key"
+                          />
+                        </div>
+
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            onClick={() => setCurrentStep(2)}
+                          >
+                            Назад
+                          </Button>
+                          <Button
+                            onClick={() => {
+                              if (kaspiForm.apiKey) {
+                                confirmVerificationMutation.mutate({ apiKey: kaspiForm.apiKey });
+                              }
+                            }}
+                            disabled={!kaspiForm.apiKey || confirmVerificationMutation.isPending}
+                            data-testid="button-confirm-verification"
+                          >
+                            {confirmVerificationMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                            Подключить Kaspi Business
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
+                    {kaspiIntegration?.verificationStatus === "pending" && (
+                      <div className="p-4 rounded-lg bg-yellow-50 dark:bg-yellow-900/20">
+                        <div className="flex items-center gap-2">
+                          <Clock className="h-5 w-5 text-yellow-600 animate-pulse" />
+                          <p className="font-medium">Ожидаем подтверждения в Kaspi Business</p>
+                        </div>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          Подтвердите запрос в приложении Kaspi Business, затем нажмите "Далее"
+                        </p>
+                      </div>
+                    )}
+
+                    {kaspiIntegration?.verificationError && (
+                      <div className="p-4 rounded-lg bg-red-50 dark:bg-red-900/20">
+                        <div className="flex items-center gap-2">
+                          <AlertCircle className="h-5 w-5 text-red-600" />
+                          <p className="font-medium text-red-700">Ошибка верификации</p>
+                        </div>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          {kaspiIntegration.verificationError}
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 )}
               </CardContent>
             </Card>

@@ -4279,8 +4279,8 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
         return res.status(404).json({ success: false, message: "Интеграция не найдена" });
       }
       
-      const { kaspiService } = await import("./services/payments");
-      const isConnected = await kaspiService.testConnection(integration);
+      const { kaspiBusinessService } = await import("./services/payments/kaspi-business.service");
+      const isConnected = await kaspiBusinessService.testConnection(integration);
       
       if (isConnected) {
         await storage.updateKaspiIntegration(tenantId, {
@@ -4321,6 +4321,73 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
       res.json(updated);
     } catch (error) {
       res.status(500).json({ message: "Ошибка обновления настроек" });
+    }
+  });
+
+  app.post("/api/kaspi/request-verification", requireAuth, async (req, res) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const { iinBin, organizationName } = req.body;
+      
+      if (!iinBin || iinBin.length !== 12 || !/^\d{12}$/.test(iinBin)) {
+        return res.status(400).json({ message: "ИИН/БИН должен содержать 12 цифр" });
+      }
+      
+      let integration = await storage.getKaspiIntegration(tenantId);
+      
+      if (integration) {
+        await storage.updateKaspiIntegration(tenantId, {
+          iinBin,
+          organizationName,
+          verificationStatus: "pending",
+          verificationRequestedAt: new Date(),
+          status: "pending_verification",
+          verificationError: null,
+        });
+      } else {
+        integration = await storage.createKaspiIntegration({
+          tenantId,
+          iinBin,
+          organizationName,
+          verificationStatus: "pending",
+          verificationRequestedAt: new Date(),
+          status: "pending_verification",
+        });
+      }
+      
+      res.json({ success: true, message: "Запрос на верификацию отправлен" });
+    } catch (error) {
+      console.error("Error requesting verification:", error);
+      res.status(500).json({ message: "Ошибка запроса верификации" });
+    }
+  });
+
+  app.post("/api/kaspi/confirm-verification", requireAuth, async (req, res) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const { apiKey } = req.body;
+      
+      if (!apiKey) {
+        return res.status(400).json({ success: false, message: "API ключ обязателен" });
+      }
+      
+      const integration = await storage.getKaspiIntegration(tenantId);
+      
+      if (!integration) {
+        return res.status(404).json({ success: false, message: "Интеграция не найдена" });
+      }
+      
+      const { kaspiBusinessService } = await import("./services/payments/kaspi-business.service");
+      const result = await kaspiBusinessService.confirmVerification(integration, apiKey);
+      
+      if (result.success) {
+        res.json({ success: true, message: "Kaspi Business подключен" });
+      } else {
+        res.json({ success: false, message: result.error || "Ошибка верификации" });
+      }
+    } catch (error) {
+      console.error("Error confirming verification:", error);
+      res.status(500).json({ success: false, message: "Ошибка подтверждения верификации" });
     }
   });
 

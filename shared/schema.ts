@@ -1056,9 +1056,17 @@ export type CrmSyncLog = typeof crmSyncLogs.$inferSelect;
 export const kaspiIntegrations = pgTable("kaspi_integrations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
-  status: text("status").notNull().default("disconnected"), // connected, disconnected, error
+  status: text("status").notNull().default("disconnected"), // connected, disconnected, error, pending_verification
   
-  // Kaspi credentials (encrypted in production)
+  // Kaspi Business verification (like ApiPay model)
+  iinBin: text("iin_bin"), // ИИН (12 digits) or БИН (12 digits)
+  organizationName: text("organization_name"), // Название организации
+  verificationStatus: text("verification_status").default("not_started"), // not_started, pending, verified, failed, expired
+  verificationRequestedAt: timestamp("verification_requested_at"),
+  verifiedAt: timestamp("verified_at"),
+  verificationError: text("verification_error"),
+  
+  // Kaspi credentials (after verification)
   merchantId: text("merchant_id"),
   apiToken: text("api_token"),
   webhookSecret: text("webhook_secret"),
