@@ -19,19 +19,24 @@ class KaspiService {
     integration: KaspiIntegration,
     endpoint: string,
     method: "GET" | "POST" = "GET",
-    body?: Record<string, unknown>
+    body?: Record<string, unknown>,
+    queryParams?: Record<string, string>
   ): Promise<unknown> {
-    if (!integration.merchantId || !integration.apiToken) {
-      throw new Error("Kaspi credentials not configured");
+    if (!integration.apiToken) {
+      throw new Error("Kaspi API token not configured");
     }
 
-    const baseUrl = "https://kaspi.kz/pay/api/v1";
-    const url = `${baseUrl}${endpoint}`;
+    const baseUrl = "https://kaspi.kz/shop/api/v2";
+    let url = `${baseUrl}${endpoint}`;
+    
+    if (queryParams) {
+      const params = new URLSearchParams(queryParams);
+      url = `${url}?${params.toString()}`;
+    }
 
     const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${integration.apiToken}`,
-      "X-Merchant-ID": integration.merchantId,
+      "Content-Type": "application/vnd.api+json",
+      "X-Auth-Token": integration.apiToken,
     };
 
     try {
@@ -56,7 +61,10 @@ class KaspiService {
 
   async testConnection(integration: KaspiIntegration): Promise<boolean> {
     try {
-      await this.callApi(integration, "/merchant/info");
+      await this.callApi(integration, "/orders", "GET", undefined, {
+        "page[number]": "0",
+        "page[size]": "1",
+      });
       return true;
     } catch {
       return false;

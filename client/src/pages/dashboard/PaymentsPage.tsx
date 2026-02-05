@@ -270,24 +270,25 @@ export default function PaymentsPage() {
                         <Label htmlFor="merchantId">Merchant ID</Label>
                         <Input
                           id="merchantId"
-                          placeholder="Ваш Merchant ID"
+                          placeholder="ID магазина из кабинета Kaspi"
                           value={kaspiForm.merchantId}
                           onChange={(e) => setKaspiForm({ ...kaspiForm, merchantId: e.target.value })}
-                          required
                           data-testid="input-merchant-id"
                         />
+                        <p className="text-xs text-muted-foreground">Опционально, для идентификации</p>
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="apiToken">API Token</Label>
+                        <Label htmlFor="apiToken">X-Auth-Token</Label>
                         <Input
                           id="apiToken"
                           type="password"
-                          placeholder="API ключ"
+                          placeholder="Токен из кабинета мерчанта Kaspi"
                           value={kaspiForm.apiToken}
                           onChange={(e) => setKaspiForm({ ...kaspiForm, apiToken: e.target.value })}
                           required
                           data-testid="input-api-token"
                         />
+                        <p className="text-xs text-muted-foreground">Получите в shop.kaspi.kz/merchantcabinet</p>
                       </div>
                     </div>
                     <div className="space-y-2">
