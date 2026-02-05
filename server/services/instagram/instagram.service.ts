@@ -90,14 +90,32 @@ class InstagramService {
     redirectUri: string
   ): Promise<{ success: boolean; tenantId?: string; error?: string }> {
     try {
+      if (!state || !state.includes(".")) {
+        return { success: false, error: "Invalid state format" };
+      }
+      
       const [stateData, stateSignature] = state.split(".");
       
+      if (!stateData || !stateSignature) {
+        return { success: false, error: "Malformed state" };
+      }
+      
       const expectedSignature = crypto.createHmac("sha256", appSecret).update(stateData).digest("hex");
-      if (!crypto.timingSafeEqual(Buffer.from(stateSignature), Buffer.from(expectedSignature))) {
+      
+      if (stateSignature.length !== expectedSignature.length) {
         return { success: false, error: "Invalid state signature" };
       }
       
-      const payload = JSON.parse(Buffer.from(stateData, "base64").toString());
+      if (!crypto.timingSafeEqual(Buffer.from(stateSignature, "hex"), Buffer.from(expectedSignature, "hex"))) {
+        return { success: false, error: "Invalid state signature" };
+      }
+      
+      let payload: any;
+      try {
+        payload = JSON.parse(Buffer.from(stateData, "base64").toString());
+      } catch {
+        return { success: false, error: "Invalid state payload" };
+      }
       const { tenantId, nonce, ts } = payload;
       
       const fiveMinutes = 5 * 60 * 1000;
@@ -244,8 +262,18 @@ class InstagramService {
       const expectedSig = crypto.createHmac("sha256", appSecret).update(rawBody).digest("hex");
       const receivedSig = signature.replace("sha256=", "");
       
-      if (!crypto.timingSafeEqual(Buffer.from(expectedSig), Buffer.from(receivedSig))) {
-        console.error("Invalid Instagram webhook signature");
+      if (receivedSig.length !== expectedSig.length) {
+        console.error("Invalid Instagram webhook signature length");
+        return;
+      }
+      
+      try {
+        if (!crypto.timingSafeEqual(Buffer.from(expectedSig, "hex"), Buffer.from(receivedSig, "hex"))) {
+          console.error("Invalid Instagram webhook signature");
+          return;
+        }
+      } catch {
+        console.error("Invalid Instagram webhook signature format");
         return;
       }
     }
@@ -280,7 +308,8 @@ class InstagramService {
   }
 
   async findIntegrationByAccountId(accountId: string): Promise<InstagramIntegration | null> {
-    return null;
+    const integration = await storage.getInstagramIntegrationByAccountId(accountId);
+    return integration || null;
   }
 
   verifyWebhook(mode: string | undefined, token: string | undefined, challenge: string | undefined, verifyToken: string): string | null {

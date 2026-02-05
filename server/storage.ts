@@ -126,6 +126,7 @@ export interface IStorage {
   // Instagram Messages
   getInstagramMessages(tenantId: string, limit?: number): Promise<InstagramMessage[]>;
   createInstagramMessage(data: InsertInstagramMessage): Promise<InstagramMessage>;
+  getInstagramIntegrationByAccountId(accountId: string): Promise<InstagramIntegration | undefined>;
   
   getOrders(tenantId: string): Promise<Order[]>;
   getOrder(id: string, tenantId: string): Promise<(Order & { items?: OrderItem[] }) | undefined>;
@@ -666,6 +667,12 @@ export class DatabaseStorage implements IStorage {
   async createInstagramMessage(data: InsertInstagramMessage): Promise<InstagramMessage> {
     const [message] = await db.insert(instagramMessages).values(data).returning();
     return message;
+  }
+
+  async getInstagramIntegrationByAccountId(accountId: string): Promise<InstagramIntegration | undefined> {
+    const [integration] = await db.select().from(instagramIntegrations)
+      .where(eq(instagramIntegrations.instagramAccountId, accountId));
+    return integration;
   }
 
   async getOrders(tenantId: string): Promise<Order[]> {

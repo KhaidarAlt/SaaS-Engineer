@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { AiPaywall } from "@/components/AiPaywall";
 import { Plug, MessageCircle, Globe, Settings, ArrowLeft, Plus, Loader2, RefreshCw, Trash2, Play, Square, QrCode, Phone, CheckCircle, AlertCircle } from "lucide-react";
-import { SiWhatsapp, SiTelegram } from "react-icons/si";
+import { SiWhatsapp, SiTelegram, SiInstagram } from "react-icons/si";
 import { Link } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -27,6 +27,14 @@ interface WahaInstance {
 interface WahaHealth {
   healthy: boolean;
   baseUrl?: string;
+}
+
+interface InstagramIntegration {
+  id: string;
+  tenantId: string;
+  instagramUsername: string | null;
+  instagramAccountId: string | null;
+  status: string;
 }
 
 const statusLabels: Record<string, string> = {
@@ -91,6 +99,37 @@ export default function AiIntegrationsPage() {
     }
   }, [instanceStatus?.status]);
 
+  const { data: instagramIntegration, isLoading: instagramLoading, refetch: refetchInstagram } = useQuery<InstagramIntegration | null>({
+    queryKey: ["/api/instagram/integration"],
+    enabled: status?.hasAccess,
+  });
+
+  const instagramConnectMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/instagram/onboarding/start");
+      return res.json();
+    },
+    onSuccess: (data: { authUrl: string }) => {
+      window.location.href = data.authUrl;
+    },
+    onError: () => {
+      toast({ title: "Ошибка подключения Instagram", variant: "destructive" });
+    },
+  });
+
+  const instagramDisconnectMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("DELETE", "/api/instagram/integration");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/instagram/integration"] });
+      toast({ title: "Instagram отключен" });
+    },
+    onError: () => {
+      toast({ title: "Ошибка отключения Instagram", variant: "destructive" });
+    },
+  });
+
   const createMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", "/api/waha/instances");
@@ -150,14 +189,6 @@ export default function AiIntegrationsPage() {
       icon: SiTelegram,
       status: "coming_soon" as const,
       color: "text-blue-500",
-    },
-    {
-      id: "instagram",
-      name: "Instagram Direct",
-      description: "Отвечайте на сообщения в Instagram автоматически",
-      icon: MessageCircle,
-      status: "coming_soon" as const,
-      color: "text-pink-600",
     },
     {
       id: "website",
@@ -311,7 +342,81 @@ export default function AiIntegrationsPage() {
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <Card data-testid="card-integration-instagram">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-purple-500 via-pink-500 to-orange-500 flex items-center justify-center">
+                <SiInstagram className="h-6 w-6 text-white" />
+              </div>
+              <div>
+                <CardTitle className="text-lg">Instagram Direct</CardTitle>
+                <CardDescription>Автоматические ответы в Instagram сообщениях</CardDescription>
+              </div>
+            </div>
+            {instagramIntegration?.status === "connected" ? (
+              <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100">
+                <CheckCircle className="h-3 w-3 mr-1" />
+                Подключен
+              </Badge>
+            ) : (
+              <Badge variant="secondary">Не подключен</Badge>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {instagramLoading ? (
+            <Skeleton className="h-16" />
+          ) : instagramIntegration?.status === "connected" ? (
+            <div className="flex items-center justify-between p-4 border rounded-lg">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-full bg-gradient-to-br from-purple-500 via-pink-500 to-orange-500 flex items-center justify-center">
+                  <SiInstagram className="h-5 w-5 text-white" />
+                </div>
+                <div>
+                  <p className="font-medium">@{instagramIntegration.instagramUsername}</p>
+                  <p className="text-sm text-muted-foreground">Instagram Business Account</p>
+                </div>
+              </div>
+              <Button 
+                variant="ghost" 
+                size="sm"
+                onClick={() => instagramDisconnectMutation.mutate()}
+                disabled={instagramDisconnectMutation.isPending}
+                data-testid="button-disconnect-instagram"
+              >
+                {instagramDisconnectMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Trash2 className="h-4 w-4 text-destructive" />
+                )}
+              </Button>
+            </div>
+          ) : (
+            <div className="text-center py-4 text-muted-foreground">
+              Подключите Instagram Business аккаунт для автоматических ответов
+            </div>
+          )}
+          
+          {instagramIntegration?.status !== "connected" && (
+            <Button 
+              onClick={() => instagramConnectMutation.mutate()} 
+              disabled={instagramConnectMutation.isPending}
+              className="w-full"
+              data-testid="button-connect-instagram"
+            >
+              {instagramConnectMutation.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Plus className="mr-2 h-4 w-4" />
+              )}
+              Подключить Instagram
+            </Button>
+          )}
+        </CardContent>
+      </Card>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {otherIntegrations.map((integration) => (
           <Card key={integration.id} data-testid={`card-integration-${integration.id}`}>
             <CardHeader>
