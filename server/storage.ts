@@ -11,6 +11,8 @@ import {
   waCloudIntegrations, waCloudPhoneNumbers, waCloudTemplates, waCloudCampaigns,
   waCloudWarmupStatus, waCloudAnalytics, waCloudRiskEvents, promoBlocks,
   instagramIntegrations, instagramMessages,
+  telegramIntegrations, telegramMessages,
+  widgetIntegrations, widgetConversations, widgetMessages,
   type User, type InsertUser, type Tenant, type InsertTenant,
   type Subscription, type InsertSubscription, type Plan, type InsertPlan,
   type Product, type InsertProduct, type Category, type InsertCategory,
@@ -50,6 +52,11 @@ import {
   type PromoBlock, type InsertPromoBlock,
   type InstagramIntegration, type InsertInstagramIntegration,
   type InstagramMessage, type InsertInstagramMessage,
+  type TelegramIntegration, type InsertTelegramIntegration,
+  type TelegramMessage, type InsertTelegramMessage,
+  type WidgetIntegration, type InsertWidgetIntegration,
+  type WidgetConversation, type InsertWidgetConversation,
+  type WidgetMessage, type InsertWidgetMessage,
 } from "@shared/schema";
 import bcrypt from "bcryptjs";
 
@@ -127,6 +134,33 @@ export interface IStorage {
   getInstagramMessages(tenantId: string, limit?: number): Promise<InstagramMessage[]>;
   createInstagramMessage(data: InsertInstagramMessage): Promise<InstagramMessage>;
   getInstagramIntegrationByAccountId(accountId: string): Promise<InstagramIntegration | undefined>;
+  
+  // Telegram Integration
+  getTelegramIntegration(tenantId: string): Promise<TelegramIntegration | undefined>;
+  getTelegramIntegrationByBotId(botId: string): Promise<TelegramIntegration | undefined>;
+  createTelegramIntegration(data: InsertTelegramIntegration): Promise<TelegramIntegration>;
+  updateTelegramIntegration(id: string, data: Partial<InsertTelegramIntegration>): Promise<TelegramIntegration | undefined>;
+  deleteTelegramIntegration(tenantId: string): Promise<void>;
+  
+  // Telegram Messages
+  getTelegramMessages(tenantId: string, limit?: number): Promise<TelegramMessage[]>;
+  createTelegramMessage(data: InsertTelegramMessage): Promise<TelegramMessage>;
+  
+  // Widget Integration
+  getWidgetIntegration(tenantId: string): Promise<WidgetIntegration | undefined>;
+  getWidgetIntegrationByKey(widgetKey: string): Promise<WidgetIntegration | undefined>;
+  createWidgetIntegration(data: InsertWidgetIntegration): Promise<WidgetIntegration>;
+  updateWidgetIntegration(id: string, data: Partial<InsertWidgetIntegration>): Promise<WidgetIntegration | undefined>;
+  deleteWidgetIntegration(tenantId: string): Promise<void>;
+  
+  // Widget Conversations
+  getWidgetConversation(sessionId: string, widgetId: string): Promise<WidgetConversation | undefined>;
+  createWidgetConversation(data: InsertWidgetConversation): Promise<WidgetConversation>;
+  updateWidgetConversation(id: string, data: Partial<InsertWidgetConversation>): Promise<WidgetConversation | undefined>;
+  
+  // Widget Messages
+  getWidgetMessages(conversationId: string): Promise<WidgetMessage[]>;
+  createWidgetMessage(data: InsertWidgetMessage): Promise<WidgetMessage>;
   
   getOrders(tenantId: string): Promise<Order[]>;
   getOrder(id: string, tenantId: string): Promise<(Order & { items?: OrderItem[] }) | undefined>;
@@ -673,6 +707,122 @@ export class DatabaseStorage implements IStorage {
     const [integration] = await db.select().from(instagramIntegrations)
       .where(eq(instagramIntegrations.instagramAccountId, accountId));
     return integration;
+  }
+
+  // Telegram Integration
+  async getTelegramIntegration(tenantId: string): Promise<TelegramIntegration | undefined> {
+    const [integration] = await db.select().from(telegramIntegrations).where(eq(telegramIntegrations.tenantId, tenantId));
+    return integration;
+  }
+
+  async getTelegramIntegrationByBotId(botId: string): Promise<TelegramIntegration | undefined> {
+    const [integration] = await db.select().from(telegramIntegrations)
+      .where(eq(telegramIntegrations.botId, botId));
+    return integration;
+  }
+
+  async createTelegramIntegration(data: InsertTelegramIntegration): Promise<TelegramIntegration> {
+    const [integration] = await db.insert(telegramIntegrations).values(data).returning();
+    return integration;
+  }
+
+  async updateTelegramIntegration(id: string, data: Partial<InsertTelegramIntegration>): Promise<TelegramIntegration | undefined> {
+    const [integration] = await db.update(telegramIntegrations)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(telegramIntegrations.id, id))
+      .returning();
+    return integration;
+  }
+
+  async deleteTelegramIntegration(tenantId: string): Promise<void> {
+    const integration = await this.getTelegramIntegration(tenantId);
+    if (integration) {
+      await db.delete(telegramMessages).where(eq(telegramMessages.integrationId, integration.id));
+      await db.delete(telegramIntegrations).where(eq(telegramIntegrations.tenantId, tenantId));
+    }
+  }
+
+  // Telegram Messages
+  async getTelegramMessages(tenantId: string, limit: number = 50): Promise<TelegramMessage[]> {
+    return db.select().from(telegramMessages)
+      .where(eq(telegramMessages.tenantId, tenantId))
+      .orderBy(desc(telegramMessages.createdAt))
+      .limit(limit);
+  }
+
+  async createTelegramMessage(data: InsertTelegramMessage): Promise<TelegramMessage> {
+    const [message] = await db.insert(telegramMessages).values(data).returning();
+    return message;
+  }
+
+  // Widget Integration
+  async getWidgetIntegration(tenantId: string): Promise<WidgetIntegration | undefined> {
+    const [integration] = await db.select().from(widgetIntegrations).where(eq(widgetIntegrations.tenantId, tenantId));
+    return integration;
+  }
+
+  async getWidgetIntegrationByKey(widgetKey: string): Promise<WidgetIntegration | undefined> {
+    const [integration] = await db.select().from(widgetIntegrations)
+      .where(eq(widgetIntegrations.widgetKey, widgetKey));
+    return integration;
+  }
+
+  async createWidgetIntegration(data: InsertWidgetIntegration): Promise<WidgetIntegration> {
+    const [integration] = await db.insert(widgetIntegrations).values(data).returning();
+    return integration;
+  }
+
+  async updateWidgetIntegration(id: string, data: Partial<InsertWidgetIntegration>): Promise<WidgetIntegration | undefined> {
+    const [integration] = await db.update(widgetIntegrations)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(widgetIntegrations.id, id))
+      .returning();
+    return integration;
+  }
+
+  async deleteWidgetIntegration(tenantId: string): Promise<void> {
+    const integration = await this.getWidgetIntegration(tenantId);
+    if (integration) {
+      const conversations = await db.select().from(widgetConversations)
+        .where(eq(widgetConversations.widgetId, integration.id));
+      for (const conv of conversations) {
+        await db.delete(widgetMessages).where(eq(widgetMessages.conversationId, conv.id));
+      }
+      await db.delete(widgetConversations).where(eq(widgetConversations.widgetId, integration.id));
+      await db.delete(widgetIntegrations).where(eq(widgetIntegrations.tenantId, tenantId));
+    }
+  }
+
+  // Widget Conversations
+  async getWidgetConversation(sessionId: string, widgetId: string): Promise<WidgetConversation | undefined> {
+    const [conversation] = await db.select().from(widgetConversations)
+      .where(and(eq(widgetConversations.sessionId, sessionId), eq(widgetConversations.widgetId, widgetId)));
+    return conversation;
+  }
+
+  async createWidgetConversation(data: InsertWidgetConversation): Promise<WidgetConversation> {
+    const [conversation] = await db.insert(widgetConversations).values(data).returning();
+    return conversation;
+  }
+
+  async updateWidgetConversation(id: string, data: Partial<InsertWidgetConversation>): Promise<WidgetConversation | undefined> {
+    const [conversation] = await db.update(widgetConversations)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(widgetConversations.id, id))
+      .returning();
+    return conversation;
+  }
+
+  // Widget Messages
+  async getWidgetMessages(conversationId: string): Promise<WidgetMessage[]> {
+    return db.select().from(widgetMessages)
+      .where(eq(widgetMessages.conversationId, conversationId))
+      .orderBy(widgetMessages.createdAt);
+  }
+
+  async createWidgetMessage(data: InsertWidgetMessage): Promise<WidgetMessage> {
+    const [message] = await db.insert(widgetMessages).values(data).returning();
+    return message;
   }
 
   async getOrders(tenantId: string): Promise<Order[]> {

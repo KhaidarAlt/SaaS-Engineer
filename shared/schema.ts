@@ -1755,6 +1755,153 @@ export const insertInstagramMessageSchema = createInsertSchema(instagramMessages
 export type InsertInstagramMessage = z.infer<typeof insertInstagramMessageSchema>;
 export type InstagramMessage = typeof instagramMessages.$inferSelect;
 
+// ============ TELEGRAM INTEGRATIONS ============
+export const telegramIntegrations = pgTable("telegram_integrations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  botToken: text("bot_token").notNull(),
+  botUsername: text("bot_username"),
+  botId: text("bot_id"),
+  webhookUrl: text("webhook_url"),
+  webhookSecret: text("webhook_secret"),
+  status: text("status").notNull().default("pending"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const telegramIntegrationsRelations = relations(telegramIntegrations, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [telegramIntegrations.tenantId],
+    references: [tenants.id],
+  }),
+}));
+
+export const insertTelegramIntegrationSchema = createInsertSchema(telegramIntegrations).omit({ 
+  id: true, createdAt: true, updatedAt: true 
+});
+export type InsertTelegramIntegration = z.infer<typeof insertTelegramIntegrationSchema>;
+export type TelegramIntegration = typeof telegramIntegrations.$inferSelect;
+
+// ============ TELEGRAM MESSAGES ============
+export const telegramMessages = pgTable("telegram_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  integrationId: varchar("integration_id").notNull().references(() => telegramIntegrations.id),
+  chatId: text("chat_id").notNull(),
+  messageId: text("message_id"),
+  senderName: text("sender_name"),
+  senderUsername: text("sender_username"),
+  messageText: text("message_text"),
+  direction: text("direction").notNull().default("inbound"),
+  status: text("status").notNull().default("received"),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const telegramMessagesRelations = relations(telegramMessages, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [telegramMessages.tenantId],
+    references: [tenants.id],
+  }),
+  integration: one(telegramIntegrations, {
+    fields: [telegramMessages.integrationId],
+    references: [telegramIntegrations.id],
+  }),
+}));
+
+export const insertTelegramMessageSchema = createInsertSchema(telegramMessages).omit({ 
+  id: true, createdAt: true 
+});
+export type InsertTelegramMessage = z.infer<typeof insertTelegramMessageSchema>;
+export type TelegramMessage = typeof telegramMessages.$inferSelect;
+
+// ============ WIDGET INTEGRATIONS ============
+export const widgetIntegrations = pgTable("widget_integrations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  widgetKey: text("widget_key").notNull().unique(),
+  name: text("name").notNull().default("Виджет чата"),
+  primaryColor: text("primary_color").notNull().default("#0ea5e9"),
+  position: text("position").notNull().default("bottom-right"),
+  welcomeMessage: text("welcome_message").default("Здравствуйте! Чем могу помочь?"),
+  placeholder: text("placeholder").default("Введите сообщение..."),
+  allowedDomains: text("allowed_domains").array(),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const widgetIntegrationsRelations = relations(widgetIntegrations, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [widgetIntegrations.tenantId],
+    references: [tenants.id],
+  }),
+}));
+
+export const insertWidgetIntegrationSchema = createInsertSchema(widgetIntegrations).omit({ 
+  id: true, createdAt: true, updatedAt: true 
+});
+export type InsertWidgetIntegration = z.infer<typeof insertWidgetIntegrationSchema>;
+export type WidgetIntegration = typeof widgetIntegrations.$inferSelect;
+
+// ============ WIDGET CONVERSATIONS ============
+export const widgetConversations = pgTable("widget_conversations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  widgetId: varchar("widget_id").notNull().references(() => widgetIntegrations.id),
+  sessionId: text("session_id").notNull(),
+  visitorName: text("visitor_name"),
+  visitorEmail: text("visitor_email"),
+  status: text("status").notNull().default("active"),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const widgetConversationsRelations = relations(widgetConversations, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [widgetConversations.tenantId],
+    references: [tenants.id],
+  }),
+  widget: one(widgetIntegrations, {
+    fields: [widgetConversations.widgetId],
+    references: [widgetIntegrations.id],
+  }),
+}));
+
+export const insertWidgetConversationSchema = createInsertSchema(widgetConversations).omit({ 
+  id: true, createdAt: true, updatedAt: true 
+});
+export type InsertWidgetConversation = z.infer<typeof insertWidgetConversationSchema>;
+export type WidgetConversation = typeof widgetConversations.$inferSelect;
+
+// ============ WIDGET MESSAGES ============
+export const widgetMessages = pgTable("widget_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  conversationId: varchar("conversation_id").notNull().references(() => widgetConversations.id),
+  role: text("role").notNull(),
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const widgetMessagesRelations = relations(widgetMessages, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [widgetMessages.tenantId],
+    references: [tenants.id],
+  }),
+  conversation: one(widgetConversations, {
+    fields: [widgetMessages.conversationId],
+    references: [widgetConversations.id],
+  }),
+}));
+
+export const insertWidgetMessageSchema = createInsertSchema(widgetMessages).omit({ 
+  id: true, createdAt: true 
+});
+export type InsertWidgetMessage = z.infer<typeof insertWidgetMessageSchema>;
+export type WidgetMessage = typeof widgetMessages.$inferSelect;
+
 // ============ FORM VALIDATION SCHEMAS ============
 export const loginSchema = z.object({
   email: z.string().email("Введите корректный email"),
