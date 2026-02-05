@@ -4979,6 +4979,143 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
     }
   });
 
+  // ============ INSTAGRAM DIRECT INTEGRATION ============
+  
+  app.get("/api/instagram/integration", requireAuth, async (req, res) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const integration = await storage.getInstagramIntegration(tenantId);
+      res.json(integration || null);
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка получения интеграции Instagram" });
+    }
+  });
+
+  app.delete("/api/instagram/integration", requireAuth, async (req, res) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const { instagramService } = await import("./services/instagram/instagram.service");
+      await instagramService.disconnect(tenantId);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка отключения Instagram" });
+    }
+  });
+
+  app.post("/api/instagram/onboarding/start", requireAuth, async (req, res) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const appId = process.env.META_APP_ID;
+      const appSecret = process.env.META_APP_SECRET;
+      
+      if (!appId || !appSecret) {
+        return res.status(500).json({ error: "Instagram integration not configured" });
+      }
+      
+      const protocol = req.get("host")?.includes("localhost") ? "http" : "https";
+      const baseUrl = `${protocol}://${req.get("host")}`;
+      const redirectUri = `${baseUrl}/api/instagram/oauth/callback`;
+      
+      const { instagramService } = await import("./services/instagram/instagram.service");
+      const authUrl = await instagramService.initiateOAuth(tenantId, appId, redirectUri, appSecret);
+      
+      res.json({ authUrl });
+    } catch (error) {
+      console.error("Instagram onboarding error:", error);
+      res.status(500).json({ error: "Failed to start Instagram onboarding" });
+    }
+  });
+
+  app.get("/api/instagram/oauth/callback", async (req, res) => {
+    try {
+      const { code, state, error: oauthError, error_description } = req.query;
+      
+      if (oauthError) {
+        console.error("Instagram OAuth error:", oauthError, error_description);
+        return res.redirect(`/dashboard/ai/integrations?error=${encodeURIComponent(error_description as string || "OAuth failed")}`);
+      }
+      
+      if (!code || !state) {
+        return res.redirect("/dashboard/ai/integrations?error=missing_params");
+      }
+      
+      const appId = process.env.META_APP_ID!;
+      const appSecret = process.env.META_APP_SECRET!;
+      const protocol = req.get("host")?.includes("localhost") ? "http" : "https";
+      const baseUrl = `${protocol}://${req.get("host")}`;
+      const redirectUri = `${baseUrl}/api/instagram/oauth/callback`;
+      
+      const { instagramService } = await import("./services/instagram/instagram.service");
+      const result = await instagramService.handleOAuthCallback(
+        code as string,
+        state as string,
+        appId,
+        appSecret,
+        redirectUri
+      );
+      
+      if (result.success) {
+        res.redirect("/dashboard/ai/integrations?instagram=success");
+      } else {
+        res.redirect(`/dashboard/ai/integrations?error=${encodeURIComponent(result.error || "Connection failed")}`);
+      }
+    } catch (error) {
+      console.error("Instagram OAuth callback error:", error);
+      res.redirect("/dashboard/ai/integrations?error=callback_failed");
+    }
+  });
+
+  app.get("/api/instagram/messages", requireAuth, async (req, res) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const limit = parseInt(req.query.limit as string) || 50;
+      const messages = await storage.getInstagramMessages(tenantId, limit);
+      res.json(messages);
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка получения сообщений" });
+    }
+  });
+
+  app.get("/api/instagram/webhook", async (req, res) => {
+    try {
+      const mode = req.query["hub.mode"] as string | undefined;
+      const token = req.query["hub.verify_token"] as string | undefined;
+      const challenge = req.query["hub.challenge"] as string | undefined;
+      
+      const globalVerifyToken = process.env.INSTAGRAM_WEBHOOK_VERIFY_TOKEN;
+      
+      if (globalVerifyToken && mode === "subscribe" && token === globalVerifyToken) {
+        return res.status(200).send(challenge);
+      }
+      
+      res.status(403).send("Forbidden");
+    } catch (error) {
+      console.error("Instagram webhook verify error:", error);
+      res.status(500).send("Internal server error");
+    }
+  });
+
+  app.post("/api/instagram/webhook", async (req, res) => {
+    try {
+      const signature = req.headers["x-hub-signature-256"] as string;
+      const appSecret = process.env.META_APP_SECRET || "";
+      const rawBody = (req as any).rawBody;
+      
+      if (!rawBody) {
+        console.error("Raw body not available for Instagram webhook");
+        return res.status(500).json({ error: "Server configuration error" });
+      }
+      
+      const { instagramService } = await import("./services/instagram/instagram.service");
+      await instagramService.processWebhookEvent(req.body, appSecret, signature, rawBody);
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Instagram webhook error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   // ============ CRM INTEGRATIONS ============
   
   // Get CRM integrations
