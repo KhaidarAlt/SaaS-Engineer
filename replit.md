@@ -52,6 +52,10 @@ Preferred communication style: Simple, everyday language.
 - WAHA (WhatsApp API)
 - Telegram Bot API (prepared)
 - **Meta WhatsApp Cloud API** (fully integrated): OAuth flow with CSRF protection (HMAC-signed state, nonce validation), phone number management, template system with Meta approval workflow, warmup logic (50 msg/day → full features over 7 days), AI risk monitoring, webhook signature verification (raw body + timingSafeEqual), broadcast campaigns support
+- **Instagram Direct** (fully integrated): OAuth flow with CSRF protection (HMAC-signed state, nonce validation, 5-minute expiry), Instagram Business Account linking via Facebook Page, webhook message handling with signature verification, automatic AI-powered message responses
+  - API: GET/DELETE /api/instagram/integration, POST /api/instagram/onboarding/start, GET /api/instagram/oauth/callback, GET /api/instagram/messages, GET/POST /api/instagram/webhook
+  - Uses existing META_APP_ID/META_APP_SECRET credentials
+  - Schema: instagramIntegrations (OAuth tokens, account info), instagramMessages (message history)
 
 ### AI Services
 - OpenAI API
