@@ -1,6 +1,6 @@
 import { ReactNode, useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import {
   LayoutDashboard,
@@ -26,6 +26,10 @@ import {
   Link2,
   MessageCircle,
   BrainCircuit,
+  ChevronDown,
+  Megaphone,
+  Sparkles,
+  Puzzle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -34,6 +38,11 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { useAuth } from "@/contexts/AuthContext";
 import { PlanSelectionPopup } from "@/components/PlanSelectionPopup";
 import { useToast } from "@/hooks/use-toast";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import type { Plan, Subscription } from "@shared/schema";
 
 interface NavItem {
@@ -43,25 +52,73 @@ interface NavItem {
   lockForPlans?: string[];
 }
 
-const tenantNavItems: NavItem[] = [
-  { href: "/dashboard", label: "Обзор", icon: LayoutDashboard },
-  { href: "/dashboard/consultant", label: "Бизнес-консультант", icon: BrainCircuit },
-  { href: "/dashboard/products", label: "Товары", icon: Package },
-  { href: "/dashboard/categories", label: "Категории", icon: Tag },
-  { href: "/dashboard/orders", label: "Заказы", icon: ShoppingCart },
-  { href: "/dashboard/payments", label: "Платежи", icon: Wallet },
-  { href: "/dashboard/discounts", label: "Скидки", icon: Percent },
-  { href: "/dashboard/promo-zone", label: "Промо-зона", icon: Gift },
-  { href: "/dashboard/import", label: "Импорт", icon: Upload, lockForPlans: ["Старт"] },
-  { href: "/dashboard/ai", label: "AI-ассистент", icon: Bot, lockForPlans: ["Старт", "Каталог"] },
-  { href: "/dashboard/smart-contact", label: "Умный контакт", icon: MessageCircle, lockForPlans: ["Старт", "Каталог"] },
-  { href: "/dashboard/integrations", label: "Интеграции", icon: Link2, lockForPlans: ["Старт", "Каталог", "Каталог + AI"] },
-  { href: "/dashboard/whatsapp-cloud", label: "WhatsApp Meta", icon: MessageCircle, lockForPlans: ["Старт", "Каталог"] },
-  { href: "/dashboard/catalog-health", label: "Здоровье каталога", icon: Activity },
-  { href: "/dashboard/links", label: "Мои ссылки", icon: ExternalLink },
-  { href: "/dashboard/analytics", label: "Аналитика", icon: BarChart3, lockForPlans: ["Старт"] },
-  { href: "/dashboard/billing", label: "Биллинг", icon: CreditCard },
-  { href: "/dashboard/settings", label: "Настройки", icon: Settings },
+interface NavGroup {
+  id: string;
+  label: string;
+  icon: React.ElementType;
+  tooltip: string;
+  items: NavItem[];
+}
+
+const tenantNavGroups: NavGroup[] = [
+  {
+    id: "main",
+    label: "Основные",
+    icon: LayoutDashboard,
+    tooltip: "Главные разделы платформы",
+    items: [
+      { href: "/dashboard", label: "Обзор", icon: LayoutDashboard },
+      { href: "/dashboard/consultant", label: "Бизнес-консультант", icon: BrainCircuit },
+      { href: "/dashboard/billing", label: "Оплата и диалоги", icon: CreditCard },
+    ],
+  },
+  {
+    id: "catalog",
+    label: "Настройка каталога",
+    icon: Package,
+    tooltip: "Товары, заказы и параметры витрины",
+    items: [
+      { href: "/dashboard/catalog-settings", label: "Настройки", icon: Settings },
+      { href: "/dashboard/categories", label: "Категории", icon: Tag },
+      { href: "/dashboard/products", label: "Товары", icon: Package },
+      { href: "/dashboard/import", label: "Импорт", icon: Upload, lockForPlans: ["Старт"] },
+      { href: "/dashboard/orders", label: "Заказы", icon: ShoppingCart },
+      { href: "/dashboard/payments", label: "Платежи", icon: Wallet },
+      { href: "/dashboard/catalog-health", label: "Здоровье каталога", icon: Activity },
+    ],
+  },
+  {
+    id: "marketing",
+    label: "Маркетинг",
+    icon: Megaphone,
+    tooltip: "Акции и продвижение магазина",
+    items: [
+      { href: "/dashboard/discounts", label: "Скидки", icon: Percent },
+      { href: "/dashboard/promo-zone", label: "Промо-зона", icon: Gift },
+    ],
+  },
+  {
+    id: "ai",
+    label: "Настройки AI",
+    icon: Sparkles,
+    tooltip: "ИИ и работа с WhatsApp",
+    items: [
+      { href: "/dashboard/ai", label: "AI-ассистент", icon: Bot, lockForPlans: ["Старт", "Каталог"] },
+      { href: "/dashboard/smart-contact", label: "Умный контакт", icon: MessageCircle, lockForPlans: ["Старт", "Каталог"] },
+      { href: "/dashboard/whatsapp-cloud", label: "WhatsApp Meta", icon: MessageCircle, lockForPlans: ["Старт", "Каталог"] },
+    ],
+  },
+  {
+    id: "extra",
+    label: "Дополнительные настройки",
+    icon: Puzzle,
+    tooltip: "Интеграции и аналитика",
+    items: [
+      { href: "/dashboard/links", label: "Мои ссылки", icon: ExternalLink },
+      { href: "/dashboard/analytics", label: "Аналитика", icon: BarChart3, lockForPlans: ["Старт"] },
+      { href: "/dashboard/integrations", label: "Интеграции", icon: Link2, lockForPlans: ["Старт", "Каталог", "Каталог + AI"] },
+    ],
+  },
 ];
 
 const superAdminNavItems: NavItem[] = [
@@ -84,12 +141,23 @@ interface BillingData {
   daysLeft: number;
 }
 
+const getMenuStateKey = (userId?: string) => `smartcatalog_menu_state_${userId || "guest"}`;
+
 export function DashboardLayout({ children, isSuperAdmin = false }: DashboardLayoutProps) {
   const [location] = useLocation();
   const { user, logout } = useAuth();
   const { toast } = useToast();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showPlanPopup, setShowPlanPopup] = useState(false);
+  const [expandedGroup, setExpandedGroup] = useState<string | null>(() => {
+    if (typeof window !== "undefined" && user?.id) {
+      const saved = localStorage.getItem(getMenuStateKey(user.id));
+      if (saved) {
+        return saved;
+      }
+    }
+    return "catalog";
+  });
 
   const { data: billing } = useQuery<BillingData>({
     queryKey: ["/api/billing"],
@@ -99,7 +167,12 @@ export function DashboardLayout({ children, isSuperAdmin = false }: DashboardLay
   const currentPlanName = billing?.subscription?.plan?.name || "";
 
   useEffect(() => {
-    // Never show popup for superadmin (check both prop and user role)
+    if (user?.id && expandedGroup) {
+      localStorage.setItem(getMenuStateKey(user.id), expandedGroup);
+    }
+  }, [expandedGroup, user?.id]);
+
+  useEffect(() => {
     if (isSuperAdmin || !user || user.role === "superadmin") return;
 
     const createdAt = new Date(user.createdAt);
@@ -112,7 +185,6 @@ export function DashboardLayout({ children, isSuperAdmin = false }: DashboardLay
     }
   }, [user, isSuperAdmin]);
 
-  const navItems = isSuperAdmin ? superAdminNavItems : tenantNavItems;
   const tenantVersion = user?.tenant?.updatedAt ? new Date(user.tenant.updatedAt).getTime() : Date.now();
   const catalogUrl = user?.tenant ? `/c/${(user.tenant as any).slug}?v=${tenantVersion}` : null;
 
@@ -136,15 +208,33 @@ export function DashboardLayout({ children, isSuperAdmin = false }: DashboardLay
     }
   };
 
-  const NavLink = ({ item }: { item: NavItem }) => {
+  const toggleGroup = (groupId: string) => {
+    setExpandedGroup(prev => prev === groupId ? null : groupId);
+  };
+
+  const isGroupActive = (group: NavGroup): boolean => {
+    return group.items.some(item => 
+      location === item.href || 
+      (item.href !== "/dashboard" && location.startsWith(item.href))
+    );
+  };
+
+  const NavLink = ({ item, onNavigate }: { item: NavItem; onNavigate?: () => void }) => {
     const isActive = location === item.href || 
       (item.href !== "/dashboard" && item.href !== "/admin" && location.startsWith(item.href));
     const locked = isItemLocked(item);
     
+    const handleClick = (e: React.MouseEvent) => {
+      handleLockedClick(e, item);
+      if (!locked && onNavigate) {
+        onNavigate();
+      }
+    };
+    
     const content = (
       <div
-        onClick={(e) => handleLockedClick(e, item)}
-        className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
+        onClick={handleClick}
+        className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors cursor-pointer ${
           locked
             ? "text-muted-foreground/50 cursor-not-allowed"
             : isActive
@@ -153,9 +243,9 @@ export function DashboardLayout({ children, isSuperAdmin = false }: DashboardLay
         }`}
         data-testid={`nav-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
       >
-        <item.icon className="h-5 w-5" />
+        <item.icon className="h-4 w-4" />
         <span className="flex-1">{item.label}</span>
-        {locked && <Lock className="h-4 w-4 text-muted-foreground/50" />}
+        {locked && <Lock className="h-3 w-3 text-muted-foreground/50" />}
       </div>
     );
 
@@ -170,11 +260,61 @@ export function DashboardLayout({ children, isSuperAdmin = false }: DashboardLay
     );
   };
 
-  const SidebarContent = () => (
+  const NavGroupComponent = ({ group, onNavigate }: { group: NavGroup; onNavigate?: () => void }) => {
+    const isExpanded = expandedGroup === group.id;
+    const isActive = isGroupActive(group);
+
+    return (
+      <div className="mb-1">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              onClick={() => toggleGroup(group.id)}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                isActive 
+                  ? "text-foreground bg-accent/50" 
+                  : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+              }`}
+              data-testid={`nav-group-${group.id}`}
+            >
+              <group.icon className="h-5 w-5" />
+              <span className="flex-1 text-left">{group.label}</span>
+              <ChevronDown 
+                className={`h-4 w-4 transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`} 
+              />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="right" className="max-w-[200px]">
+            {group.tooltip}
+          </TooltipContent>
+        </Tooltip>
+        
+        <AnimatePresence initial={false}>
+          {isExpanded && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="overflow-hidden"
+            >
+              <div className="pl-4 mt-1 space-y-0.5">
+                {group.items.map((item) => (
+                  <NavLink key={item.href} item={item} onNavigate={onNavigate} />
+                ))}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    );
+  };
+
+  const SidebarContent = ({ onNavigate }: { onNavigate?: () => void }) => (
     <div className="flex flex-col h-full">
       <div className="p-4 border-b border-sidebar-border">
         <Link href={isSuperAdmin ? "/admin" : "/dashboard"}>
-          <div className="flex items-center gap-2 cursor-pointer">
+          <div className="flex items-center gap-2 cursor-pointer" onClick={onNavigate}>
             <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
               <Package className="h-4 w-4 text-primary-foreground" />
             </div>
@@ -188,10 +328,18 @@ export function DashboardLayout({ children, isSuperAdmin = false }: DashboardLay
         </Link>
       </div>
 
-      <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-        {navItems.map((item) => (
-          <NavLink key={item.href} item={item} />
-        ))}
+      <nav className="flex-1 p-3 overflow-y-auto">
+        {isSuperAdmin ? (
+          <div className="space-y-1">
+            {superAdminNavItems.map((item) => (
+              <NavLink key={item.href} item={item} onNavigate={onNavigate} />
+            ))}
+          </div>
+        ) : (
+          tenantNavGroups.map((group) => (
+            <NavGroupComponent key={group.id} group={group} onNavigate={onNavigate} />
+          ))
+        )}
       </nav>
 
       {catalogUrl && !isSuperAdmin && (
@@ -250,7 +398,7 @@ export function DashboardLayout({ children, isSuperAdmin = false }: DashboardLay
                 </Button>
               </SheetTrigger>
               <SheetContent side="left" className="w-64 p-0">
-                <SidebarContent />
+                <SidebarContent onNavigate={() => setMobileMenuOpen(false)} />
               </SheetContent>
             </Sheet>
             <h2 className="font-semibold text-lg hidden sm:block">

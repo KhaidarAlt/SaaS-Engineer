@@ -41,6 +41,8 @@ Preferred communication style: Simple, everyday language.
 - **Catalog Health QA**: Scoring system for product data quality (images, descriptions, prices) with actionable recommendations.
 - **Admin Panel**: Superadmin features for user and tenant management, plan configuration, subscription extension/changes, and lead tracking.
 - **Plan Selection**: Popup system to guide users through plan selection with feature comparisons and restrictions based on chosen plan.
+- **Navigation**: Grouped collapsible menu with 5 sections (Основные, Настройка каталога, Маркетинг, Настройки AI, Дополнительные настройки). Single-expanded group behavior with localStorage persistence per user.
+- **Business Consultant**: AI-powered business consultant with 5 modes (Analyst, Marketer, ROP, Finance, Support) for data-driven insights and platform guidance.
 
 ## External Dependencies
 ### Database

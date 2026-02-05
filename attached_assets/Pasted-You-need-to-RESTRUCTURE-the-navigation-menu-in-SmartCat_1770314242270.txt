@@ -1,0 +1,122 @@
+You need to RESTRUCTURE the navigation menu in SmartCatalog
+to make it intuitive for non-technical business users.
+
+LANGUAGE: Russian only  
+STYLE: consistent with current UI  
+GOAL: reduce visual noise and show logical grouping
+
+────────────────────────────────
+1. RENAME SECTIONS
+────────────────────────────────
+
+Rename:
+
+• “Билинг” → “Оплата и диалоги”  
+• Keep group name “Настройка каталога”  
+• Inside this group create section “Настройки”
+
+────────────────────────────────
+2. IMPLEMENT GROUPED MENU WITH SUBMENUS
+────────────────────────────────
+
+Main groups and items:
+
+🟦 ОСНОВНЫЕ
+- Обзор
+- Бизнес-консультант
+- Оплата и диалоги
+
+🟦 НАСТРОЙКА КАТАЛОГА
+- Настройки
+- Категории
+- Товары
+- Импорт
+- Заказы
+- Платежи
+- Здоровье каталога
+
+🟦 МАРКЕТИНГ
+- Скидки
+- Промо-зона
+
+🟦 НАСТРОЙКИ AI
+- AI ассистент
+- Умный контакт
+- WhatsApp Meta
+
+🟦 ДОПОЛНИТЕЛЬНЫЕ НАСТРОЙКИ
+- Мои ссылки
+- Аналитика
+- Интеграции
+
+────────────────────────────────
+3. BEHAVIOR LOGIC
+────────────────────────────────
+
+• Click on group → expand/collapse submenu  
+• Only one group open by default  
+• Remember last opened group per user  
+• Highlight active section  
+• Mobile friendly behavior
+
+Default state for new user:
+Open group → “Настройка каталога”
+
+────────────────────────────────
+4. TOOLTIP TEXTS (Russian)
+────────────────────────────────
+
+Оплата и диалоги  
+“Тариф SmartCatalog и счётчик использованных диалогов”
+
+Настройка каталога  
+“Товары, заказы и параметры витрины”
+
+Маркетинг  
+“Акции и продвижение магазина”
+
+Настройки AI  
+“ИИ и работа с WhatsApp”
+
+Дополнительные настройки  
+“Интеграции и аналитика”
+
+────────────────────────────────
+5. SECTION “НАСТРОЙКИ” CONTENT
+────────────────────────────────
+
+Inside “Настройка каталога → Настройки” place:
+
+1. УТП в шапке (до 120 символов)
+
+2. Карточка товара – переключатели:
+- показывать характеристики
+- показывать наличие
+- кнопка WhatsApp
+- быстрый просмотр
+- избранное
+
+3. Теги товаров – управление бейджами
+
+4. Общие параметры витрины
+
+────────────────────────────────
+6. TECH REQUIREMENTS
+────────────────────────────────
+
+• Update routes mapping  
+• Keep existing permissions  
+• Do not break current logic  
+• Feature flags support  
+• Store menu state per user
+
+────────────────────────────────
+7. OUTPUT REQUIRED
+────────────────────────────────
+
+• Updated menu component  
+• New section “Настройки”  
+• Migration of names  
+• Tooltips  
+• Russian texts  
+• Mobile behavior
