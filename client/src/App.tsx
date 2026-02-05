@@ -55,6 +55,7 @@ import LinksPublicPage from "@/pages/public/LinksPublicPage";
 import IntegrationsPage from "@/pages/dashboard/IntegrationsPage";
 import WhatsAppCloudPage from "@/pages/dashboard/WhatsAppCloudPage";
 import SmartContactPage from "@/pages/dashboard/SmartContactPage";
+import BusinessConsultantPage from "@/pages/dashboard/BusinessConsultantPage";
 import PrivacyPage from "@/pages/legal/PrivacyPage";
 import PrivacyPageKz from "@/pages/legal/PrivacyPageKz";
 import TermsPage from "@/pages/legal/TermsPage";
@@ -193,6 +194,9 @@ function Router() {
       </Route>
       <Route path="/dashboard/smart-contact">
         <ProtectedRoute component={SmartContactPage} />
+      </Route>
+      <Route path="/dashboard/consultant">
+        <ProtectedRoute component={BusinessConsultantPage} />
       </Route>
 
       <Route path="/dashboard/ai">

@@ -25,6 +25,7 @@ import {
   FileText,
   Link2,
   MessageCircle,
+  BrainCircuit,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -44,6 +45,7 @@ interface NavItem {
 
 const tenantNavItems: NavItem[] = [
   { href: "/dashboard", label: "Обзор", icon: LayoutDashboard },
+  { href: "/dashboard/consultant", label: "Бизнес-консультант", icon: BrainCircuit },
   { href: "/dashboard/products", label: "Товары", icon: Package },
   { href: "/dashboard/categories", label: "Категории", icon: Tag },
   { href: "/dashboard/orders", label: "Заказы", icon: ShoppingCart },
