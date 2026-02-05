@@ -1334,6 +1334,147 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/crm/stats", requireAuth, async (req, res) => {
+    try {
+      const orders = await storage.getOrders(req.user!.tenantId!);
+      const stats = {
+        total: orders.length,
+        new: orders.filter(o => o.status === "new").length,
+        inProgress: orders.filter(o => o.status === "in_progress").length,
+        awaitingPayment: orders.filter(o => o.status === "awaiting_payment").length,
+        paid: orders.filter(o => o.status === "paid").length,
+        completed: orders.filter(o => o.status === "completed").length,
+      };
+      res.json(stats);
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка получения статистики CRM" });
+    }
+  });
+
+  app.post("/api/crm/deals/:id/ai-analyze", requireAuth, async (req, res) => {
+    try {
+      const { generateAiResponse, isOpenAiConfigured } = await import("./services/openai");
+      
+      if (!isOpenAiConfigured()) {
+        return res.status(400).json({ message: "AI не настроен" });
+      }
+
+      const tenantId = req.user!.tenantId!;
+      const order = await storage.getOrder(req.params.id, tenantId);
+      if (!order) {
+        return res.status(404).json({ message: "Сделка не найдена" });
+      }
+
+      const tenant = await storage.getTenant(tenantId);
+      const items = (order as any).items || [];
+
+      const dealContext = `
+Информация о сделке:
+- Номер сделки: #${order.orderNumber}
+- Клиент: ${order.customerName}
+- Телефон: ${order.customerPhone}
+- Статус сделки: ${order.status}
+- Статус оплаты: ${order.paymentStatus || 'ожидает'}
+- Сумма: ${order.total} тенге
+- Дата создания: ${new Date(order.createdAt).toLocaleString('ru-RU')}
+- Товары: ${items.map((i: any) => `${i.productName} x${i.quantity}`).join(', ') || 'нет данных'}
+- Комментарий клиента: ${order.comment || 'нет'}
+- WhatsApp отправлен: ${order.whatsappSent ? 'да' : 'нет'}
+- Компания: ${tenant?.companyName || 'не указана'}
+      `.trim();
+
+      const systemPrompt = `Ты - бизнес-консультант для CRM системы SmartCatalog. Анализируй сделки и давай рекомендации.
+
+Формат ответа:
+📊 АНАЛИЗ
+[Краткий анализ текущего состояния сделки]
+
+⚠️ РИСКИ
+[Потенциальные риски и проблемы]
+
+📝 ЧТО НАПИСАТЬ КЛИЕНТУ
+[Готовый текст сообщения для отправки клиенту в WhatsApp]
+
+✅ СЛЕДУЮЩИЙ ШАГ
+[Конкретное действие для менеджера]
+
+Будь кратким, но информативным. Используй эмодзи для структуры.`;
+
+      const result = await generateAiResponse(
+        `Проанализируй эту сделку и дай рекомендации:\n\n${dealContext}`,
+        [],
+        { systemPrompt, tenantId }
+      );
+
+      res.json({ 
+        analysis: result.content,
+        dealContext 
+      });
+    } catch (error) {
+      console.error("[CRM AI Analysis Error]", error);
+      res.status(500).json({ message: "Ошибка AI анализа" });
+    }
+  });
+
+  app.post("/api/crm/deals/:id/generate-message", requireAuth, async (req, res) => {
+    try {
+      const { generateAiResponse, isOpenAiConfigured } = await import("./services/openai");
+      
+      if (!isOpenAiConfigured()) {
+        return res.status(400).json({ message: "AI не настроен" });
+      }
+
+      const { template } = req.body;
+      const tenantId = req.user!.tenantId!;
+      const order = await storage.getOrder(req.params.id, tenantId);
+      if (!order) {
+        return res.status(404).json({ message: "Сделка не найдена" });
+      }
+
+      const tenant = await storage.getTenant(tenantId);
+      const items = (order as any).items || [];
+
+      const templates: Record<string, string> = {
+        payment_reminder: "Напоминание об оплате",
+        delivery_confirmation: "Уточнение доставки",
+        cart_followup: "Дожим после добавления в корзину",
+        thank_you: "Благодарность после оплаты",
+      };
+
+      const templateName = templates[template] || template;
+
+      const dealContext = `
+Клиент: ${order.customerName}
+Телефон: ${order.customerPhone}
+Номер заказа: #${order.orderNumber}
+Сумма: ${order.total} тенге
+Товары: ${items.map((i: any) => `${i.productName} x${i.quantity}`).join(', ') || 'товары'}
+Статус оплаты: ${order.paymentStatus || 'ожидает'}
+Компания: ${tenant?.companyName || 'SmartCatalog'}
+      `.trim();
+
+      const systemPrompt = `Ты - помощник для генерации сообщений клиентам. 
+Генерируй дружелюбные, но профессиональные сообщения на русском языке для WhatsApp.
+Используй имя клиента, сумму заказа и название товаров.
+Не используй слишком много эмодзи (максимум 1-2).
+Сообщение должно быть коротким (2-4 предложения).`;
+
+      const result = await generateAiResponse(
+        `Сгенерируй сообщение типа "${templateName}" для клиента:\n\n${dealContext}`,
+        [],
+        { systemPrompt, tenantId }
+      );
+
+      res.json({ 
+        message: result.content,
+        template: templateName 
+      });
+    } catch (error) {
+      console.error("[CRM Message Generation Error]", error);
+      res.status(500).json({ message: "Ошибка генерации сообщения" });
+    }
+  });
+
   app.get("/api/orders/:id", requireAuth, async (req, res) => {
     try {
       const order = await storage.getOrder(req.params.id, req.user!.tenantId!);
