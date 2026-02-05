@@ -24,7 +24,7 @@ export interface VerificationResult {
   error?: string;
 }
 
-const SMARTCATALOG_KASPI_PHONE = "77001234567";
+const SMARTCATALOG_KASPI_PHONE = "77765348417";
 
 const KASPI_BUSINESS_API_BASE = "https://bpapi.bazarbay.site/api";
 
