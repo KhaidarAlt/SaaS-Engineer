@@ -5,8 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { AiPaywall } from "@/components/AiPaywall";
-import { Plug, MessageCircle, Globe, Settings, ArrowLeft, Plus, Loader2, RefreshCw, Trash2, Play, Square, QrCode, Phone, CheckCircle, AlertCircle } from "lucide-react";
+import { Plug, MessageCircle, Globe, Settings, ArrowLeft, Plus, Loader2, RefreshCw, Trash2, Play, Square, QrCode, Phone, CheckCircle, AlertCircle, Copy, Code } from "lucide-react";
 import { SiWhatsapp, SiTelegram, SiInstagram } from "react-icons/si";
 import { Link } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -35,6 +37,23 @@ interface InstagramIntegration {
   instagramUsername: string | null;
   instagramAccountId: string | null;
   status: string;
+}
+
+interface TelegramIntegration {
+  id: string;
+  tenantId: string;
+  botUsername: string | null;
+  botId: string | null;
+  status: string;
+}
+
+interface WidgetIntegration {
+  id: string;
+  tenantId: string;
+  widgetKey: string;
+  name: string;
+  primaryColor: string;
+  isActive: boolean;
 }
 
 const statusLabels: Record<string, string> = {
@@ -177,28 +196,100 @@ export default function AiIntegrationsPage() {
     },
   });
 
+  // Telegram integration
+  const [telegramDialogOpen, setTelegramDialogOpen] = useState(false);
+  const [telegramBotToken, setTelegramBotToken] = useState("");
+
+  const { data: telegramIntegration, isLoading: telegramLoading } = useQuery<TelegramIntegration | null>({
+    queryKey: ["/api/telegram/integration"],
+    enabled: status?.hasAccess,
+  });
+
+  const telegramConnectMutation = useMutation({
+    mutationFn: async (botToken: string) => {
+      const res = await apiRequest("POST", "/api/telegram/connect", { botToken });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/telegram/integration"] });
+      setTelegramDialogOpen(false);
+      setTelegramBotToken("");
+      toast({ title: "Telegram бот подключен!" });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Ошибка подключения", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const telegramDisconnectMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("DELETE", "/api/telegram/integration");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/telegram/integration"] });
+      toast({ title: "Telegram бот отключен" });
+    },
+    onError: () => {
+      toast({ title: "Ошибка отключения", variant: "destructive" });
+    },
+  });
+
+  // Widget integration
+  const [widgetDialogOpen, setWidgetDialogOpen] = useState(false);
+  const [embedCode, setEmbedCode] = useState("");
+
+  const { data: widgetIntegration, isLoading: widgetLoading } = useQuery<WidgetIntegration | null>({
+    queryKey: ["/api/widget/integration"],
+    enabled: status?.hasAccess,
+  });
+
+  const widgetCreateMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/widget/create", {});
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/widget/integration"] });
+      toast({ title: "Виджет создан!" });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Ошибка создания", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const widgetDeleteMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("DELETE", "/api/widget/integration");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/widget/integration"] });
+      toast({ title: "Виджет удален" });
+    },
+    onError: () => {
+      toast({ title: "Ошибка удаления", variant: "destructive" });
+    },
+  });
+
+  const fetchEmbedCode = async () => {
+    try {
+      const res = await apiRequest("GET", "/api/widget/embed-code");
+      const data = await res.json();
+      setEmbedCode(data.embedCode);
+      setWidgetDialogOpen(true);
+    } catch {
+      toast({ title: "Ошибка получения кода", variant: "destructive" });
+    }
+  };
+
+  const copyEmbedCode = () => {
+    navigator.clipboard.writeText(embedCode);
+    toast({ title: "Код скопирован!" });
+  };
+
   if (!status?.hasAccess) {
     return <DashboardLayout><div className="p-6"><AiPaywall currentPlan={status?.planName} /></div></DashboardLayout>;
   }
 
-  const otherIntegrations = [
-    {
-      id: "telegram",
-      name: "Telegram",
-      description: "Автоматизируйте общение через Telegram бота",
-      icon: SiTelegram,
-      status: "coming_soon" as const,
-      color: "text-blue-500",
-    },
-    {
-      id: "website",
-      name: "Виджет на сайте",
-      description: "Встройте чат-виджет на ваш сайт",
-      icon: Globe,
-      status: "coming_soon" as const,
-      color: "text-primary",
-    },
-  ];
 
   return (
     <DashboardLayout>
@@ -416,29 +507,163 @@ export default function AiIntegrationsPage() {
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {otherIntegrations.map((integration) => (
-          <Card key={integration.id} data-testid={`card-integration-${integration.id}`}>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-lg bg-muted flex items-center justify-center">
-                    <integration.icon className={`h-6 w-6 ${integration.color}`} />
-                  </div>
-                  <CardTitle className="text-base">{integration.name}</CardTitle>
-                </div>
-                <Badge variant="secondary">Скоро</Badge>
+      <Card data-testid="card-integration-telegram">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
+                <SiTelegram className="h-6 w-6 text-blue-500" />
               </div>
-            </CardHeader>
-            <CardContent>
-              <CardDescription className="mb-4">{integration.description}</CardDescription>
-              <Button variant="secondary" className="w-full" disabled>
-                Скоро будет доступно
+              <div>
+                <CardTitle className="text-lg">Telegram Bot</CardTitle>
+                <CardDescription>Автоматизируйте общение через Telegram бота</CardDescription>
+              </div>
+            </div>
+            {telegramIntegration?.status === "active" ? (
+              <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100">
+                <CheckCircle className="h-3 w-3 mr-1" />
+                Подключен
+              </Badge>
+            ) : (
+              <Badge variant="secondary">Не подключен</Badge>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {telegramLoading ? (
+            <Skeleton className="h-16" />
+          ) : telegramIntegration?.status === "active" ? (
+            <div className="flex items-center justify-between p-4 border rounded-lg">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
+                  <SiTelegram className="h-5 w-5 text-blue-500" />
+                </div>
+                <div>
+                  <p className="font-medium">@{telegramIntegration.botUsername}</p>
+                  <p className="text-sm text-muted-foreground">Telegram Bot</p>
+                </div>
+              </div>
+              <Button 
+                variant="ghost" 
+                size="sm"
+                onClick={() => telegramDisconnectMutation.mutate()}
+                disabled={telegramDisconnectMutation.isPending}
+                data-testid="button-disconnect-telegram"
+              >
+                {telegramDisconnectMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Trash2 className="h-4 w-4 text-destructive" />
+                )}
               </Button>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+            </div>
+          ) : (
+            <div className="text-center py-4 text-muted-foreground">
+              Подключите Telegram бота для автоматических ответов клиентам
+            </div>
+          )}
+          
+          {telegramIntegration?.status !== "active" && (
+            <Button 
+              onClick={() => setTelegramDialogOpen(true)} 
+              className="w-full"
+              data-testid="button-connect-telegram"
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Подключить Telegram бота
+            </Button>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card data-testid="card-integration-widget">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                <Globe className="h-6 w-6 text-primary" />
+              </div>
+              <div>
+                <CardTitle className="text-lg">Виджет на сайте</CardTitle>
+                <CardDescription>Встройте чат-виджет на ваш сайт</CardDescription>
+              </div>
+            </div>
+            {widgetIntegration?.isActive ? (
+              <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100">
+                <CheckCircle className="h-3 w-3 mr-1" />
+                Активен
+              </Badge>
+            ) : widgetIntegration ? (
+              <Badge variant="secondary">Отключен</Badge>
+            ) : (
+              <Badge variant="secondary">Не создан</Badge>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {widgetLoading ? (
+            <Skeleton className="h-16" />
+          ) : widgetIntegration ? (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between p-4 border rounded-lg">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-full flex items-center justify-center" style={{ backgroundColor: widgetIntegration.primaryColor + "20" }}>
+                    <MessageCircle className="h-5 w-5" style={{ color: widgetIntegration.primaryColor }} />
+                  </div>
+                  <div>
+                    <p className="font-medium">{widgetIntegration.name}</p>
+                    <p className="text-sm text-muted-foreground">Ключ: {widgetIntegration.widgetKey.slice(0, 8)}...</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={fetchEmbedCode}
+                    data-testid="button-get-widget-code"
+                  >
+                    <Code className="h-4 w-4 mr-1" />
+                    Код
+                  </Button>
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    onClick={() => widgetDeleteMutation.mutate()}
+                    disabled={widgetDeleteMutation.isPending}
+                    data-testid="button-delete-widget"
+                  >
+                    {widgetDeleteMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-4 text-muted-foreground">
+              Создайте виджет для встраивания чата на ваш сайт
+            </div>
+          )}
+          
+          {!widgetIntegration && (
+            <Button 
+              onClick={() => widgetCreateMutation.mutate()} 
+              disabled={widgetCreateMutation.isPending}
+              className="w-full"
+              data-testid="button-create-widget"
+            >
+              {widgetCreateMutation.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Plus className="mr-2 h-4 w-4" />
+              )}
+              Создать виджет
+            </Button>
+          )}
+        </CardContent>
+      </Card>
 
       <Dialog open={qrDialogOpen} onOpenChange={setQrDialogOpen}>
         <DialogContent className="max-w-md">
@@ -485,6 +710,79 @@ export default function AiIntegrationsPage() {
               Обновить
             </Button>
             <Button variant="ghost" onClick={() => setQrDialogOpen(false)}>
+              Закрыть
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={telegramDialogOpen} onOpenChange={setTelegramDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Подключить Telegram бота</DialogTitle>
+            <DialogDescription>
+              Создайте бота через @BotFather в Telegram и введите полученный токен
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="telegram-token">Токен бота</Label>
+              <Input
+                id="telegram-token"
+                placeholder="123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
+                value={telegramBotToken}
+                onChange={(e) => setTelegramBotToken(e.target.value)}
+                data-testid="input-telegram-token"
+              />
+              <p className="text-xs text-muted-foreground">
+                Получите токен у @BotFather командой /newbot
+              </p>
+            </div>
+          </div>
+          <DialogFooter className="flex gap-2">
+            <Button 
+              onClick={() => telegramConnectMutation.mutate(telegramBotToken)}
+              disabled={telegramConnectMutation.isPending || telegramBotToken.length < 40}
+              data-testid="button-submit-telegram"
+            >
+              {telegramConnectMutation.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
+              Подключить
+            </Button>
+            <Button variant="ghost" onClick={() => setTelegramDialogOpen(false)}>
+              Отмена
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={widgetDialogOpen} onOpenChange={setWidgetDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Код для встраивания виджета</DialogTitle>
+            <DialogDescription>
+              Скопируйте этот код и вставьте перед закрывающим тегом &lt;/body&gt; на вашем сайте
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="relative">
+              <pre className="p-4 bg-muted rounded-lg text-sm overflow-x-auto whitespace-pre-wrap break-all">
+                {embedCode}
+              </pre>
+              <Button
+                variant="outline"
+                size="sm"
+                className="absolute top-2 right-2"
+                onClick={copyEmbedCode}
+                data-testid="button-copy-embed"
+              >
+                <Copy className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setWidgetDialogOpen(false)}>
               Закрыть
             </Button>
           </DialogFooter>
