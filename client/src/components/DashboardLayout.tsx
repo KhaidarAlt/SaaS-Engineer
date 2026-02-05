@@ -78,7 +78,7 @@ const tenantNavGroups: NavGroup[] = [
     icon: Package,
     tooltip: "Товары, заказы и параметры витрины",
     items: [
-      { href: "/dashboard/catalog-settings", label: "Настройки", icon: Settings },
+      { href: "/dashboard/settings", label: "Настройки", icon: Settings },
       { href: "/dashboard/categories", label: "Категории", icon: Tag },
       { href: "/dashboard/products", label: "Товары", icon: Package },
       { href: "/dashboard/import", label: "Импорт", icon: Upload, lockForPlans: ["Старт"] },
