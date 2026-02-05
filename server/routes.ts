@@ -1740,6 +1740,7 @@ export async function registerRoutes(
           ogTitle: (tenant as any).ogTitle,
           ogDescription: (tenant as any).ogDescription,
           ogImageUrl: (tenant as any).ogImageUrl,
+          catalogUsp: (tenant as any).catalogUsp,
         },
         products: productsWithPrices,
         categories: categories.filter(c => c.isActive),
