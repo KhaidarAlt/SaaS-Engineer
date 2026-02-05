@@ -10,6 +10,7 @@ import {
   crmIntegrations, crmSyncLogs, orderStatusLogs, kaspiIntegrations, payments,
   waCloudIntegrations, waCloudPhoneNumbers, waCloudTemplates, waCloudCampaigns,
   waCloudWarmupStatus, waCloudAnalytics, waCloudRiskEvents, promoBlocks,
+  instagramIntegrations, instagramMessages,
   type User, type InsertUser, type Tenant, type InsertTenant,
   type Subscription, type InsertSubscription, type Plan, type InsertPlan,
   type Product, type InsertProduct, type Category, type InsertCategory,
@@ -47,6 +48,8 @@ import {
   type WaCloudAnalytics, type InsertWaCloudAnalytics,
   type WaCloudRiskEvent, type InsertWaCloudRiskEvent,
   type PromoBlock, type InsertPromoBlock,
+  type InstagramIntegration, type InsertInstagramIntegration,
+  type InstagramMessage, type InsertInstagramMessage,
 } from "@shared/schema";
 import bcrypt from "bcryptjs";
 
@@ -113,6 +116,16 @@ export interface IStorage {
   incrementPromoBlockBannerClick(id: string, tenantId: string): Promise<void>;
   incrementPromoBlockCtaClick(id: string, tenantId: string): Promise<void>;
   updatePromoBlockAiDescription(id: string, tenantId: string, aiDescription: string): Promise<void>;
+  
+  // Instagram Direct Integration
+  getInstagramIntegration(tenantId: string): Promise<InstagramIntegration | undefined>;
+  createInstagramIntegration(data: InsertInstagramIntegration): Promise<InstagramIntegration>;
+  updateInstagramIntegration(id: string, data: Partial<InsertInstagramIntegration>): Promise<InstagramIntegration | undefined>;
+  deleteInstagramIntegration(tenantId: string): Promise<void>;
+  
+  // Instagram Messages
+  getInstagramMessages(tenantId: string, limit?: number): Promise<InstagramMessage[]>;
+  createInstagramMessage(data: InsertInstagramMessage): Promise<InstagramMessage>;
   
   getOrders(tenantId: string): Promise<Order[]>;
   getOrder(id: string, tenantId: string): Promise<(Order & { items?: OrderItem[] }) | undefined>;
@@ -617,6 +630,42 @@ export class DatabaseStorage implements IStorage {
     await db.update(promoBlocks)
       .set({ aiDescription, updatedAt: new Date() })
       .where(and(eq(promoBlocks.id, id), eq(promoBlocks.tenantId, tenantId)));
+  }
+
+  // Instagram Direct Integration
+  async getInstagramIntegration(tenantId: string): Promise<InstagramIntegration | undefined> {
+    const [integration] = await db.select().from(instagramIntegrations).where(eq(instagramIntegrations.tenantId, tenantId));
+    return integration;
+  }
+
+  async createInstagramIntegration(data: InsertInstagramIntegration): Promise<InstagramIntegration> {
+    const [integration] = await db.insert(instagramIntegrations).values(data).returning();
+    return integration;
+  }
+
+  async updateInstagramIntegration(id: string, data: Partial<InsertInstagramIntegration>): Promise<InstagramIntegration | undefined> {
+    const [integration] = await db.update(instagramIntegrations)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(instagramIntegrations.id, id))
+      .returning();
+    return integration;
+  }
+
+  async deleteInstagramIntegration(tenantId: string): Promise<void> {
+    await db.delete(instagramIntegrations).where(eq(instagramIntegrations.tenantId, tenantId));
+  }
+
+  // Instagram Messages
+  async getInstagramMessages(tenantId: string, limit: number = 50): Promise<InstagramMessage[]> {
+    return db.select().from(instagramMessages)
+      .where(eq(instagramMessages.tenantId, tenantId))
+      .orderBy(desc(instagramMessages.createdAt))
+      .limit(limit);
+  }
+
+  async createInstagramMessage(data: InsertInstagramMessage): Promise<InstagramMessage> {
+    const [message] = await db.insert(instagramMessages).values(data).returning();
+    return message;
   }
 
   async getOrders(tenantId: string): Promise<Order[]> {

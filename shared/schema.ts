@@ -1654,6 +1654,107 @@ export const insertSmartContactSettingsSchema = createInsertSchema(smartContactS
 export type InsertSmartContactSettings = z.infer<typeof insertSmartContactSettingsSchema>;
 export type SmartContactSettings = typeof smartContactSettings.$inferSelect;
 
+// ============ INSTAGRAM DIRECT INTEGRATION ============
+export const instagramIntegrations = pgTable("instagram_integrations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id).unique(),
+  
+  // OAuth credentials
+  accessToken: text("access_token"),
+  tokenExpiresAt: timestamp("token_expires_at"),
+  
+  // Instagram account details
+  instagramAccountId: text("instagram_account_id"), // Instagram Business Account ID
+  instagramUsername: text("instagram_username"),
+  instagramProfilePic: text("instagram_profile_pic"),
+  
+  // Connected Facebook Page
+  pageId: text("page_id"), // Facebook Page ID (required for Instagram)
+  pageName: text("page_name"),
+  pageAccessToken: text("page_access_token"),
+  
+  // Connection status
+  status: text("status").notNull().default("disconnected"), // disconnected, connecting, connected, error
+  connectionError: text("connection_error"),
+  
+  // Webhook configuration
+  webhookVerifyToken: text("webhook_verify_token"),
+  webhookActive: boolean("webhook_active").default(false),
+  
+  // AI Integration
+  aiEnabled: boolean("ai_enabled").default(true),
+  autoReply: boolean("auto_reply").default(true),
+  
+  // OAuth CSRF protection
+  oauthNonce: text("oauth_nonce"),
+  
+  // Stats
+  messagesReceived: integer("messages_received").default(0),
+  messagesSent: integer("messages_sent").default(0),
+  lastMessageAt: timestamp("last_message_at"),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const instagramIntegrationsRelations = relations(instagramIntegrations, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [instagramIntegrations.tenantId],
+    references: [tenants.id],
+  }),
+}));
+
+export const insertInstagramIntegrationSchema = createInsertSchema(instagramIntegrations).omit({ 
+  id: true, createdAt: true, updatedAt: true 
+});
+export type InsertInstagramIntegration = z.infer<typeof insertInstagramIntegrationSchema>;
+export type InstagramIntegration = typeof instagramIntegrations.$inferSelect;
+
+// ============ INSTAGRAM MESSAGES LOG ============
+export const instagramMessages = pgTable("instagram_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  integrationId: varchar("integration_id").notNull().references(() => instagramIntegrations.id),
+  
+  // Message details
+  messageId: text("message_id").notNull(), // Instagram message ID
+  senderId: text("sender_id").notNull(), // Instagram user ID
+  senderUsername: text("sender_username"),
+  
+  // Message content
+  messageText: text("message_text"),
+  messageType: text("message_type").notNull().default("text"), // text, image, story_mention, story_reply
+  mediaUrl: text("media_url"),
+  
+  // Direction
+  direction: text("direction").notNull(), // inbound, outbound
+  
+  // AI response tracking
+  aiProcessed: boolean("ai_processed").default(false),
+  aiResponseId: text("ai_response_id"),
+  
+  // Timestamps
+  instagramTimestamp: timestamp("instagram_timestamp"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const instagramMessagesRelations = relations(instagramMessages, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [instagramMessages.tenantId],
+    references: [tenants.id],
+  }),
+  integration: one(instagramIntegrations, {
+    fields: [instagramMessages.integrationId],
+    references: [instagramIntegrations.id],
+  }),
+}));
+
+export const insertInstagramMessageSchema = createInsertSchema(instagramMessages).omit({ 
+  id: true, createdAt: true 
+});
+export type InsertInstagramMessage = z.infer<typeof insertInstagramMessageSchema>;
+export type InstagramMessage = typeof instagramMessages.$inferSelect;
+
 // ============ FORM VALIDATION SCHEMAS ============
 export const loginSchema = z.object({
   email: z.string().email("Введите корректный email"),
