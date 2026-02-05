@@ -60,7 +60,13 @@ Preferred communication style: Simple, everyday language.
 - Replit Object Storage (Google Cloud Storage) for persistent files, with presigned URL uploads.
 
 ### Payment Processing
-- **Kaspi Business** (fully integrated): Payment link generation, webhook processing, auto-invoice creation, payment status tracking, post-payment notifications (Telegram + WhatsApp)
+- **Kaspi Business** (fully integrated): 
+  - 3-step verification flow (add SmartCatalog as employee → confirm in app → enter API key)
+  - Invoice creation via kaspi-business.service.ts
+  - Payment status tracking with auto-polling
+  - Post-payment notifications (Telegram + WhatsApp)
+  - WhatsApp payment link delivery to customers via WAHA
+  - API: POST /api/kaspi/request-verification, /api/kaspi/confirm-verification, /api/payments/kaspi-business/create
 - Stripe (scaffolded)
 
 ### CRM Integrations
