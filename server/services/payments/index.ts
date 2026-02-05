@@ -1,8 +1,9 @@
 import { storage } from "../../storage";
 import { kaspiService, type KaspiPaymentResult } from "./kaspi.service";
+import { kaspiBusinessService, type KaspiInvoiceResult } from "./kaspi-business.service";
 import type { Order, Payment, KaspiIntegration } from "@shared/schema";
 
-export { kaspiService };
+export { kaspiService, kaspiBusinessService };
 
 export interface CreatePaymentOptions {
   order: Order;
@@ -222,16 +223,47 @@ export async function checkPaymentStatus(
     return { status: payment.status, payment };
   }
   
-  const kaspiStatus = await kaspiService.getPaymentStatus(kaspiIntegration, payment.externalId);
-  
-  if (kaspiStatus.status !== "pending") {
-    await storage.updatePayment(payment.id, {
-      status: kaspiStatus.status,
-      paidAt: kaspiStatus.paidAt,
-    });
+  if (payment.provider === "kaspi_business") {
+    const kaspiBusinessStatus = await kaspiBusinessService.getInvoiceStatus(
+      kaspiIntegration,
+      payment.externalId
+    );
     
-    const updatedPayment = await storage.getPayment(payment.id);
-    return { status: kaspiStatus.status, payment: updatedPayment };
+    if (kaspiBusinessStatus.status !== "pending") {
+      await storage.updatePayment(payment.id, {
+        status: kaspiBusinessStatus.status,
+        paidAt: kaspiBusinessStatus.paidAt,
+      });
+      
+      if (kaspiBusinessStatus.status === "paid") {
+        const updateData: Record<string, unknown> = {
+          paymentStatus: "paid",
+          paidAt: kaspiBusinessStatus.paidAt || new Date(),
+          paymentSource: "auto",
+        };
+        
+        if (kaspiIntegration.updateOrderStatus) {
+          updateData.status = "paid";
+        }
+        
+        await storage.updateOrderWithPayment(orderId, tenantId, updateData);
+      }
+      
+      const updatedPayment = await storage.getPayment(payment.id);
+      return { status: kaspiBusinessStatus.status, payment: updatedPayment };
+    }
+  } else {
+    const kaspiStatus = await kaspiService.getPaymentStatus(kaspiIntegration, payment.externalId);
+    
+    if (kaspiStatus.status !== "pending") {
+      await storage.updatePayment(payment.id, {
+        status: kaspiStatus.status,
+        paidAt: kaspiStatus.paidAt,
+      });
+      
+      const updatedPayment = await storage.getPayment(payment.id);
+      return { status: kaspiStatus.status, payment: updatedPayment };
+    }
   }
   
   if (payment.expiresAt && new Date() > payment.expiresAt) {
@@ -246,4 +278,133 @@ export async function checkPaymentStatus(
   }
   
   return { status: payment.status, payment };
+}
+
+export interface CreateInvoiceAndSendWhatsAppOptions {
+  order: Order;
+  tenantId: string;
+  sendWhatsApp?: boolean;
+}
+
+export interface InvoiceWithWhatsAppResult {
+  success: boolean;
+  payment?: Payment;
+  paymentUrl?: string;
+  whatsappSent?: boolean;
+  error?: string;
+}
+
+export async function createKaspiBusinessInvoice(
+  options: CreateInvoiceAndSendWhatsAppOptions
+): Promise<InvoiceWithWhatsAppResult> {
+  const { order, tenantId, sendWhatsApp = true } = options;
+  
+  const kaspiIntegration = await storage.getKaspiIntegration(tenantId);
+  
+  if (!kaspiIntegration || kaspiIntegration.verificationStatus !== "verified") {
+    return {
+      success: false,
+      error: "Kaspi Business не настроен или не верифицирован",
+    };
+  }
+  
+  if (!kaspiIntegration.apiToken) {
+    return {
+      success: false,
+      error: "API ключ Kaspi Business не настроен",
+    };
+  }
+  
+  const existingPayment = await storage.getPaymentByOrderId(order.id);
+  if (existingPayment && existingPayment.status === "pending") {
+    return {
+      success: true,
+      payment: existingPayment,
+      paymentUrl: existingPayment.paymentUrl || undefined,
+      whatsappSent: false,
+    };
+  }
+  
+  const invoiceResult = await kaspiBusinessService.createInvoice(
+    kaspiIntegration,
+    order,
+    order.customerPhone
+  );
+  
+  if (!invoiceResult.success || !invoiceResult.paymentUrl) {
+    return {
+      success: false,
+      error: invoiceResult.error || "Ошибка создания счёта Kaspi Business",
+    };
+  }
+  
+  const timeout = kaspiIntegration.paymentTimeout || 30;
+  const expiresAt = new Date(Date.now() + timeout * 60 * 1000);
+  
+  const payment = await storage.createPayment({
+    tenantId,
+    orderId: order.id,
+    amount: order.total,
+    currency: "KZT",
+    status: "pending",
+    provider: "kaspi_business",
+    externalId: invoiceResult.invoiceId,
+    paymentUrl: invoiceResult.paymentUrl,
+    customerPhone: order.customerPhone,
+    customerName: order.customerName,
+    source: "auto",
+    expiresAt,
+  });
+  
+  await storage.updateOrderWithPayment(order.id, tenantId, {
+    status: "awaiting_payment",
+    paymentStatus: "pending",
+    paymentId: payment.id,
+    paymentProvider: "kaspi_business",
+  });
+  
+  let whatsappSent = false;
+  
+  if (sendWhatsApp && order.customerPhone) {
+    try {
+      const { wahaService } = await import("../waha");
+      const wahaInstances = await storage.getWahaInstances(tenantId);
+      const activeInstance = wahaInstances.find(i => i.status === "active");
+      
+      if (activeInstance) {
+        const customerChatId = order.customerPhone.replace(/\D/g, "") + "@c.us";
+        const tenant = await storage.getTenant(tenantId);
+        const storeName = tenant?.name || "SmartCatalog";
+        
+        const paymentMessage = `Здравствуйте, ${order.customerName}!
+
+Ваш заказ #${order.orderNumber} на сумму ${order.total} тг оформлен в ${storeName}.
+
+Для оплаты через Kaspi перейдите по ссылке:
+${invoiceResult.paymentUrl}
+
+Ссылка действительна ${timeout} минут.
+
+Спасибо за заказ!`;
+        
+        await wahaService.sendTextMessage(
+          activeInstance.instanceName,
+          customerChatId,
+          paymentMessage
+        );
+        
+        whatsappSent = true;
+        console.log(`[KaspiBusiness] Payment link sent via WhatsApp to ${order.customerPhone}`);
+      }
+    } catch (whatsappErr) {
+      console.error("Failed to send WhatsApp payment link:", whatsappErr);
+    }
+  }
+  
+  return {
+    success: true,
+    payment,
+    paymentUrl: invoiceResult.paymentUrl,
+    whatsappSent,
+  };
 }

@@ -4453,6 +4453,53 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
     }
   });
 
+  app.post("/api/payments/kaspi-business/create", requireAuth, async (req, res) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      
+      const { kaspiBusinessCreateInvoiceSchema } = await import("@shared/schema");
+      const parsed = kaspiBusinessCreateInvoiceSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: parsed.error.errors[0]?.message || "Ошибка валидации" });
+      }
+      
+      const { orderId, sendWhatsApp } = parsed.data;
+      
+      const order = await storage.getOrder(orderId, tenantId);
+      if (!order) {
+        return res.status(404).json({ message: "Заказ не найден" });
+      }
+      
+      if (!order.customerPhone) {
+        return res.status(400).json({ message: "Телефон клиента обязателен для выставления счёта" });
+      }
+      
+      const { createKaspiBusinessInvoice } = await import("./services/payments");
+      const result = await createKaspiBusinessInvoice({
+        order,
+        tenantId,
+        sendWhatsApp,
+      });
+      
+      if (result.success) {
+        res.json({
+          success: true,
+          payment: result.payment,
+          paymentUrl: result.paymentUrl,
+          whatsappSent: result.whatsappSent,
+        });
+      } else {
+        res.status(400).json({
+          success: false,
+          message: result.error || "Ошибка создания счёта Kaspi Business",
+        });
+      }
+    } catch (error) {
+      console.error("Error creating Kaspi Business invoice:", error);
+      res.status(500).json({ message: "Ошибка создания счёта Kaspi Business" });
+    }
+  });
+
   app.post("/api/payments/webhook", async (req, res) => {
     try {
       const signature = req.headers["x-kaspi-signature"] as string;

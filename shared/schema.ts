@@ -1678,3 +1678,11 @@ export const checkoutSchema = z.object({
 export type LoginInput = z.infer<typeof loginSchema>;
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type CheckoutInput = z.infer<typeof checkoutSchema>;
+
+// ============ KASPI BUSINESS SCHEMAS ============
+export const kaspiBusinessCreateInvoiceSchema = z.object({
+  orderId: z.string().min(1, "orderId обязателен"),
+  sendWhatsApp: z.boolean().optional().default(true),
+});
+
+export type KaspiBusinessCreateInvoiceInput = z.infer<typeof kaspiBusinessCreateInvoiceSchema>;
