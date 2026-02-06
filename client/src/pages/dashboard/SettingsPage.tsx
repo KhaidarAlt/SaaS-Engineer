@@ -35,6 +35,38 @@ import { useAuth } from "@/contexts/AuthContext";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Tenant } from "@shared/schema";
 
+function DnsCopyRow({ label, value }: { label: string; value: string }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = () => {
+    navigator.clipboard.writeText(value);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+  const testId = label.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <div className="flex-1 min-w-0">
+        <span className="text-muted-foreground">{label}:</span>{" "}
+        <span className="font-semibold select-all break-all" data-testid={`text-dns-${testId}`}>{value}</span>
+      </div>
+      <Button
+        type="button"
+        size="icon"
+        variant="ghost"
+        onClick={handleCopy}
+        className="shrink-0 h-7 w-7"
+        data-testid={`button-copy-dns-${testId}`}
+      >
+        {copied ? (
+          <Check className="h-3.5 w-3.5 text-green-600" />
+        ) : (
+          <Copy className="h-3.5 w-3.5" />
+        )}
+      </Button>
+    </div>
+  );
+}
+
 const settingsFormSchema = z.object({
   name: z.string().min(1, "Название обязательно"),
   slug: z.string().min(1, "Ссылка обязательна").regex(/^[a-z0-9-]+$/, "Только латинские буквы, цифры и дефис"),
@@ -827,7 +859,7 @@ export default function SettingsPage() {
                   Свой домен
                 </CardTitle>
                 <CardDescription>
-                  Подключите свой домен для каталога (например, catalog.myshop.kz)
+                  Подключите свой домен для каталога (например, myshop.kz)
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -835,30 +867,46 @@ export default function SettingsPage() {
                   <Label htmlFor="customDomain">Доменное имя</Label>
                   <Input
                     id="customDomain"
-                    placeholder="catalog.myshop.kz"
+                    placeholder="myshop.kz"
                     {...form.register("customDomain")}
                     data-testid="input-custom-domain"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Укажите домен без http:// и без слеша в конце
+                    Укажите ваш домен без http:// и без слеша в конце (например, myshop.kz)
                   </p>
                 </div>
                 
-                <div className="p-4 bg-muted/50 rounded-lg space-y-3">
+                <div className="p-4 bg-muted/50 rounded-lg space-y-4">
                   <p className="text-sm font-medium">Инструкция по настройке DNS:</p>
-                  <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside">
-                    <li>Войдите в панель управления вашего домена</li>
-                    <li>Создайте CNAME запись:</li>
+                  <ol className="text-sm text-muted-foreground space-y-3 list-decimal list-inside">
+                    <li>Войдите в панель управления DNS вашего домена</li>
+                    <li>
+                      Создайте <strong>A-запись</strong> для корневого домена:
+                      <div className="bg-background p-3 rounded border font-mono text-xs space-y-2 mt-2 ml-0">
+                        <DnsCopyRow label="Тип записи" value="A" />
+                        <DnsCopyRow label="Имя домена" value={form.watch("customDomain") || "myshop.kz"} />
+                        <DnsCopyRow label="IP-адрес" value="34.111.179.128" />
+                        <DnsCopyRow label="TTL" value="3600" />
+                      </div>
+                    </li>
+                    <li>
+                      Дополнительно создайте <strong>A-запись</strong> для www:
+                      <div className="bg-background p-3 rounded border font-mono text-xs space-y-2 mt-2 ml-0">
+                        <DnsCopyRow label="Тип записи" value="A" />
+                        <DnsCopyRow label="Имя домена" value={`www.${form.watch("customDomain") || "myshop.kz"}`} />
+                        <DnsCopyRow label="IP-адрес" value="34.111.179.128" />
+                        <DnsCopyRow label="TTL" value="3600" />
+                      </div>
+                    </li>
+                    <li>Сохраните настройки и нажмите кнопку <strong>«Сохранить»</strong> на этой странице</li>
+                    <li>Напишите в поддержку для активации домена</li>
                   </ol>
-                  <div className="bg-background p-3 rounded border font-mono text-xs space-y-1">
-                    <div><span className="text-muted-foreground">Тип:</span> CNAME</div>
-                    <div><span className="text-muted-foreground">Имя:</span> {form.watch("customDomain")?.split('.')[0] || "catalog"}</div>
-                    <div><span className="text-muted-foreground">Значение:</span> botfactory.kz</div>
+                  <div className="flex items-start gap-2 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+                    <AlertCircle className="h-4 w-4 text-yellow-600 mt-0.5 shrink-0" />
+                    <p className="text-xs text-yellow-800 dark:text-yellow-200">
+                      DNS изменения вступят в силу от 5 минут до 24 часов. После настройки напишите в поддержку для активации SSL-сертификата на вашем домене.
+                    </p>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    После настройки DNS изменения вступят в силу в течение 24 часов.
-                    Напишите в поддержку после настройки для активации домена.
-                  </p>
                 </div>
               </CardContent>
             </Card>

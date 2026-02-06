@@ -601,6 +601,48 @@ export async function registerRoutes(
   // Serve legacy local uploads (for backward compatibility)
   app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
+  // Custom domain middleware: redirect custom domains to tenant catalog
+  app.use(async (req: Request, res: Response, next: NextFunction) => {
+    const host = (req.hostname || req.get("host") || "").toLowerCase().replace(/:\d+$/, "");
+    
+    // Skip for known app domains, API routes, static assets, and existing catalog routes
+    if (
+      !host ||
+      host === "localhost" ||
+      host.includes("replit") ||
+      host.includes("botfactory.kz") ||
+      host.includes("worf.replit.dev") ||
+      req.path.startsWith("/api") ||
+      req.path.startsWith("/c/") ||
+      req.path.startsWith("/uploads") ||
+      req.path.startsWith("/assets") ||
+      req.path.startsWith("/@") ||
+      req.path.startsWith("/node_modules") ||
+      req.path.startsWith("/src") ||
+      req.path === "/favicon.ico"
+    ) {
+      return next();
+    }
+
+    try {
+      // Try both with and without www prefix
+      const hostWithoutWww = host.replace(/^www\./, "");
+      const tenant = await storage.getTenantByCustomDomain(hostWithoutWww) 
+        || await storage.getTenantByCustomDomain(host);
+      if (tenant) {
+        // Rewrite the URL to serve the catalog for this tenant, preserving query string
+        const originalQuery = req.originalUrl.includes("?") ? req.originalUrl.substring(req.originalUrl.indexOf("?")) : "";
+        const subPath = req.path === "/" ? "" : req.path;
+        const catalogUrl = `/c/${tenant.slug}${subPath}${originalQuery}`;
+        req.url = catalogUrl;
+        console.log(`[CustomDomain] ${host} → ${catalogUrl}`);
+      }
+    } catch (err) {
+      console.error("[CustomDomain] Error:", err);
+    }
+    next();
+  });
+
   passport.use(
     new LocalStrategy(
       { usernameField: "email" },
@@ -871,12 +913,61 @@ export async function registerRoutes(
     }
   });
 
+  // Helper to normalize domain input consistently
+  function normalizeDomain(input: string): string {
+    return input
+      .toLowerCase()
+      .trim()
+      .replace(/^https?:\/\//, "")
+      .replace(/^www\./, "")
+      .replace(/\/.*$/, "")
+      .replace(/:\d+$/, "");
+  }
+
   app.put("/api/tenant", requireAuth, async (req, res) => {
     try {
-      const tenant = await storage.updateTenant(req.user!.tenantId!, req.body);
+      const data = { ...req.body };
+      
+      // Normalize custom domain
+      if (data.customDomain) {
+        data.customDomain = normalizeDomain(data.customDomain);
+        
+        if (!data.customDomain) {
+          data.customDomain = null;
+        } else {
+          // Check if this domain is already used by another tenant
+          const existing = await storage.getTenantByCustomDomain(data.customDomain);
+          if (existing && existing.id !== req.user!.tenantId!) {
+            return res.status(400).json({ message: "Этот домен уже используется другим магазином" });
+          }
+        }
+      }
+      
+      const tenant = await storage.updateTenant(req.user!.tenantId!, data);
       res.json(tenant);
     } catch (error) {
       res.status(500).json({ message: "Ошибка обновления" });
+    }
+  });
+
+  app.get("/api/tenant/domain-check", requireAuth, async (req, res) => {
+    try {
+      const rawDomain = req.query.domain as string || "";
+      const domain = normalizeDomain(rawDomain);
+      if (!domain) {
+        return res.status(400).json({ message: "Домен не указан" });
+      }
+      
+      const existing = await storage.getTenantByCustomDomain(domain);
+      const isAvailable = !existing || existing.id === req.user!.tenantId!;
+      
+      res.json({ 
+        domain,
+        available: isAvailable,
+        message: isAvailable ? "Домен доступен" : "Домен уже используется другим магазином"
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка проверки домена" });
     }
   });
 
