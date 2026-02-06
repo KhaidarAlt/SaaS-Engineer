@@ -42,6 +42,7 @@ Preferred communication style: Simple, everyday language.
 - **Admin Panel**: Superadmin features for user and tenant management, plan configuration, subscription extension/changes, and lead tracking.
 - **Plan Selection**: Popup system to guide users through plan selection with feature comparisons and restrictions based on chosen plan.
 - **Navigation**: Grouped collapsible menu with 5 sections (Основные, Настройка каталога, Маркетинг, Настройки AI, Дополнительные настройки). Single-expanded group behavior with localStorage persistence per user.
+- **Custom Domains**: Tenants can connect first-level domains (e.g., myshop.kz). Server middleware detects custom domains via Host header and serves tenant catalog. Automatic DNS verification via POST /api/tenant/domain-verify uses Node.js dns.resolve4 to check A-records against expected IP 34.111.179.128. Domain normalization helper strips protocol/www/paths/ports consistently. Schema fields: customDomain, domainVerified.
 - **Business Consultant**: AI-powered business consultant with 5 modes (Analyst, Marketer, ROP, Finance, Support) for data-driven insights and platform guidance.
 
 ## External Dependencies

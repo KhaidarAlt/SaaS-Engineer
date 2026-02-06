@@ -67,6 +67,98 @@ function DnsCopyRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+function DomainVerificationStatus({ domain, savedDomain, tenantDomainVerified }: { domain: string; savedDomain?: string; tenantDomainVerified?: boolean }) {
+  const [verifyResult, setVerifyResult] = useState<{
+    status: string;
+    message: string;
+    records?: { domain: string; ips: string[]; matches: boolean }[];
+  } | null>(null);
+  const [isChecking, setIsChecking] = useState(false);
+  const { toast } = useToast();
+
+  const handleVerify = async () => {
+    setIsChecking(true);
+    setVerifyResult(null);
+    try {
+      const res = await apiRequest("POST", "/api/tenant/domain-verify");
+      const data = await res.json();
+      setVerifyResult(data);
+      if (data.status === "verified" || data.status === "partial") {
+        toast({ title: "DNS подтверждён", description: data.message });
+        queryClient.invalidateQueries({ queryKey: ["/api/tenant"] });
+      }
+    } catch {
+      toast({ title: "Ошибка", description: "Не удалось проверить DNS", variant: "destructive" });
+    } finally {
+      setIsChecking(false);
+    }
+  };
+
+  const effectiveDomain = domain || savedDomain;
+  if (!effectiveDomain) return null;
+
+  const isVerified = tenantDomainVerified || verifyResult?.status === "verified" || verifyResult?.status === "partial";
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-3 flex-wrap">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={handleVerify}
+          disabled={isChecking}
+          data-testid="button-verify-dns"
+        >
+          {isChecking ? (
+            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+          ) : (
+            <RefreshCw className="h-4 w-4 mr-2" />
+          )}
+          Проверить DNS
+        </Button>
+
+        {isVerified && !verifyResult && (
+          <Badge variant="outline" className="text-green-700 dark:text-green-400 border-green-300 dark:border-green-700" data-testid="badge-domain-verified">
+            <CheckCircle className="h-3 w-3 mr-1" />
+            DNS подтверждён
+          </Badge>
+        )}
+      </div>
+
+      {verifyResult && (
+        <div className={`p-3 rounded-lg border text-sm ${
+          verifyResult.status === "verified"
+            ? "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800 text-green-800 dark:text-green-200"
+            : verifyResult.status === "partial"
+            ? "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800 text-green-800 dark:text-green-200"
+            : verifyResult.status === "not_configured"
+            ? "bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800 text-yellow-800 dark:text-yellow-200"
+            : "bg-muted border-border text-muted-foreground"
+        }`} data-testid="text-domain-status">
+          <p>{verifyResult.message}</p>
+          {verifyResult.records && verifyResult.records.length > 0 && (
+            <div className="mt-2 space-y-1 text-xs font-mono">
+              {verifyResult.records.map((rec, i) => (
+                <div key={i} className="flex items-center gap-2 flex-wrap">
+                  {rec.matches ? (
+                    <CheckCircle className="h-3 w-3 text-green-600 shrink-0" />
+                  ) : (
+                    <AlertCircle className="h-3 w-3 text-yellow-600 shrink-0" />
+                  )}
+                  <span>{rec.domain}</span>
+                  <span className="text-muted-foreground">
+                    {rec.ips.length > 0 ? `→ ${rec.ips.join(", ")}` : "→ не найден"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const settingsFormSchema = z.object({
   name: z.string().min(1, "Название обязательно"),
   slug: z.string().min(1, "Ссылка обязательна").regex(/^[a-z0-9-]+$/, "Только латинские буквы, цифры и дефис"),
@@ -875,6 +967,8 @@ export default function SettingsPage() {
                     Укажите ваш домен без http:// и без слеша в конце (например, myshop.kz)
                   </p>
                 </div>
+
+                <DomainVerificationStatus domain={form.watch("customDomain") || ""} savedDomain={(tenant as any)?.customDomain || ""} tenantDomainVerified={(tenant as any)?.domainVerified} />
                 
                 <div className="p-4 bg-muted/50 rounded-lg space-y-4">
                   <p className="text-sm font-medium">Инструкция по настройке DNS:</p>
@@ -899,12 +993,12 @@ export default function SettingsPage() {
                       </div>
                     </li>
                     <li>Сохраните настройки и нажмите кнопку <strong>«Сохранить»</strong> на этой странице</li>
-                    <li>Напишите в поддержку для активации домена</li>
+                    <li>Нажмите <strong>«Проверить DNS»</strong> для автоматической проверки</li>
                   </ol>
-                  <div className="flex items-start gap-2 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
-                    <AlertCircle className="h-4 w-4 text-yellow-600 mt-0.5 shrink-0" />
-                    <p className="text-xs text-yellow-800 dark:text-yellow-200">
-                      DNS изменения вступят в силу от 5 минут до 24 часов. После настройки напишите в поддержку для активации SSL-сертификата на вашем домене.
+                  <div className="flex items-start gap-2 p-3 bg-muted border border-border rounded-lg">
+                    <AlertCircle className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                    <p className="text-xs text-muted-foreground">
+                      DNS изменения вступят в силу от 5 минут до 24 часов. После подтверждения DNS SSL-сертификат активируется автоматически.
                     </p>
                   </div>
                 </div>

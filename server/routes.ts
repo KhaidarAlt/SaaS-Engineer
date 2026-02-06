@@ -971,6 +971,75 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/tenant/domain-verify", requireAuth, async (req, res) => {
+    const dns = await import("dns");
+    const { promisify } = await import("util");
+    const resolve4 = promisify(dns.resolve4);
+    
+    const EXPECTED_IP = "34.111.179.128";
+    
+    try {
+      const tenant = await storage.getTenant(req.user!.tenantId!);
+      if (!tenant) {
+        return res.status(404).json({ message: "Тенант не найден" });
+      }
+      
+      const rawDomain = tenant.customDomain;
+      if (!rawDomain) {
+        return res.json({
+          status: "no_domain",
+          message: "Домен не указан в настройках. Сначала укажите и сохраните домен.",
+        });
+      }
+      const domain = normalizeDomain(rawDomain);
+
+      const results: { domain: string; ips: string[]; matches: boolean }[] = [];
+      let rootOk = false;
+      let wwwOk = false;
+
+      try {
+        const ips = await resolve4(domain);
+        const matches = ips.includes(EXPECTED_IP);
+        rootOk = matches;
+        results.push({ domain, ips, matches });
+      } catch {
+        results.push({ domain, ips: [], matches: false });
+      }
+
+      try {
+        const wwwDomain = `www.${domain}`;
+        const ips = await resolve4(wwwDomain);
+        const matches = ips.includes(EXPECTED_IP);
+        wwwOk = matches;
+        results.push({ domain: wwwDomain, ips, matches });
+      } catch {
+        results.push({ domain: `www.${domain}`, ips: [], matches: false });
+      }
+
+      let status: string;
+      let message: string;
+
+      if (rootOk && wwwOk) {
+        status = "verified";
+        message = `DNS настроен правильно. Обе записи (${domain} и www.${domain}) указывают на ${EXPECTED_IP}. SSL-сертификат будет активирован автоматически.`;
+        await storage.updateTenant(tenant.id, { domainVerified: true });
+      } else if (rootOk) {
+        status = "partial";
+        message = `Корневой домен ${domain} настроен правильно. Запись www.${domain} ещё не настроена (не обязательно).`;
+        await storage.updateTenant(tenant.id, { domainVerified: true });
+      } else {
+        status = "not_configured";
+        message = `DNS ещё не настроен. Домен ${domain} не указывает на ${EXPECTED_IP}. Проверьте настройки DNS у вашего регистратора. Изменения могут занять до 24 часов.`;
+        await storage.updateTenant(tenant.id, { domainVerified: false });
+      }
+
+      res.json({ status, message, records: results, expectedIp: EXPECTED_IP });
+    } catch (error) {
+      console.error("[DomainVerify] Error:", error);
+      res.status(500).json({ message: "Ошибка проверки DNS" });
+    }
+  });
+
   app.get("/api/products", requireAuth, async (req, res) => {
     try {
       const products = await storage.getProducts(req.user!.tenantId!);

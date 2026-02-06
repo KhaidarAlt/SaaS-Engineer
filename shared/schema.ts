@@ -57,6 +57,7 @@ export const tenants = pgTable("tenants", {
   aiSystemPrompt: text("ai_system_prompt"),
   aiTypingDelay: integer("ai_typing_delay").default(0),
   customDomain: text("custom_domain"),
+  domainVerified: boolean("domain_verified").notNull().default(false),
   // Catalog settings
   catalogUsp: text("catalog_usp"), // УТП в шапке (макс 120 символов)
   showProductSpecs: boolean("show_product_specs").notNull().default(true),
