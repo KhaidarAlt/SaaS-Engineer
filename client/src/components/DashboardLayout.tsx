@@ -30,6 +30,7 @@ import {
   Megaphone,
   Sparkles,
   Puzzle,
+  Layers,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -79,6 +80,7 @@ const tenantNavGroups: NavGroup[] = [
     tooltip: "Товары, CRM и параметры витрины",
     items: [
       { href: "/dashboard/settings", label: "Настройки", icon: Settings },
+      { href: "/dashboard/templates", label: "Шаблоны каталога", icon: Layers },
       { href: "/dashboard/categories", label: "Категории", icon: Tag },
       { href: "/dashboard/products", label: "Товары", icon: Package },
       { href: "/dashboard/import", label: "Импорт", icon: Upload, lockForPlans: ["Старт"] },

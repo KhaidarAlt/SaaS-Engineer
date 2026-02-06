@@ -2415,6 +2415,7 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
           total: subtotal.toFixed(2),
           status: "new",
           whatsappSent: false,
+          templateType: (tenant as any).catalogTemplate || "universal",
         },
         orderItems.map(item => ({
           orderId: "",

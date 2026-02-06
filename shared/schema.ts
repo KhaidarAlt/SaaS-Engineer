@@ -70,6 +70,7 @@ export const tenants = pgTable("tenants", {
   showFilters: boolean("show_filters").notNull().default(true),
   showFloatingWhatsApp: boolean("show_floating_whatsapp").notNull().default(true),
   showAiConsultant: boolean("show_ai_consultant").notNull().default(true),
+  catalogTemplate: text("catalog_template").notNull().default("universal"), // universal, fashion, food
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -190,6 +191,18 @@ export const products = pgTable("products", {
   colors: jsonb("colors").$type<{name: string; hex: string}[]>(),
   sizeColorStock: jsonb("size_color_stock").$type<{size: string; colorHex: string; qty: number}[]>(),
   tags: text("tags").array().default(sql`'{}'::text[]`), // Теги: hit, new, best_price, sale, delivery_today, in_stock, low_stock
+  // Universal template fields
+  brand: text("brand"),
+  unitOfMeasure: text("unit_of_measure"), // шт, кг, г, м, см, пог.м, м², л
+  specs: jsonb("specs").$type<{name: string; value: string}[]>(),
+  // Food template fields
+  ingredients: text("ingredients"),
+  modifiers: jsonb("modifiers").$type<{name: string; options: {label: string; price: number}[]}[]>(),
+  portionSize: text("portion_size"),
+  cookingTime: integer("cooking_time"), // minutes
+  weight: text("weight"),
+  calories: integer("calories"),
+  allergens: text("allergens").array(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -373,6 +386,7 @@ export const orders = pgTable("orders", {
   paymentProvider: text("payment_provider"), // kaspi, manual, etc
   paidAt: timestamp("paid_at"),
   paymentSource: text("payment_source"), // auto, manual
+  templateType: text("template_type"), // universal, fashion, food
   whatsappSent: boolean("whatsapp_sent").notNull().default(false),
   whatsappSentAt: timestamp("whatsapp_sent_at"),
   whatsappError: text("whatsapp_error"),

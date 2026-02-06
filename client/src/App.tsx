@@ -56,6 +56,7 @@ import IntegrationsPage from "@/pages/dashboard/IntegrationsPage";
 import WhatsAppCloudPage from "@/pages/dashboard/WhatsAppCloudPage";
 import SmartContactPage from "@/pages/dashboard/SmartContactPage";
 import BusinessConsultantPage from "@/pages/dashboard/BusinessConsultantPage";
+import TemplatesPage from "@/pages/dashboard/TemplatesPage";
 import PrivacyPage from "@/pages/legal/PrivacyPage";
 import PrivacyPageKz from "@/pages/legal/PrivacyPageKz";
 import TermsPage from "@/pages/legal/TermsPage";
@@ -185,6 +186,9 @@ function Router() {
       </Route>
       <Route path="/dashboard/settings">
         <ProtectedRoute component={SettingsPage} />
+      </Route>
+      <Route path="/dashboard/templates">
+        <ProtectedRoute component={TemplatesPage} />
       </Route>
       <Route path="/dashboard/import">
         <ProtectedRoute component={ImportPage} />

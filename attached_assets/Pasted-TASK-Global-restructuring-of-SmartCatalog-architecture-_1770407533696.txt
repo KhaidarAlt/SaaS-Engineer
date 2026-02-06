@@ -1,0 +1,165 @@
+TASK: Global restructuring of SmartCatalog architecture
+
+LANGUAGE: Russian  
+GOAL: support 3 business niches with independent logic,
+styles and WAU features.
+
+────────────────────────────────
+1. ARCHITECTURE CHANGE
+────────────────────────────────
+
+• Delete standalone section “Товары”
+• Introduce new core section:
+
+📌 “Шаблоны каталога”
+
+Subsections:
+- Universal
+- Fashion
+- Food
+
+“Товары” become CONTEXT-DEPENDENT
+and open inside selected template.
+
+────────────────────────────────
+2. TEMPLATE SYSTEM
+────────────────────────────────
+
+User selects one template per shop.
+
+Each template defines:
+
+- product fields  
+- catalog UX  
+- checkout logic  
+- AI behavior  
+- WAU mechanics
+
+────────────────────────────────
+3. UNIVERSAL TEMPLATE
+────────────────────────────────
+
+Purpose:
+tech, furniture, parts, general goods
+
+Features:
+
+• units of measure:
+  шт, кг, г, м, см, пог.м, м², л
+
+• characteristics  
+• colors  
+• tags  
+• stock
+
+WAU:
+- AI product consultant  
+- comparison  
+- technical advice
+
+────────────────────────────────
+4. FASHION TEMPLATE
+────────────────────────────────
+
+Style: Reels vertical 9:16
+
+Fields:
+
+• gender  
+• type (clothing/shoes/accessories)  
+• size logic by age  
+• colors
+
+WAU:
+
+• AI stylist  
+• size quiz  
+• look builder  
+• social triggers
+
+────────────────────────────────
+5. FOOD TEMPLATE
+────────────────────────────────
+
+Fields:
+
+• ingredients  
+• modifiers  
+• portion  
+• cooking time
+
+WAU:
+
+• AI waiter  
+• repeat order  
+• group dinner  
+• smart upsell
+
+────────────────────────────────
+6. AI TRAINING WINDOW (MANDATORY)
+────────────────────────────────
+
+Inside EACH template add block:
+
+🧠 “Обучение ИИ для этого каталога”
+
+User can define:
+
+• кто ИИ  
+• стиль общения  
+• что можно/нельзя  
+• скрипты продаж
+
+This data duplicates settings
+from section “Настройки AI”.
+
+Template-specific system prompt
+overrides general behavior.
+
+────────────────────────────────
+7. MENU STRUCTURE
+────────────────────────────────
+
+Настройка каталога
+ ├ Шаблоны каталога
+ │   ├ Universal
+ │   ├ Fashion
+ │   └ Food
+ ├ Категории
+ ├ Товары (контекстно)
+ ├ Импорт
+ ├ CRM
+ ├ Платежи
+ └ Здоровье каталога
+
+────────────────────────────────
+8. PRODUCT FORM ADAPTATION
+────────────────────────────────
+
+Form dynamically changes:
+
+• Universal → units + characteristics  
+• Fashion → sizes + gender  
+• Food → modifiers + portions
+
+────────────────────────────────
+9. CRM COMPATIBILITY
+────────────────────────────────
+
+Deals store:
+
+• template type  
+• specific fields  
+• AI dialogs  
+• modifiers/sizes
+
+────────────────────────────────
+10. OUTPUT REQUIRED
+────────────────────────────────
+
+• new menu  
+• templates selector  
+• 3 UX engines  
+• AI training windows  
+• dynamic product forms  
+• CRM mapping

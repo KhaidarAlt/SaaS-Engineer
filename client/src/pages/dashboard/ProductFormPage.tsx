@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation, useRoute } from "wouter";
 import { motion } from "framer-motion";
-import { ArrowLeft, Save, Package, Wand2, Plus, X, Palette, Users, Tag } from "lucide-react";
+import { ArrowLeft, Save, Package, Wand2, Plus, X, Palette, Users, Tag, UtensilsCrossed } from "lucide-react";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,6 +33,8 @@ import { InlineProductImages, InlineProductImagesRef } from "@/components/Inline
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Product, Category } from "@shared/schema";
+import type { CatalogTemplateType } from "@shared/templateRegistry";
+import { UNIT_OPTIONS } from "@shared/templateRegistry";
 
 const CLOTHING_SIZES = ["XXS", "XS", "S", "M", "L", "XL", "XXL", "3XL", "4XL", "5XL"];
 const SHOE_SIZES = ["35", "36", "37", "38", "39", "40", "41", "42", "43", "44", "45", "46", "47", "48"];
@@ -129,6 +131,18 @@ export default function ProductFormPage() {
   const [sizeType, setSizeType] = useState<"clothing" | "shoes" | "kids_clothing" | "kids_shoes" | "baby" | "kids_height">("clothing");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
 
+  const [ingredients, setIngredients] = useState("");
+  const [portionSize, setPortionSize] = useState("");
+  const [weight, setWeight] = useState("");
+  const [cookingTime, setCookingTime] = useState<number | undefined>();
+  const [calories, setCalories] = useState<number | undefined>();
+  const [allergens, setAllergens] = useState<string[]>([]);
+  const [modifiers, setModifiers] = useState<{name: string; options: {label: string; price: number}[]}[]>([]);
+
+  const [brand, setBrand] = useState("");
+  const [unitOfMeasure, setUnitOfMeasure] = useState("шт");
+  const [specs, setSpecs] = useState<{name: string; value: string}[]>([]);
+
   const { data: product, isLoading: productLoading } = useQuery<Product>({
     queryKey: ["/api/products", productId],
     enabled: !!productId,
@@ -137,6 +151,11 @@ export default function ProductFormPage() {
   const { data: categories } = useQuery<Category[]>({
     queryKey: ["/api/categories"],
   });
+
+  const { data: tenant } = useQuery<any>({
+    queryKey: ["/api/tenant"],
+  });
+  const catalogTemplate = (tenant?.catalogTemplate || "universal") as CatalogTemplateType;
 
   const form = useForm<ProductFormData>({
     resolver: zodResolver(productFormSchema),
@@ -170,6 +189,18 @@ export default function ProductFormPage() {
       setSelectedGender(productGender);
       setSizeColorStock(productSizeColorStock);
       setSelectedTags(productTags);
+
+      setBrand((product as any).brand || "");
+      setUnitOfMeasure((product as any).unitOfMeasure || "шт");
+      setSpecs((product as any).specs || []);
+
+      setIngredients((product as any).ingredients || "");
+      setPortionSize((product as any).portionSize || "");
+      setWeight((product as any).weight || "");
+      setCookingTime((product as any).cookingTime || undefined);
+      setCalories((product as any).calories || undefined);
+      setAllergens((product as any).allergens || []);
+      setModifiers((product as any).modifiers || []);
       
       form.reset({
         sku: product.sku,
@@ -192,14 +223,30 @@ export default function ProductFormPage() {
 
   const mutation = useMutation({
     mutationFn: async (data: ProductFormData) => {
-      const payload = {
+      const payload: Record<string, any> = {
         ...data,
-        gender: selectedGender || null,
-        sizes: selectedSizes,
-        colors: selectedColors,
-        sizeColorStock: sizeColorStock,
         tags: selectedTags,
       };
+      
+      if (catalogTemplate === "fashion") {
+        payload.gender = selectedGender || null;
+        payload.sizes = selectedSizes;
+        payload.colors = selectedColors;
+        payload.sizeColorStock = sizeColorStock;
+      } else if (catalogTemplate === "universal") {
+        payload.brand = brand || null;
+        payload.unitOfMeasure = unitOfMeasure || null;
+        payload.specs = specs.length > 0 ? specs : null;
+        payload.colors = selectedColors;
+      } else if (catalogTemplate === "food") {
+        payload.ingredients = ingredients || null;
+        payload.modifiers = modifiers.length > 0 ? modifiers : null;
+        payload.portionSize = portionSize || null;
+        payload.cookingTime = cookingTime || null;
+        payload.weight = weight || null;
+        payload.calories = calories || null;
+        payload.allergens = allergens.length > 0 ? allergens : null;
+      }
       if (isEdit && productId) {
         return apiRequest("PUT", `/api/products/${productId}`, payload);
       }
@@ -474,6 +521,8 @@ export default function ProductFormPage() {
             </CardContent>
           </Card>
 
+          {catalogTemplate === "fashion" && (
+          <>
           <Card>
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">
@@ -787,6 +836,324 @@ export default function ProductFormPage() {
               )}
             </CardContent>
           </Card>
+          </>
+          )}
+
+          {catalogTemplate === "universal" && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Package className="h-5 w-5" />
+                Характеристики товара
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Бренд</Label>
+                  <Input
+                    value={brand}
+                    onChange={(e) => setBrand(e.target.value)}
+                    placeholder="Название бренда"
+                    data-testid="input-brand"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Единица измерения</Label>
+                  <Select value={unitOfMeasure} onValueChange={setUnitOfMeasure}>
+                    <SelectTrigger data-testid="select-unit">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {UNIT_OPTIONS.map((unit) => (
+                        <SelectItem key={unit.value} value={unit.value}>{unit.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <Label>Характеристики</Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setSpecs([...specs, { name: "", value: "" }])}
+                    data-testid="button-add-spec"
+                  >
+                    <Plus className="h-4 w-4 mr-1" />
+                    Добавить
+                  </Button>
+                </div>
+                {specs.map((spec, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <Input
+                      value={spec.name}
+                      onChange={(e) => {
+                        const newSpecs = [...specs];
+                        newSpecs[idx] = { ...spec, name: e.target.value };
+                        setSpecs(newSpecs);
+                      }}
+                      placeholder="Название"
+                      className="flex-1"
+                      data-testid={`input-spec-name-${idx}`}
+                    />
+                    <Input
+                      value={spec.value}
+                      onChange={(e) => {
+                        const newSpecs = [...specs];
+                        newSpecs[idx] = { ...spec, value: e.target.value };
+                        setSpecs(newSpecs);
+                      }}
+                      placeholder="Значение"
+                      className="flex-1"
+                      data-testid={`input-spec-value-${idx}`}
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setSpecs(specs.filter((_, i) => i !== idx))}
+                      data-testid={`button-remove-spec-${idx}`}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+
+              <div className="space-y-2">
+                <Label>Цвета</Label>
+                <div className="flex flex-wrap gap-2">
+                  {PRESET_COLORS.map((color) => (
+                    <button
+                      key={color.hex}
+                      type="button"
+                      onClick={() => toggleColor(color)}
+                      className={`w-8 h-8 rounded-full border-2 transition-all ${
+                        selectedColors.find(c => c.hex === color.hex)
+                          ? "ring-2 ring-primary ring-offset-2"
+                          : "border-border"
+                      }`}
+                      style={{ backgroundColor: color.hex }}
+                      title={color.name}
+                      data-testid={`button-color-${color.name}`}
+                    />
+                  ))}
+                </div>
+                {selectedColors.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {selectedColors.map((color) => (
+                      <Badge key={color.hex} variant="secondary" className="flex items-center gap-2 pr-1">
+                        <span className="w-4 h-4 rounded-full border border-border" style={{ backgroundColor: color.hex }} />
+                        {color.name}
+                        <button type="button" onClick={() => removeColor(color.hex)} className="hover:text-destructive">
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+          )}
+
+          {catalogTemplate === "food" && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <UtensilsCrossed className="h-5 w-5" />
+                Информация о блюде
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label>Состав / Ингредиенты</Label>
+                <Textarea
+                  value={ingredients}
+                  onChange={(e) => setIngredients(e.target.value)}
+                  placeholder="Перечислите ингредиенты через запятую"
+                  rows={3}
+                  data-testid="input-ingredients"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Размер порции</Label>
+                  <Input
+                    value={portionSize}
+                    onChange={(e) => setPortionSize(e.target.value)}
+                    placeholder="Например: 250 мл"
+                    data-testid="input-portion"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Вес</Label>
+                  <Input
+                    value={weight}
+                    onChange={(e) => setWeight(e.target.value)}
+                    placeholder="Например: 450 г"
+                    data-testid="input-weight"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Время приготовления (мин)</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    value={cookingTime ?? ""}
+                    onChange={(e) => setCookingTime(e.target.value ? parseInt(e.target.value) : undefined)}
+                    placeholder="0"
+                    data-testid="input-cooking-time"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Калорийность (ккал)</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    value={calories ?? ""}
+                    onChange={(e) => setCalories(e.target.value ? parseInt(e.target.value) : undefined)}
+                    placeholder="0"
+                    data-testid="input-calories"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Аллергены</Label>
+                <div className="flex flex-wrap gap-2">
+                  {["Глютен", "Молоко", "Яйца", "Орехи", "Соя", "Рыба", "Морепродукты", "Кунжут"].map((allergen) => (
+                    <Badge
+                      key={allergen}
+                      variant={allergens.includes(allergen) ? "default" : "outline"}
+                      className="cursor-pointer"
+                      onClick={() => {
+                        if (allergens.includes(allergen)) {
+                          setAllergens(allergens.filter(a => a !== allergen));
+                        } else {
+                          setAllergens([...allergens, allergen]);
+                        }
+                      }}
+                      data-testid={`badge-allergen-${allergen}`}
+                    >
+                      {allergen}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <Label>Модификаторы (добавки, соусы)</Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setModifiers([...modifiers, { name: "", options: [{ label: "", price: 0 }] }])}
+                    data-testid="button-add-modifier"
+                  >
+                    <Plus className="h-4 w-4 mr-1" />
+                    Добавить
+                  </Button>
+                </div>
+                {modifiers.map((mod, idx) => (
+                  <div key={idx} className="p-3 border rounded-lg space-y-3">
+                    <div className="flex items-center gap-2">
+                      <Input
+                        value={mod.name}
+                        onChange={(e) => {
+                          const newMods = [...modifiers];
+                          newMods[idx] = { ...mod, name: e.target.value };
+                          setModifiers(newMods);
+                        }}
+                        placeholder="Название группы (напр. Соус)"
+                        className="flex-1"
+                        data-testid={`input-modifier-name-${idx}`}
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setModifiers(modifiers.filter((_, i) => i !== idx))}
+                        data-testid={`button-remove-modifier-${idx}`}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    {mod.options.map((opt, optIdx) => (
+                      <div key={optIdx} className="flex items-center gap-2 ml-4">
+                        <Input
+                          value={opt.label}
+                          onChange={(e) => {
+                            const newMods = [...modifiers];
+                            const newOpts = [...mod.options];
+                            newOpts[optIdx] = { ...opt, label: e.target.value };
+                            newMods[idx] = { ...mod, options: newOpts };
+                            setModifiers(newMods);
+                          }}
+                          placeholder="Вариант (напр. Кетчуп)"
+                          className="flex-1"
+                          data-testid={`input-modifier-opt-label-${idx}-${optIdx}`}
+                        />
+                        <Input
+                          type="number"
+                          value={opt.price}
+                          onChange={(e) => {
+                            const newMods = [...modifiers];
+                            const newOpts = [...mod.options];
+                            newOpts[optIdx] = { ...opt, price: parseFloat(e.target.value) || 0 };
+                            newMods[idx] = { ...mod, options: newOpts };
+                            setModifiers(newMods);
+                          }}
+                          placeholder="Цена"
+                          className="w-24"
+                          data-testid={`input-modifier-opt-price-${idx}-${optIdx}`}
+                        />
+                        <span className="text-sm text-muted-foreground">₸</span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            const newMods = [...modifiers];
+                            const newOpts = mod.options.filter((_, i) => i !== optIdx);
+                            newMods[idx] = { ...mod, options: newOpts };
+                            setModifiers(newMods);
+                          }}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="ml-4"
+                      onClick={() => {
+                        const newMods = [...modifiers];
+                        newMods[idx] = { ...mod, options: [...mod.options, { label: "", price: 0 }] };
+                        setModifiers(newMods);
+                      }}
+                      data-testid={`button-add-modifier-option-${idx}`}
+                    >
+                      <Plus className="h-4 w-4 mr-1" />
+                      Добавить вариант
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+          )}
 
           {/* Tags Section */}
           <Card>

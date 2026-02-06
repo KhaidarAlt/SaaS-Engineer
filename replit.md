@@ -36,7 +36,8 @@ Preferred communication style: Simple, everyday language.
 - **Key Data Models**: Plans, Tenants, Users, Products/Categories, Orders/OrderItems, Discounts/Promotions.
 - **Build System**: Vite for client, esbuild for server, tsx for development.
 - **Smart Import**: CSV/XLSX parsing, auto-column mapping, validation, and multiple import modes (upsert by SKU, create_only, replace catalog). Supports ZIP photo import with SKU matching.
-- **Product Management**: Detailed product variant management with SKU, price, and stock tracking per variant; robust image handling (compression, preview); gender, size, and color attributes with availability-based filtering.
+- **Catalog Templates**: Template system with 3 niches — Universal (tech/furniture/general), Fashion (clothing/shoes/accessories), Food (restaurants/delivery). Each template defines product fields, AI role, WAU features. Template selector at /dashboard/templates with AI training window. Dynamic product form adapts fields per template. Schema: tenants.catalogTemplate (universal|fashion|food), template registry in shared/templateRegistry.ts.
+- **Product Management**: Detailed product variant management with SKU, price, and stock tracking per variant; robust image handling (compression, preview); template-specific fields (Universal: brand, unitOfMeasure, specs; Fashion: gender, sizes, colors, sizeColorStock; Food: ingredients, modifiers, portionSize, cookingTime, weight, calories, allergens).
 - **WhatsApp Integration**: WAHA (self-hosted WhatsApp API) integration for order notifications, QR code login, status monitoring, and webhook events. AI-assistant integrates with WAHA for customer support.
 - **Catalog Health QA**: Scoring system for product data quality (images, descriptions, prices) with actionable recommendations.
 - **Admin Panel**: Superadmin features for user and tenant management, plan configuration, subscription extension/changes, and lead tracking.
