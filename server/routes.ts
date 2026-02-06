@@ -505,7 +505,7 @@ async function ensureDemoTenant() {
     slug: "demo",
     status: "active",
     contactEmail: "demo@smartcatalog.kz",
-    contactPhone: "+77001234567",
+    contactPhone: "+77765348417",
     address: "Алматы, демо-адрес",
     description: "Это демонстрационный каталог для ознакомления с возможностями SmartCatalog",
   });
@@ -6032,7 +6032,7 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
       const testData = {
         title: `[ТЕСТ] Заявка от SmartCatalog`,
         clientName: "Тестовый клиент",
-        phone: "+77001234567",
+        phone: "+77765348417",
         email: "test@example.com",
         products: "Тестовый товар x1 = 10000₸",
         amount: 10000,

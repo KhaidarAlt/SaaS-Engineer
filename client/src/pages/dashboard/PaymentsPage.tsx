@@ -52,7 +52,7 @@ import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { KaspiIntegration, Payment } from "@shared/schema";
 
-const SMARTCATALOG_KASPI_PHONE = "+7 700 123 45 67";
+const SMARTCATALOG_KASPI_PHONE = "+7 776 534 84 17";
 
 const paymentStatusConfig = {
   pending: { label: "Ожидает оплаты", icon: Clock, color: "text-yellow-600", bgColor: "bg-yellow-100" },
@@ -164,7 +164,7 @@ export default function PaymentsPage() {
   });
 
   const copyPhone = () => {
-    navigator.clipboard.writeText("77001234567");
+    navigator.clipboard.writeText("77765348417");
     toast({ title: "Номер скопирован" });
   };
 
