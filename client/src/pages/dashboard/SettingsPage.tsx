@@ -71,6 +71,7 @@ function DomainVerificationStatus({ domain, savedDomain, tenantDomainVerified }:
   const [verifyResult, setVerifyResult] = useState<{
     status: string;
     message: string;
+    details?: { method: string; result: string }[];
     records?: { domain: string; ips: string[]; matches: boolean }[];
   } | null>(null);
   const [isChecking, setIsChecking] = useState(false);
@@ -83,9 +84,11 @@ function DomainVerificationStatus({ domain, savedDomain, tenantDomainVerified }:
       const res = await apiRequest("POST", "/api/tenant/domain-verify");
       const data = await res.json();
       setVerifyResult(data);
-      if (data.status === "verified" || data.status === "partial") {
-        toast({ title: "DNS подтверждён", description: data.message });
+      if (data.status === "verified") {
+        toast({ title: "Домен подключён", description: data.message });
         queryClient.invalidateQueries({ queryKey: ["/api/tenant"] });
+      } else if (data.status === "partial") {
+        toast({ title: "DNS настроен частично", description: data.message });
       }
     } catch {
       toast({ title: "Ошибка", description: "Не удалось проверить DNS", variant: "destructive" });
@@ -97,7 +100,7 @@ function DomainVerificationStatus({ domain, savedDomain, tenantDomainVerified }:
   const effectiveDomain = domain || savedDomain;
   if (!effectiveDomain) return null;
 
-  const isVerified = tenantDomainVerified || verifyResult?.status === "verified" || verifyResult?.status === "partial";
+  const isVerified = tenantDomainVerified || verifyResult?.status === "verified";
 
   return (
     <div className="space-y-3">
@@ -136,25 +139,68 @@ function DomainVerificationStatus({ domain, savedDomain, tenantDomainVerified }:
             : "bg-muted border-border text-muted-foreground"
         }`} data-testid="text-domain-status">
           <p>{verifyResult.message}</p>
-          {verifyResult.records && verifyResult.records.length > 0 && (
+          {verifyResult.details && verifyResult.details.length > 0 && (
             <div className="mt-2 space-y-1 text-xs font-mono">
-              {verifyResult.records.map((rec, i) => (
+              {verifyResult.details.map((d, i) => (
                 <div key={i} className="flex items-center gap-2 flex-wrap">
-                  {rec.matches ? (
+                  {d.result === "OK" ? (
                     <CheckCircle className="h-3 w-3 text-green-600 shrink-0" />
                   ) : (
                     <AlertCircle className="h-3 w-3 text-yellow-600 shrink-0" />
                   )}
-                  <span>{rec.domain}</span>
-                  <span className="text-muted-foreground">
-                    {rec.ips.length > 0 ? `→ ${rec.ips.join(", ")}` : "→ не найден"}
-                  </span>
+                  <span>{d.method}:</span>
+                  <span className="text-muted-foreground">{d.result}</span>
                 </div>
               ))}
             </div>
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function DomainSetupInstructions({ domain }: { domain: string }) {
+  const { data: platformData } = useQuery<{ platformDomain: string }>({
+    queryKey: ["/api/platform-domain"],
+  });
+  const platformDomain = platformData?.platformDomain || "your-app.replit.app";
+
+  return (
+    <div className="p-4 bg-muted/50 rounded-lg space-y-4">
+      <p className="text-sm font-medium">Инструкция по подключению домена:</p>
+      <ol className="text-sm text-muted-foreground space-y-3 list-decimal list-inside">
+        <li>
+          Зарегистрируйтесь в <a href="https://cloudflare.com" target="_blank" rel="noopener noreferrer" className="text-primary underline">Cloudflare</a> (бесплатно) и добавьте туда ваш домен
+        </li>
+        <li>
+          В DNS-настройках Cloudflare создайте <strong>CNAME-запись</strong>:
+          <div className="bg-background p-3 rounded border font-mono text-xs space-y-2 mt-2 ml-0">
+            <DnsCopyRow label="Тип записи" value="CNAME" />
+            <DnsCopyRow label="Имя" value={domain} />
+            <DnsCopyRow label="Цель (Target)" value={platformDomain} />
+            <DnsCopyRow label="Прокси" value="Включено (оранжевое облако)" />
+          </div>
+        </li>
+        <li>
+          Дополнительно создайте <strong>CNAME-запись</strong> для www:
+          <div className="bg-background p-3 rounded border font-mono text-xs space-y-2 mt-2 ml-0">
+            <DnsCopyRow label="Тип записи" value="CNAME" />
+            <DnsCopyRow label="Имя" value={`www.${domain}`} />
+            <DnsCopyRow label="Цель (Target)" value={platformDomain} />
+            <DnsCopyRow label="Прокси" value="Включено (оранжевое облако)" />
+          </div>
+        </li>
+        <li>В настройках SSL/TLS Cloudflare выберите режим <strong>Full</strong></li>
+        <li>Сохраните настройки и нажмите <strong>«Сохранить»</strong> на этой странице</li>
+        <li>Нажмите <strong>«Проверить DNS»</strong> для автоматической проверки</li>
+      </ol>
+      <div className="flex items-start gap-2 p-3 bg-muted border border-border rounded-lg">
+        <AlertCircle className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+        <p className="text-xs text-muted-foreground">
+          Cloudflare автоматически предоставляет SSL-сертификат и проксирует трафик на вашу платформу. DNS изменения обычно вступают в силу за 5-15 минут.
+        </p>
+      </div>
     </div>
   );
 }
@@ -975,38 +1021,7 @@ export default function SettingsPage() {
 
                 <DomainVerificationStatus domain={form.watch("customDomain") || ""} savedDomain={(tenant as any)?.customDomain || ""} tenantDomainVerified={(tenant as any)?.domainVerified} />
                 
-                <div className="p-4 bg-muted/50 rounded-lg space-y-4">
-                  <p className="text-sm font-medium">Инструкция по настройке DNS:</p>
-                  <ol className="text-sm text-muted-foreground space-y-3 list-decimal list-inside">
-                    <li>Войдите в панель управления DNS вашего домена</li>
-                    <li>
-                      Создайте <strong>A-запись</strong> для корневого домена:
-                      <div className="bg-background p-3 rounded border font-mono text-xs space-y-2 mt-2 ml-0">
-                        <DnsCopyRow label="Тип записи" value="A" />
-                        <DnsCopyRow label="Имя домена" value={form.watch("customDomain") || "myshop.kz"} />
-                        <DnsCopyRow label="IP-адрес" value="34.111.179.128" />
-                        <DnsCopyRow label="TTL" value="3600" />
-                      </div>
-                    </li>
-                    <li>
-                      Дополнительно создайте <strong>A-запись</strong> для www:
-                      <div className="bg-background p-3 rounded border font-mono text-xs space-y-2 mt-2 ml-0">
-                        <DnsCopyRow label="Тип записи" value="A" />
-                        <DnsCopyRow label="Имя домена" value={`www.${form.watch("customDomain") || "myshop.kz"}`} />
-                        <DnsCopyRow label="IP-адрес" value="34.111.179.128" />
-                        <DnsCopyRow label="TTL" value="3600" />
-                      </div>
-                    </li>
-                    <li>Сохраните настройки и нажмите кнопку <strong>«Сохранить»</strong> на этой странице</li>
-                    <li>Нажмите <strong>«Проверить DNS»</strong> для автоматической проверки</li>
-                  </ol>
-                  <div className="flex items-start gap-2 p-3 bg-muted border border-border rounded-lg">
-                    <AlertCircle className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
-                    <p className="text-xs text-muted-foreground">
-                      DNS изменения вступят в силу от 5 минут до 24 часов. После подтверждения DNS SSL-сертификат активируется автоматически.
-                    </p>
-                  </div>
-                </div>
+                <DomainSetupInstructions domain={form.watch("customDomain") || "myshop.kz"} />
               </CardContent>
             </Card>
           </motion.div>

@@ -601,6 +601,25 @@ export async function registerRoutes(
   // Serve legacy local uploads (for backward compatibility)
   app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
+  app.get("/.well-known/catalog-verify/:tenantId", async (req: Request, res: Response) => {
+    try {
+      const tenant = await storage.getTenant(req.params.tenantId);
+      if (tenant && tenant.customDomain) {
+        const host = (req.hostname || req.get("host") || "").toLowerCase().replace(/:\d+$/, "").replace(/^www\./, "");
+        const tenantDomain = tenant.customDomain.toLowerCase().replace(/^www\./, "");
+        if (host === tenantDomain) {
+          return res.json({ verified: true, tenantId: tenant.id, slug: tenant.slug });
+        }
+      }
+    } catch {}
+    res.status(404).json({ verified: false });
+  });
+
+  app.get("/api/platform-domain", (_req: Request, res: Response) => {
+    const platformDomain = process.env.PLATFORM_DOMAIN || process.env.REPLIT_DOMAINS?.split(",")[0] || "";
+    res.json({ platformDomain });
+  });
+
   app.get("/api/domain-detect", async (req: Request, res: Response) => {
     const host = (req.hostname || req.get("host") || "").toLowerCase().replace(/:\d+$/, "");
     const hostWithoutWww = host.replace(/^www\./, "");
@@ -640,6 +659,7 @@ export async function registerRoutes(
       host.includes("worf.replit.dev") ||
       req.path.startsWith("/api") ||
       req.path.startsWith("/c/") ||
+      req.path.startsWith("/.well-known") ||
       req.path.startsWith("/uploads") ||
       req.path.startsWith("/assets") ||
       req.path.startsWith("/@") ||
@@ -997,12 +1017,6 @@ export async function registerRoutes(
   });
 
   app.post("/api/tenant/domain-verify", requireAuth, async (req, res) => {
-    const dns = await import("dns");
-    const { promisify } = await import("util");
-    const resolve4 = promisify(dns.resolve4);
-    
-    const EXPECTED_IP = "34.111.179.128";
-    
     try {
       const tenant = await storage.getTenant(req.user!.tenantId!);
       if (!tenant) {
@@ -1017,48 +1031,74 @@ export async function registerRoutes(
         });
       }
       const domain = normalizeDomain(rawDomain);
+      const platformDomain = process.env.PLATFORM_DOMAIN || process.env.REPLIT_DOMAINS?.split(",")[0] || "";
 
-      const results: { domain: string; ips: string[]; matches: boolean }[] = [];
-      let rootOk = false;
-      let wwwOk = false;
+      let httpVerified = false;
+      let dnsResolved = false;
+      const details: { method: string; result: string }[] = [];
 
+      // Method 1: HTTP probe - most reliable, works with any proxy (Cloudflare, etc.)
       try {
-        const ips = await resolve4(domain);
-        const matches = ips.includes(EXPECTED_IP);
-        rootOk = matches;
-        results.push({ domain, ips, matches });
-      } catch {
-        results.push({ domain, ips: [], matches: false });
+        const probeUrl = `https://${domain}/.well-known/catalog-verify/${tenant.id}`;
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 8000);
+        const response = await fetch(probeUrl, { 
+          signal: controller.signal,
+          headers: { 'User-Agent': 'SmartCatalog-DomainVerifier/1.0' }
+        });
+        clearTimeout(timeout);
+        if (response.ok) {
+          const data = await response.json() as any;
+          if (data.verified && data.tenantId === tenant.id) {
+            httpVerified = true;
+            details.push({ method: "HTTP", result: "OK" });
+          } else {
+            details.push({ method: "HTTP", result: "Response mismatch" });
+          }
+        } else {
+          details.push({ method: "HTTP", result: `HTTP ${response.status}` });
+        }
+      } catch (err: any) {
+        details.push({ method: "HTTP", result: err.message || "Connection failed" });
       }
 
+      // Method 2: DNS CNAME check
       try {
-        const wwwDomain = `www.${domain}`;
-        const ips = await resolve4(wwwDomain);
-        const matches = ips.includes(EXPECTED_IP);
-        wwwOk = matches;
-        results.push({ domain: wwwDomain, ips, matches });
+        const dns = await import("dns");
+        const { promisify } = await import("util");
+        const resolveCname = promisify(dns.resolveCname);
+        const cnameRecords = await resolveCname(domain);
+        const cnameMatch = cnameRecords.some((r: string) => 
+          r.toLowerCase().includes(platformDomain.toLowerCase())
+        );
+        if (cnameMatch) {
+          dnsResolved = true;
+          details.push({ method: "CNAME", result: `Points to ${cnameRecords[0]}` });
+        } else {
+          details.push({ method: "CNAME", result: `Points to ${cnameRecords.join(", ")} (expected ${platformDomain})` });
+        }
       } catch {
-        results.push({ domain: `www.${domain}`, ips: [], matches: false });
+        details.push({ method: "CNAME", result: "No CNAME record found (may use Cloudflare proxy)" });
       }
 
       let status: string;
       let message: string;
 
-      if (rootOk && wwwOk) {
+      if (httpVerified) {
         status = "verified";
-        message = `DNS настроен правильно. Обе записи (${domain} и www.${domain}) указывают на ${EXPECTED_IP}. SSL-сертификат будет активирован автоматически.`;
+        message = `Домен ${domain} подключён и работает. Трафик правильно направляется на вашу платформу.`;
         await storage.updateTenant(tenant.id, { domainVerified: true });
-      } else if (rootOk) {
+      } else if (dnsResolved) {
         status = "partial";
-        message = `Корневой домен ${domain} настроен правильно. Запись www.${domain} ещё не настроена (не обязательно).`;
-        await storage.updateTenant(tenant.id, { domainVerified: true });
+        message = `CNAME запись настроена правильно, но HTTP-проверка не прошла. Возможно, нужно подождать распространения DNS или включить проксирование в Cloudflare.`;
+        await storage.updateTenant(tenant.id, { domainVerified: false });
       } else {
         status = "not_configured";
-        message = `DNS ещё не настроен. Домен ${domain} не указывает на ${EXPECTED_IP}. Проверьте настройки DNS у вашего регистратора. Изменения могут занять до 24 часов.`;
+        message = `Домен ${domain} ещё не настроен. Создайте CNAME-запись, указывающую на ${platformDomain}. Если используете Cloudflare — включите проксирование (оранжевое облако). Изменения DNS могут занять до 24 часов.`;
         await storage.updateTenant(tenant.id, { domainVerified: false });
       }
 
-      res.json({ status, message, records: results, expectedIp: EXPECTED_IP });
+      res.json({ status, message, details, platformDomain });
     } catch (error) {
       console.error("[DomainVerify] Error:", error);
       res.status(500).json({ message: "Ошибка проверки DNS" });
