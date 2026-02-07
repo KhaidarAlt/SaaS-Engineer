@@ -400,11 +400,18 @@ export default function SettingsPage() {
     }
   }, [tenant, form]);
 
+  const getCatalogBaseUrl = (slug: string, updatedAt?: string | Date) => {
+    const version = updatedAt ? new Date(updatedAt).getTime() : Date.now();
+    const t = tenant as any;
+    if (t?.customDomain && t?.domainVerified) {
+      return `https://${t.customDomain}?v=${version}`;
+    }
+    return `${window.location.origin}/c/${slug}?v=${version}`;
+  };
+
   const generateQRCode = async (slug: string, updatedAt?: string | Date) => {
     try {
-      // Add version param based on updatedAt for cache busting in messengers
-      const version = updatedAt ? new Date(updatedAt).getTime() : Date.now();
-      const url = `${window.location.origin}/c/${slug}?v=${version}`;
+      const url = getCatalogBaseUrl(slug, updatedAt);
       const qr = await QRCodeLib.toDataURL(url, { 
         width: 256, 
         margin: 2,
@@ -426,9 +433,7 @@ export default function SettingsPage() {
 
   const copyLink = () => {
     if (!tenant) return;
-    // Add version param for cache busting in messengers
-    const version = tenant.updatedAt ? new Date(tenant.updatedAt).getTime() : Date.now();
-    const url = `${window.location.origin}/c/${tenant.slug}?v=${version}`;
+    const url = getCatalogBaseUrl(tenant.slug, tenant.updatedAt);
     navigator.clipboard.writeText(url);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -909,7 +914,7 @@ export default function SettingsPage() {
                   <div className="space-y-3">
                     <div className="flex items-center gap-2">
                       <Input
-                        value={tenant ? `${window.location.origin}/c/${tenant.slug}?v=${tenant.updatedAt ? new Date(tenant.updatedAt).getTime() : Date.now()}` : ""}
+                        value={tenant ? getCatalogBaseUrl(tenant.slug, tenant.updatedAt) : ""}
                         readOnly
                         className="text-sm"
                       />

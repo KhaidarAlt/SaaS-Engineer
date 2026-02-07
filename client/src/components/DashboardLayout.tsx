@@ -188,7 +188,12 @@ export function DashboardLayout({ children, isSuperAdmin = false }: DashboardLay
   }, [user, isSuperAdmin]);
 
   const tenantVersion = user?.tenant?.updatedAt ? new Date(user.tenant.updatedAt).getTime() : Date.now();
-  const catalogUrl = user?.tenant ? `/c/${(user.tenant as any).slug}?v=${tenantVersion}` : null;
+  const t = user?.tenant as any;
+  const catalogUrl = t ? (
+    t.customDomain && t.domainVerified
+      ? `https://${t.customDomain}?v=${tenantVersion}`
+      : `/c/${t.slug}?v=${tenantVersion}`
+  ) : null;
 
   const handleLogout = async () => {
     await logout();
