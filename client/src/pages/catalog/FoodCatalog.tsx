@@ -80,6 +80,7 @@ export default function FoodCatalog({
   const [quantity, setQuantity] = useState(1);
   const [kitchenComment, setKitchenComment] = useState("");
   const [isScrollingByClick, setIsScrollingByClick] = useState(false);
+  const isScrollingByClickRef = useRef(false);
 
   const categoryTabsRef = useRef<HTMLDivElement>(null);
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -153,18 +154,24 @@ export default function FoodCatalog({
   }, [allSectionIds, activeCategoryId]);
 
   useEffect(() => {
-    if (isScrollingByClick) return;
-
-    const observers: IntersectionObserver[] = [];
-
     const handleIntersect = (entries: IntersectionObserverEntry[]) => {
+      if (isScrollingByClickRef.current) return;
+
+      let topMostId: string | null = null;
+      let topMostTop = Infinity;
+
       for (const entry of entries) {
         if (entry.isIntersecting) {
-          const id = entry.target.getAttribute("data-section-id");
-          if (id) {
-            setActiveCategoryId(id);
+          const rect = entry.boundingClientRect;
+          if (rect.top < topMostTop) {
+            topMostTop = rect.top;
+            topMostId = entry.target.getAttribute("data-section-id");
           }
         }
+      }
+
+      if (topMostId) {
+        setActiveCategoryId(topMostId);
       }
     };
 
@@ -180,12 +187,10 @@ export default function FoodCatalog({
       }
     }
 
-    observers.push(observer);
-
     return () => {
-      observers.forEach((obs) => obs.disconnect());
+      observer.disconnect();
     };
-  }, [allSectionIds, isScrollingByClick]);
+  }, [allSectionIds]);
 
   useEffect(() => {
     if (activeCategoryId && categoryButtonRefs.current[activeCategoryId] && categoryTabsRef.current) {
@@ -199,6 +204,7 @@ export default function FoodCatalog({
   }, [activeCategoryId]);
 
   const scrollToSection = useCallback((categoryId: string) => {
+    isScrollingByClickRef.current = true;
     setIsScrollingByClick(true);
     setActiveCategoryId(categoryId);
     const el = sectionRefs.current[categoryId];
@@ -206,7 +212,10 @@ export default function FoodCatalog({
       const top = el.getBoundingClientRect().top + window.scrollY - HEADER_HEIGHT - CATEGORIES_HEIGHT - 8;
       window.scrollTo({ top, behavior: "smooth" });
     }
-    setTimeout(() => setIsScrollingByClick(false), 800);
+    setTimeout(() => {
+      isScrollingByClickRef.current = false;
+      setIsScrollingByClick(false);
+    }, 1000);
   }, []);
 
   const openModifierSheet = useCallback((product: any) => {
