@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
+import { queryClient } from "@/lib/queryClient";
 import type { User, Tenant, Subscription, Plan } from "@shared/schema";
 
 interface AuthUser extends User {
@@ -51,6 +52,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const data = await res.json();
       throw new Error(data.message || "Ошибка входа");
     }
+    queryClient.clear();
     await refreshUser();
   };
 
@@ -65,11 +67,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const errorData = await res.json();
       throw new Error(errorData.message || "Ошибка регистрации");
     }
+    queryClient.clear();
     await refreshUser();
   };
 
   const logout = async () => {
     await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
+    queryClient.clear();
     setUser(null);
   };
 
