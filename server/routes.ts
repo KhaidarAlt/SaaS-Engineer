@@ -629,8 +629,7 @@ export async function registerRoutes(
       const hostWithoutWww = host.replace(/^www\./, "");
       const tenant = await storage.getTenantByCustomDomain(hostWithoutWww) 
         || await storage.getTenantByCustomDomain(host);
-      if (tenant) {
-        // Rewrite the URL to serve the catalog for this tenant, preserving query string
+      if (tenant && tenant.domainVerified) {
         const originalQuery = req.originalUrl.includes("?") ? req.originalUrl.substring(req.originalUrl.indexOf("?")) : "";
         const subPath = req.path === "/" ? "" : req.path;
         const catalogUrl = `/c/${tenant.slug}${subPath}${originalQuery}`;
