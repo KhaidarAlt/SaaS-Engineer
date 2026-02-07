@@ -1,0 +1,186 @@
+TASK: Professional redesign of landing botfactory.kz / SmartCatalog
+
+GOAL:
+Create premium modern landing that looks like work of top design studio,
+not template page. Add new product features and stronger selling texts.
+
+LANGUAGE: Russian (Kazakhstan market)
+STYLE: premium SaaS, minimal, confident, emotional
+TECH: React + Tailwind + Framer Motion (or native animations)
+
+────────────────────────────────
+1. GLOBAL DESIGN REQUIREMENTS
+────────────────────────────────
+
+• smooth animations on scroll
+• micro-interactions on hover
+• gradients and glass effects
+• premium typography
+• storytelling sections
+• dynamic counters
+• 3D-like depth
+• skeleton loading
+
+COLORS:
+primary blue of brand + dark typography + soft gradients
+
+────────────────────────────────
+2. HERO SECTION (NEW TEXT)
+────────────────────────────────
+
+Title:
+Преврати WhatsApp в интернет-магазин
+с ИИ-продавцом, CRM и оплатой Kaspi — за 5 минут
+
+Subtitle:
+Клиент платит в привычном приложении Kaspi.
+ИИ общается, выставляет счёт, проверяет оплату
+и закрывает сделку в CRM.
+
+Buttons:
+[Создать каталог бесплатно]
+[Посмотреть пример магазина]
+Caption: Оформите тестовый заказ и получите его в WhatsApp
+Footer: Без карты. Сможет каждый. Бесплатно до 20 товаров навсегда.
+
+Animation:
+typing effect + floating WhatsApp bubbles
+
+────────────────────────────────
+3. PROBLEMS BLOCK (keep logic, new style)
+────────────────────────────────
+
+Cards with animation:
+
+- Клиенты теряются в переписках  
+- Нет единого каталога  
+- Заказы хаотично  
+- Менеджеры не успевают  
+- Нет аналитики  
+- Только чаты
+
+Add: line “Проблема — в отсутствии системы продаж”
+
+────────────────────────────────
+4. NEW CORE BLOCKS TO ADD
+────────────────────────────────
+
+A. KASPI WITHOUT ACQUIRING
+
+• ИИ формирует ссылку Kaspi  
+• клиент платит в приложении  
+• статус проверяется  
+• CRM → «Оплачен»  
+• уведомление менеджеру
+
+Visual: Kaspi flow scheme animation
+
+B. CONNECTION SPEED
+
+• ИИ в WhatsApp — 30 секунд  
+• Cloud API — 5 минут  
+• Instagram Direct  
+• Telegram  
+• Виджет на сайт  
+• Свой домен  
+• BIO для Instagram
+
+C. MULTI CATALOG
+
+• Universal  
+• Fashion (Instagram/Reels)  
+• Food (как Wolt/Яндекс Еда)
+
+────────────────────────────────
+5. CASES BLOCK (MANDATORY)
+────────────────────────────────
+
+Format: ДО → ПОСЛЕ
+
+CASE 1 — ESSEN техника
+До: ручные ответы, потери 40%
+После: +27% оплат, CRM, Kaspi
+
+CASE 2 — LUNA Fashion
+До: вопросы размеров, хаос
+После: +35% заказов, ИИ-стилист
+
+CASE 3 — Tokyo Pizza (Instagram)
+До: заказы 7 минут
+После: скорость заказа 3 минуты,
++40% повторных
+
+────────────────────────────────
+6. AI BLOCK
+────────────────────────────────
+
+• продаёт 24/7  
+• знает акции  
+• скрипты  
+• тестирование диалогов  
+• мгновенная коррекция  
+• дожим корзин
+
+────────────────────────────────
+7. CRM BLOCK
+────────────────────────────────
+
+• заказ → менеджеру  
+• статусы  
+• история  
+• Bitrix + amoCRM
+
+────────────────────────────────
+8. FAIR PRICING BLOCK
+────────────────────────────────
+
+Text:
+
+Только у нас — оплата по факту.
+Без пакетов диалогов и переплат.
+
+────────────────────────────────
+9. TARIFFS (NEW)
+────────────────────────────────
+
+PLAN 1 — SMARTCATALOG  
+4 990 ₸ / месяц
+
+- каталог без ограничений  
+- акции  
+- аналитика  
+- домен  
+- CRM
+
+PLAN 2 — SMARTCATALOG + AI  
+9 990 ₸ / месяц + 50 ₸ за диалог
+
+- ИИ 24/7  
+- Kaspi без эквайринга  
+- автоплатежи  
+- все каналы
+
+────────────────────────────────
+10. ANIMATIONS IDEAS
+────────────────────────────────
+
+• WhatsApp chat simulator  
+• Kaspi payment demo  
+• reels fashion preview  
+• food menu like Wolt
+
+────────────────────────────────
+11. TONE OF VOICE
+────────────────────────────────
+
+• уверенно  
+• без воды  
+• фокус на деньгах клиента  
+• казахстанский рынок
+
+────────────────────────────────
+OUTPUT:
+• new landing code  
+• texts integrated  
+• animations  
+• mobile first
