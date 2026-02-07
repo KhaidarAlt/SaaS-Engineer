@@ -2051,6 +2051,11 @@ export async function registerRoutes(
           ogDescription: (tenant as any).ogDescription,
           ogImageUrl: (tenant as any).ogImageUrl,
           catalogUsp: (tenant as any).catalogUsp,
+          catalogTemplate: (tenant as any).catalogTemplate || "universal",
+          showFavorites: (tenant as any).showFavorites,
+          showQuickView: (tenant as any).showQuickView,
+          showAiConsultant: (tenant as any).showAiConsultant,
+          showFloatingWhatsApp: tenant.showFloatingWhatsApp,
         },
         products: productsWithPrices,
         categories: categories.filter(c => c.isActive),
@@ -2326,8 +2331,15 @@ export async function registerRoutes(
         },
       };
 
-      // Build system message for product-specific consultation
-      const systemContext = `Ты — AI-консультант по товару "${product.name}" в магазине "${tenant.name}".
+      const { CATALOG_TEMPLATES } = await import("../shared/templateRegistry");
+      const templateType = ((tenant as any).catalogTemplate || "universal") as keyof typeof CATALOG_TEMPLATES;
+      const template = CATALOG_TEMPLATES[templateType] || CATALOG_TEMPLATES.universal;
+      const aiRoleName = template.aiRole.roleName;
+      const aiBasePrompt = (tenant as any).aiSystemPrompt || template.aiRole.defaultPrompt;
+
+      const systemContext = `${aiBasePrompt}
+
+Ты — ${aiRoleName} по товару "${product.name}" в магазине "${tenant.name}".
 
 ИНФОРМАЦИЯ О ТОВАРЕ:
 - Название: ${product.name}
@@ -6178,22 +6190,20 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
   // Dynamic OG tags for catalog pages - serves HTML with proper meta tags for messengers
   app.get("/c/:slug", async (req, res, next) => {
     try {
+      // In development mode, skip OG middleware and let Vite's catch-all handle HTML serving
+      // Vite must transform index.html to inject its client scripts for React to work
+      if (process.env.NODE_ENV !== "production") {
+        return next();
+      }
+      
       const slug = req.params.slug;
       const tenant = await storage.getTenantBySlug(slug);
       
       if (!tenant) {
-        // Let static/vite handle 404
         return next();
       }
       
-      // Determine which index.html to use
-      // Use process.cwd() for reliable path resolution in both dev and production
-      let indexPath: string;
-      if (process.env.NODE_ENV === "production") {
-        indexPath = path.resolve(process.cwd(), "dist", "public", "index.html");
-      } else {
-        indexPath = path.resolve(process.cwd(), "client", "index.html");
-      }
+      const indexPath = path.resolve(process.cwd(), "dist", "public", "index.html");
       
       if (!fs.existsSync(indexPath)) {
         return next();

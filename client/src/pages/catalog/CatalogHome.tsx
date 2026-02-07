@@ -19,6 +19,10 @@ import {
   Heart,
   Eye,
   ExternalLink,
+  LayoutGrid,
+  List as ListIcon,
+  Table2,
+  ArrowUpDown,
 } from "lucide-react";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
@@ -648,7 +652,11 @@ export default function CatalogHome() {
   const [stockFilter, setStockFilter] = useState<string>("all");
   const [sizeFilter, setSizeFilter] = useState<string>("all");
   const [colorFilter, setColorFilter] = useState<string>("all");
-  const { items, totalItems, lastAddedAt } = useCart();
+  const [sortOrder, setSortOrder] = useState("default");
+  const [viewMode, setViewMode] = useState<'grid' | 'list' | 'table'>('grid');
+  const [brandFilter, setBrandFilter] = useState("all");
+  const { items, totalItems, lastAddedAt, addItem } = useCart();
+  const { toast } = useToast();
   const { isFavorite, toggleFavorite } = useFavorites(slug);
   const [isCartPulsing, setIsCartPulsing] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<ProductWithPrice | null>(null);
@@ -738,6 +746,9 @@ export default function CatalogHome() {
   });
   const availableColors = Array.from(colorMap.values());
 
+  const availableBrands = Array.from(new Set(
+    data?.products?.map(p => (p as any).brand).filter(Boolean) || []
+  )).sort() as string[];
 
   const filteredProducts = data?.products?.filter((product) => {
     const matchesSearch = product.name.toLowerCase().includes(search.toLowerCase());
@@ -789,8 +800,25 @@ export default function CatalogHome() {
       }
     }
 
-    return product.isActive && matchesSearch && matchesCategory && matchesStock && matchesSize && matchesColor;
+    const matchesBrand = brandFilter === "all" || (product as any).brand === brandFilter;
+
+    return product.isActive && matchesSearch && matchesCategory && matchesStock && matchesSize && matchesColor && matchesBrand;
   });
+
+  const sortedProducts = filteredProducts ? filteredProducts.slice().sort((a, b) => {
+    switch (sortOrder) {
+      case "price_asc":
+        return parseFloat(a.computedPrice) - parseFloat(b.computedPrice);
+      case "price_desc":
+        return parseFloat(b.computedPrice) - parseFloat(a.computedPrice);
+      case "name_asc":
+        return a.name.localeCompare(b.name, "ru");
+      case "newest":
+        return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+      default:
+        return 0;
+    }
+  }) : [];
 
   if (error) {
     return (
@@ -1024,6 +1052,19 @@ export default function CatalogHome() {
               <SelectItem value="in_stock">В наличии</SelectItem>
             </SelectContent>
           </Select>
+          {availableBrands.length > 0 && (
+            <Select value={brandFilter} onValueChange={setBrandFilter}>
+              <SelectTrigger className="w-full sm:w-44" data-testid="select-brand">
+                <SelectValue placeholder="Бренд" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Все бренды</SelectItem>
+                {availableBrands.map((brand) => (
+                  <SelectItem key={brand} value={brand}>{brand}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
         </div>
 
         {(availableSizes.length > 0 || availableColors.length > 0) && (
@@ -1146,27 +1187,285 @@ export default function CatalogHome() {
           </div>
         )}
 
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-6">
+          <p className="text-sm text-muted-foreground" data-testid="text-product-count">
+            Найдено: {sortedProducts.length} товаров
+          </p>
+          <div className="flex items-center gap-3 flex-wrap">
+            <Select value={sortOrder} onValueChange={setSortOrder}>
+              <SelectTrigger className="w-auto min-w-[180px]" data-testid="select-sort">
+                <ArrowUpDown className="h-4 w-4 mr-2 shrink-0" />
+                <SelectValue placeholder="Сортировка" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="default">По умолчанию</SelectItem>
+                <SelectItem value="price_asc">Цена: по возрастанию</SelectItem>
+                <SelectItem value="price_desc">Цена: по убыванию</SelectItem>
+                <SelectItem value="name_asc">По названию А-Я</SelectItem>
+                <SelectItem value="newest">Новинки</SelectItem>
+              </SelectContent>
+            </Select>
+            <div className="flex items-center gap-1">
+              <Button
+                size="icon"
+                variant={viewMode === 'grid' ? 'default' : 'outline'}
+                onClick={() => setViewMode('grid')}
+                data-testid="button-view-grid"
+              >
+                <LayoutGrid className="h-4 w-4" />
+              </Button>
+              <Button
+                size="icon"
+                variant={viewMode === 'list' ? 'default' : 'outline'}
+                onClick={() => setViewMode('list')}
+                data-testid="button-view-list"
+              >
+                <ListIcon className="h-4 w-4" />
+              </Button>
+              <Button
+                size="icon"
+                variant={viewMode === 'table' ? 'default' : 'outline'}
+                onClick={() => setViewMode('table')}
+                data-testid="button-view-table"
+              >
+                <Table2 className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        </div>
+
         {isLoading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {[...Array(8)].map((_, i) => (
               <CardSkeleton key={i} />
             ))}
           </div>
-        ) : filteredProducts && filteredProducts.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {filteredProducts.map((product) => (
-              <ProductCard 
-                key={product.id} 
-                product={product} 
-                tenantSlug={slug} 
-                isFavorite={isFavorite(product.id)}
-                onToggleFavorite={toggleFavorite}
-                onQuickView={setSelectedProduct}
-                showFavorites={(data?.tenant as any)?.showFavorites !== false}
-                showQuickView={(data?.tenant as any)?.showQuickView !== false}
-              />
-            ))}
-          </div>
+        ) : sortedProducts.length > 0 ? (
+          <>
+            {viewMode === 'grid' && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {sortedProducts.map((product) => (
+                  <ProductCard 
+                    key={product.id} 
+                    product={product} 
+                    tenantSlug={slug} 
+                    isFavorite={isFavorite(product.id)}
+                    onToggleFavorite={toggleFavorite}
+                    onQuickView={setSelectedProduct}
+                    showFavorites={(data?.tenant as any)?.showFavorites !== false}
+                    showQuickView={(data?.tenant as any)?.showQuickView !== false}
+                  />
+                ))}
+              </div>
+            )}
+
+            {viewMode === 'list' && (
+              <div className="flex flex-col gap-4">
+                {sortedProducts.map((product) => {
+                  const isInStock = product.alwaysInStock || product.stockQty > 0;
+                  const formatPrice = (value: number | string) => {
+                    const num = typeof value === "string" ? parseFloat(value) : value;
+                    return new Intl.NumberFormat("ru-KZ").format(num) + " ₸";
+                  };
+                  return (
+                    <Card key={product.id} className="hover-elevate">
+                      <CardContent className="p-4 flex items-center gap-4">
+                        <Link href={`/c/${slug}/product/${product.id}`}>
+                          <div className="w-24 h-24 rounded-lg overflow-hidden bg-muted shrink-0 cursor-pointer relative">
+                            {product.mainImageUrl ? (
+                              <img
+                                src={product.mainImageUrl}
+                                alt={product.name}
+                                className="w-full h-full object-cover"
+                                loading="lazy"
+                              />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center">
+                                <Package className="h-8 w-8 text-muted-foreground/30" />
+                              </div>
+                            )}
+                          </div>
+                        </Link>
+                        <div className="flex-1 min-w-0">
+                          <Link href={`/c/${slug}/product/${product.id}`}>
+                            <h3 className="font-medium line-clamp-1 cursor-pointer text-foreground">{product.name}</h3>
+                          </Link>
+                          {product.description && (
+                            <p className="text-sm text-muted-foreground line-clamp-2 mt-1">
+                              {product.description.substring(0, 120)}{product.description.length > 120 ? "..." : ""}
+                            </p>
+                          )}
+                          <div className="flex items-center gap-2 mt-2">
+                            {product.hasDiscount ? (
+                              <>
+                                <span className="font-bold text-red-500">{formatPrice(product.computedPrice)}</span>
+                                <span className="text-sm text-muted-foreground line-through">{formatPrice(product.originalPrice)}</span>
+                              </>
+                            ) : (
+                              <span className="font-bold">{formatPrice(product.computedPrice)}</span>
+                            )}
+                            {!isInStock && <Badge variant="destructive" className="ml-2">Нет в наличии</Badge>}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {(data?.tenant as any)?.showFavorites !== false && (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className={isFavorite(product.id) ? 'text-red-500' : 'text-muted-foreground'}
+                              onClick={() => toggleFavorite(product.id)}
+                              data-testid={`button-favorite-${product.id}`}
+                            >
+                              <Heart className={`h-4 w-4 ${isFavorite(product.id) ? 'fill-current' : ''}`} />
+                            </Button>
+                          )}
+                          {(data?.tenant as any)?.showQuickView !== false && (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => setSelectedProduct(product)}
+                              data-testid={`button-quick-view-${product.id}`}
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                          )}
+                          <Button
+                            size="sm"
+                            disabled={!isInStock}
+                            onClick={() => {
+                              addItem(product);
+                              toast({
+                                title: "Добавлено в корзину",
+                                description: product.name,
+                              });
+                            }}
+                            data-testid={`button-add-cart-${product.id}`}
+                          >
+                            <ShoppingCart className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
+
+            {viewMode === 'table' && (
+              <Card>
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="text-left p-3 text-sm font-medium text-muted-foreground">Фото</th>
+                        <th className="text-left p-3 text-sm font-medium text-muted-foreground">Название</th>
+                        <th className="text-left p-3 text-sm font-medium text-muted-foreground hidden md:table-cell">Категория</th>
+                        <th className="text-left p-3 text-sm font-medium text-muted-foreground">Цена</th>
+                        <th className="text-left p-3 text-sm font-medium text-muted-foreground hidden sm:table-cell">Наличие</th>
+                        <th className="text-right p-3 text-sm font-medium text-muted-foreground">Действия</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sortedProducts.map((product) => {
+                        const isInStock = product.alwaysInStock || product.stockQty > 0;
+                        const formatPrice = (value: number | string) => {
+                          const num = typeof value === "string" ? parseFloat(value) : value;
+                          return new Intl.NumberFormat("ru-KZ").format(num) + " ₸";
+                        };
+                        const category = data?.categories?.find(c => c.id === product.categoryId);
+                        return (
+                          <tr key={product.id} className="border-b last:border-b-0">
+                            <td className="p-3">
+                              <Link href={`/c/${slug}/product/${product.id}`}>
+                                <div className="w-12 h-12 rounded-md overflow-hidden bg-muted cursor-pointer">
+                                  {product.mainImageUrl ? (
+                                    <img
+                                      src={product.mainImageUrl}
+                                      alt={product.name}
+                                      className="w-full h-full object-cover"
+                                      loading="lazy"
+                                    />
+                                  ) : (
+                                    <div className="w-full h-full flex items-center justify-center">
+                                      <Package className="h-4 w-4 text-muted-foreground/30" />
+                                    </div>
+                                  )}
+                                </div>
+                              </Link>
+                            </td>
+                            <td className="p-3">
+                              <Link href={`/c/${slug}/product/${product.id}`}>
+                                <span className="font-medium text-sm cursor-pointer text-foreground line-clamp-1">{product.name}</span>
+                              </Link>
+                            </td>
+                            <td className="p-3 hidden md:table-cell">
+                              <span className="text-sm text-muted-foreground">{category?.name || "—"}</span>
+                            </td>
+                            <td className="p-3">
+                              {product.hasDiscount ? (
+                                <div className="flex flex-col">
+                                  <span className="text-sm font-bold text-red-500">{formatPrice(product.computedPrice)}</span>
+                                  <span className="text-xs text-muted-foreground line-through">{formatPrice(product.originalPrice)}</span>
+                                </div>
+                              ) : (
+                                <span className="text-sm font-bold">{formatPrice(product.computedPrice)}</span>
+                              )}
+                            </td>
+                            <td className="p-3 hidden sm:table-cell">
+                              {isInStock ? (
+                                <Badge variant="secondary">В наличии</Badge>
+                              ) : (
+                                <Badge variant="destructive">Нет</Badge>
+                              )}
+                            </td>
+                            <td className="p-3">
+                              <div className="flex items-center justify-end gap-1">
+                                {(data?.tenant as any)?.showFavorites !== false && (
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className={isFavorite(product.id) ? 'text-red-500' : 'text-muted-foreground'}
+                                    onClick={() => toggleFavorite(product.id)}
+                                    data-testid={`button-favorite-${product.id}`}
+                                  >
+                                    <Heart className={`h-4 w-4 ${isFavorite(product.id) ? 'fill-current' : ''}`} />
+                                  </Button>
+                                )}
+                                {(data?.tenant as any)?.showQuickView !== false && (
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    onClick={() => setSelectedProduct(product)}
+                                    data-testid={`button-quick-view-${product.id}`}
+                                  >
+                                    <Eye className="h-4 w-4" />
+                                  </Button>
+                                )}
+                                <Button
+                                  size="icon"
+                                  disabled={!isInStock}
+                                  onClick={() => {
+                                    addItem(product);
+                                    toast({
+                                      title: "Добавлено в корзину",
+                                      description: product.name,
+                                    });
+                                  }}
+                                  data-testid={`button-add-cart-${product.id}`}
+                                >
+                                  <ShoppingCart className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
+            )}
+          </>
         ) : (
           <div className="text-center py-16">
             <Package className="h-16 w-16 text-muted-foreground/50 mx-auto mb-4" />

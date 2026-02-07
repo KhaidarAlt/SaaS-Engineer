@@ -45,7 +45,7 @@ import AiSandboxPage from "@/pages/dashboard/ai/AiSandboxPage";
 import AiAnalyticsPage from "@/pages/dashboard/ai/AiAnalyticsPage";
 import AiIntegrationsPage from "@/pages/dashboard/ai/AiIntegrationsPage";
 import AiSettingsPage from "@/pages/dashboard/ai/AiSettingsPage";
-import CatalogHome from "@/pages/catalog/CatalogHome";
+import CatalogRouter from "@/pages/catalog/CatalogRouter";
 import ProductDetailPage from "@/pages/catalog/ProductDetailPage";
 import CartPage from "@/pages/catalog/CartPage";
 import CheckoutPage from "@/pages/catalog/CheckoutPage";
@@ -271,7 +271,7 @@ function Router() {
 
       <Route path="/l/:slug" component={LinksPublicPage} />
 
-      <Route path="/c/:slug" component={CatalogHome} />
+      <Route path="/c/:slug" component={CatalogRouter} />
       <Route path="/c/:slug/cart" component={CartPage} />
       <Route path="/c/:slug/checkout" component={CheckoutPage} />
       <Route path="/c/:slug/product/:id" component={ProductDetailPage} />

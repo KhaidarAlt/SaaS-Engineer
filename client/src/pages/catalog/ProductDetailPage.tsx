@@ -28,6 +28,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/co
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useCart } from "@/contexts/CartContext";
+import { CATALOG_TEMPLATES, type CatalogTemplateType } from "@shared/templateRegistry";
 import { useToast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { trackEvent } from "@/lib/analytics";
@@ -129,6 +130,10 @@ export default function ProductDetailPage() {
     queryKey: ["/api/catalog", slug],
     enabled: !!slug,
   });
+
+  const templateType = ((catalogData?.tenant as any)?.catalogTemplate || "universal") as CatalogTemplateType;
+  const aiTemplate = CATALOG_TEMPLATES[templateType] || CATALOG_TEMPLATES.universal;
+  const aiRoleName = aiTemplate.aiRole.roleName;
 
   const trackedRef = useRef(false);
   useEffect(() => {
@@ -695,14 +700,14 @@ export default function ProductDetailPage() {
                   data-testid="button-ai-consultant"
                 >
                   <Bot className="h-5 w-5" />
-                  Спросить AI об этом товаре
+                  Спросить {aiRoleName}
                 </Button>
               </SheetTrigger>
               <SheetContent className="flex flex-col w-full sm:max-w-md">
                 <SheetHeader>
                   <SheetTitle className="flex items-center gap-2">
                     <Bot className="h-5 w-5 text-primary" />
-                    AI-консультант
+                    {aiRoleName}
                   </SheetTitle>
                 </SheetHeader>
                 <div className="flex-1 flex flex-col min-h-0">
@@ -712,7 +717,7 @@ export default function ProductDetailPage() {
                         <div className="text-center text-muted-foreground py-8">
                           <Bot className="h-12 w-12 mx-auto mb-3 opacity-50" />
                           <p className="text-sm">
-                            Привет! Я AI-консультант.
+                            Привет! Я {aiRoleName}.
                             <br />
                             Задайте вопрос о товаре "{product.name}"
                           </p>
