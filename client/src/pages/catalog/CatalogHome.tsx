@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import { useRoute, Link } from "wouter";
+import { Link } from "wouter";
+import { useCatalogSlug } from "@/hooks/useCatalogSlug";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Search,
@@ -130,7 +131,8 @@ function useFavorites(tenantSlug: string) {
 
 function ProductCard({ 
   product, 
-  tenantSlug, 
+  tenantSlug,
+  basePath,
   isFavorite, 
   onToggleFavorite,
   onQuickView,
@@ -139,6 +141,7 @@ function ProductCard({
 }: { 
   product: ProductWithPrice; 
   tenantSlug: string;
+  basePath: string;
   isFavorite: boolean;
   onToggleFavorite: (id: string) => void;
   onQuickView: (product: ProductWithPrice) => void;
@@ -163,7 +166,7 @@ function ProductCard({
         <div className="flex items-center justify-between gap-4">
           <span className="truncate">{product.name}</span>
           <a 
-            href={`/c/${tenantSlug}/cart`}
+            href={`${basePath}/cart`}
             className="shrink-0 text-primary font-medium hover:underline"
           >
             Оформить
@@ -180,7 +183,7 @@ function ProductCard({
       transition={{ duration: 0.3 }}
     >
       <Card className="overflow-hidden h-full hover-elevate">
-        <Link href={`/c/${tenantSlug}/product/${product.id}`}>
+        <Link href={`${basePath}/product/${product.id}`}>
           <div className="aspect-square relative overflow-hidden bg-muted cursor-pointer">
             {product.mainImageUrl ? (
               <img
@@ -264,7 +267,7 @@ function ProductCard({
           </div>
         </Link>
         <CardContent className="p-4">
-          <Link href={`/c/${tenantSlug}/product/${product.id}`}>
+          <Link href={`${basePath}/product/${product.id}`}>
             <h3 className="font-medium line-clamp-2 mb-2 cursor-pointer text-foreground">
               {product.name}
             </h3>
@@ -303,12 +306,14 @@ function QuickViewModal({
   product,
   isOpen,
   tenantSlug,
+  basePath,
   onClose,
   isMobile,
 }: {
   product: ProductWithPrice | null;
   isOpen: boolean;
   tenantSlug: string;
+  basePath: string;
   onClose: () => void;
   isMobile: boolean;
 }) {
@@ -335,7 +340,7 @@ function QuickViewModal({
         <div className="flex items-center justify-between gap-4">
           <span className="truncate">{product.name}</span>
           <a
-            href={`/c/${tenantSlug}/cart`}
+            href={`${basePath}/cart`}
             className="shrink-0 text-primary font-medium hover:underline"
           >
             Оформить
@@ -441,7 +446,7 @@ function QuickViewModal({
           <ShoppingCart className="h-4 w-4 mr-2" />
           Добавить в корзину
         </Button>
-        <Link href={`/c/${tenantSlug}/product/${product.id}`}>
+        <Link href={`${basePath}/product/${product.id}`}>
           <Button
             variant="outline"
             size="lg"
@@ -504,9 +509,11 @@ function QuickViewModal({
 function PromoCarousel({
   promoBlocks,
   tenantSlug,
+  basePath,
 }: {
   promoBlocks: PromoBlock[];
   tenantSlug: string;
+  basePath: string;
   tenantPhone?: string | null;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -575,7 +582,7 @@ function PromoCarousel({
             {promoBlocks.map((block, index) => (
               <Link
                 key={block.id}
-                href={`/c/${tenantSlug}/promo/${block.id}`}
+                href={`${basePath}/promo/${block.id}`}
                 className="flex-shrink-0 w-full snap-center cursor-pointer"
                 data-testid={`link-promo-block-${block.id}`}
                 onClick={() => {
@@ -644,9 +651,9 @@ function PromoCarousel({
   );
 }
 
-export default function CatalogHome() {
-  const [, params] = useRoute("/c/:slug");
-  const slug = params?.slug || "";
+export default function CatalogHome({ basePath: parentBasePath }: { basePath?: string }) {
+  const { slug, basePath: hookBasePath } = useCatalogSlug("/c/:slug");
+  const basePath = parentBasePath !== undefined ? parentBasePath : hookBasePath;
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [stockFilter, setStockFilter] = useState<string>("all");
@@ -839,7 +846,7 @@ export default function CatalogHome() {
       <header className="sticky top-0 z-50 backdrop-blur-md bg-background/95 border-b border-border">
         <div className="max-w-7xl mx-auto px-4 md:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16 gap-4">
-            <Link href={`/c/${slug}`}>
+            <Link href={`${basePath || "/"}`}>
               <div className="flex flex-col cursor-pointer">
                 <div className="flex items-center gap-3">
                   {data?.tenant?.logoUrl && (
@@ -897,7 +904,7 @@ export default function CatalogHome() {
             </div>
             <div className="flex items-center gap-3">
               <ThemeToggle />
-              <Link href={`/c/${slug}/cart`}>
+              <Link href={`${basePath}/cart`}>
                 <Button variant="outline" className="relative" data-testid="button-cart">
                   <ShoppingCart className="h-5 w-5" />
                   {totalItems > 0 && (
@@ -954,6 +961,7 @@ export default function CatalogHome() {
         <PromoCarousel
           promoBlocks={promoBlocks}
           tenantSlug={slug}
+          basePath={basePath}
           tenantPhone={data?.tenant?.contactPhone}
         />
       )}
@@ -974,7 +982,7 @@ export default function CatalogHome() {
                   </p>
                 </div>
               </div>
-              <Link href={`/c/${slug}/cart`}>
+              <Link href={`${basePath}/cart`}>
                 <Button size="sm" data-testid="button-demo-cta">
                   <ShoppingCart className="w-4 h-4 mr-2" />
                   Перейти к оформлению
@@ -1248,7 +1256,8 @@ export default function CatalogHome() {
                   <ProductCard 
                     key={product.id} 
                     product={product} 
-                    tenantSlug={slug} 
+                    tenantSlug={slug}
+                    basePath={basePath}
                     isFavorite={isFavorite(product.id)}
                     onToggleFavorite={toggleFavorite}
                     onQuickView={setSelectedProduct}
@@ -1270,7 +1279,7 @@ export default function CatalogHome() {
                   return (
                     <Card key={product.id} className="hover-elevate">
                       <CardContent className="p-4 flex items-center gap-4">
-                        <Link href={`/c/${slug}/product/${product.id}`}>
+                        <Link href={`${basePath}/product/${product.id}`}>
                           <div className="w-24 h-24 rounded-lg overflow-hidden bg-muted shrink-0 cursor-pointer relative">
                             {product.mainImageUrl ? (
                               <img
@@ -1287,7 +1296,7 @@ export default function CatalogHome() {
                           </div>
                         </Link>
                         <div className="flex-1 min-w-0">
-                          <Link href={`/c/${slug}/product/${product.id}`}>
+                          <Link href={`${basePath}/product/${product.id}`}>
                             <h3 className="font-medium line-clamp-1 cursor-pointer text-foreground">{product.name}</h3>
                           </Link>
                           {product.description && (
@@ -1376,7 +1385,7 @@ export default function CatalogHome() {
                         return (
                           <tr key={product.id} className="border-b last:border-b-0">
                             <td className="p-3">
-                              <Link href={`/c/${slug}/product/${product.id}`}>
+                              <Link href={`${basePath}/product/${product.id}`}>
                                 <div className="w-12 h-12 rounded-md overflow-hidden bg-muted cursor-pointer">
                                   {product.mainImageUrl ? (
                                     <img
@@ -1394,7 +1403,7 @@ export default function CatalogHome() {
                               </Link>
                             </td>
                             <td className="p-3">
-                              <Link href={`/c/${slug}/product/${product.id}`}>
+                              <Link href={`${basePath}/product/${product.id}`}>
                                 <span className="font-medium text-sm cursor-pointer text-foreground line-clamp-1">{product.name}</span>
                               </Link>
                             </td>
@@ -1532,6 +1541,7 @@ export default function CatalogHome() {
         product={selectedProduct}
         isOpen={!!selectedProduct}
         tenantSlug={slug}
+        basePath={basePath}
         onClose={() => setSelectedProduct(null)}
         isMobile={isMobile}
       />
@@ -1560,7 +1570,7 @@ export default function CatalogHome() {
 
       {/* Floating Cart Button for Mobile */}
       {totalItems > 0 && (
-        <Link href={`/c/${slug}/cart`}>
+        <Link href={`${basePath}/cart`}>
           <motion.div
             initial={{ scale: 0, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}

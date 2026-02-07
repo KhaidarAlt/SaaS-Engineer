@@ -1,9 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
-import { useRoute } from "wouter";
 import { Loader2 } from "lucide-react";
 import CatalogHome from "./CatalogHome";
 import FashionCatalog from "./FashionCatalog";
 import FoodCatalog from "./FoodCatalog";
+import { useCatalogSlug } from "@/hooks/useCatalogSlug";
 import type { Tenant, Product, Category, Promotion, PromoBlock } from "@shared/schema";
 
 interface ProductWithPrice extends Product {
@@ -24,8 +24,7 @@ interface CatalogData {
 }
 
 export default function CatalogRouter() {
-  const [, params] = useRoute("/c/:slug");
-  const slug = params?.slug || "";
+  const { slug, basePath } = useCatalogSlug("/c/:slug");
 
   const { data, isLoading, error } = useQuery<CatalogData>({
     queryKey: ["/api/catalog", slug],
@@ -57,6 +56,7 @@ export default function CatalogRouter() {
     return (
       <FashionCatalog
         slug={slug}
+        basePath={basePath}
         tenant={data.tenant}
         products={data.products}
         categories={data.categories}
@@ -68,6 +68,7 @@ export default function CatalogRouter() {
     return (
       <FoodCatalog
         slug={slug}
+        basePath={basePath}
         tenant={data.tenant}
         products={data.products}
         categories={data.categories}
@@ -75,5 +76,5 @@ export default function CatalogRouter() {
     );
   }
 
-  return <CatalogHome />;
+  return <CatalogHome basePath={basePath} />;
 }

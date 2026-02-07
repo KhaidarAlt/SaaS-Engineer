@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation } from "@tanstack/react-query";
-import { useRoute, Link } from "wouter";
+import { Link } from "wouter";
 import { motion } from "framer-motion";
 import { ArrowLeft, Send, CheckCircle2, Package, MessageCircle, Sparkles } from "lucide-react";
 import { SiWhatsapp } from "react-icons/si";
@@ -16,6 +16,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { useToast } from "@/hooks/use-toast";
 import { useCart } from "@/contexts/CartContext";
 import { apiRequest } from "@/lib/queryClient";
+import { useCatalogSlug } from "@/hooks/useCatalogSlug";
 import { checkoutSchema, type CheckoutInput } from "@shared/schema";
 import { WhatsAppSendButton } from "@/components/WhatsAppSendButton";
 import { trackEvent, updateCartSession, convertCartSession } from "@/lib/analytics";
@@ -51,8 +52,7 @@ interface OrderResponse {
 }
 
 export default function CheckoutPage() {
-  const [, params] = useRoute("/c/:slug/checkout");
-  const slug = params?.slug || "";
+  const { slug, basePath } = useCatalogSlug("/c/:slug/checkout");
   const { items, subtotal, clearCart } = useCart();
   const { toast } = useToast();
   const [orderSuccess, setOrderSuccess] = useState(false);
@@ -253,7 +253,7 @@ export default function CheckoutPage() {
                     Создать свой каталог бесплатно
                   </Button>
                 </Link>
-                <Link href={`/c/${slug}`}>
+                <Link href={basePath || "/"}>
                   <Button variant="outline" className="w-full" data-testid="button-continue-shopping">
                     Вернуться к каталогу
                   </Button>
@@ -281,7 +281,7 @@ export default function CheckoutPage() {
               <p className="text-sm text-muted-foreground mb-6">
                 Мы свяжемся с вами для подтверждения заказа
               </p>
-              <Link href={`/c/${slug}`}>
+              <Link href={basePath || "/"}>
                 <Button variant="outline" data-testid="button-continue-shopping">
                   Вернуться к каталогу
                 </Button>
@@ -302,7 +302,7 @@ export default function CheckoutPage() {
           <p className="text-muted-foreground mb-6">
             Добавьте товары для оформления заказа
           </p>
-          <Link href={`/c/${slug}`}>
+          <Link href={basePath || "/"}>
             <Button>Перейти к каталогу</Button>
           </Link>
         </div>
@@ -316,7 +316,7 @@ export default function CheckoutPage() {
         <div className="max-w-7xl mx-auto px-4 md:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-3">
-              <Link href={`/c/${slug}/cart`}>
+              <Link href={`${basePath}/cart`}>
                 <Button variant="ghost" size="icon" data-testid="button-back">
                   <ArrowLeft className="h-5 w-5" />
                 </Button>

@@ -601,6 +601,32 @@ export async function registerRoutes(
   // Serve legacy local uploads (for backward compatibility)
   app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
+  app.get("/api/domain-detect", async (req: Request, res: Response) => {
+    const host = (req.hostname || req.get("host") || "").toLowerCase().replace(/:\d+$/, "");
+    const hostWithoutWww = host.replace(/^www\./, "");
+    
+    if (
+      !host ||
+      host === "localhost" ||
+      host.includes("replit") ||
+      host.includes("botfactory.kz") ||
+      host.includes("worf.replit.dev")
+    ) {
+      return res.json({ customDomain: false });
+    }
+
+    try {
+      const tenant = await storage.getTenantByCustomDomain(hostWithoutWww)
+        || await storage.getTenantByCustomDomain(host);
+      if (tenant && tenant.domainVerified) {
+        return res.json({ customDomain: true, slug: tenant.slug, tenantName: tenant.name });
+      }
+    } catch (err) {
+      console.error("[DomainDetect] Error:", err);
+    }
+    return res.json({ customDomain: false });
+  });
+
   // Custom domain middleware: redirect custom domains to tenant catalog
   app.use(async (req: Request, res: Response, next: NextFunction) => {
     const host = (req.hostname || req.get("host") || "").toLowerCase().replace(/:\d+$/, "");

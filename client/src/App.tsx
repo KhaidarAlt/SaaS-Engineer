@@ -1,6 +1,7 @@
+import { createContext, useContext } from "react";
 import { Switch, Route, Redirect } from "wouter";
 import { queryClient } from "./lib/queryClient";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
@@ -110,10 +111,56 @@ function PublicRoute({ component: Component }: { component: React.ComponentType 
   return <Component />;
 }
 
+interface CustomDomainInfo {
+  customDomain: boolean;
+  slug?: string;
+  tenantName?: string;
+  isLoading: boolean;
+}
+
+const CustomDomainContext = createContext<CustomDomainInfo>({ customDomain: false, isLoading: true });
+
+export function useCustomDomain() {
+  return useContext(CustomDomainContext);
+}
+
+function CustomDomainProvider({ children }: { children: React.ReactNode }) {
+  const { data, isLoading } = useQuery<CustomDomainInfo>({
+    queryKey: ["/api/domain-detect"],
+    staleTime: Infinity,
+    gcTime: Infinity,
+  });
+
+  const value: CustomDomainInfo = {
+    customDomain: data?.customDomain ?? false,
+    slug: data?.slug,
+    tenantName: data?.tenantName,
+    isLoading,
+  };
+
+  return (
+    <CustomDomainContext.Provider value={value}>
+      {children}
+    </CustomDomainContext.Provider>
+  );
+}
+
+function HomePage() {
+  const { customDomain, isLoading } = useCustomDomain();
+  if (isLoading) return <PageLoader />;
+  if (customDomain) return <CatalogRouter />;
+  return <LandingPage />;
+}
+
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={LandingPage} />
+      <Route path="/" component={HomePage} />
+      
+      <Route path="/product/:id" component={ProductDetailPage} />
+      <Route path="/cart" component={CartPage} />
+      <Route path="/checkout" component={CheckoutPage} />
+      <Route path="/promo/:promoId" component={PromoPage} />
       
       <Route path="/privacy" component={PrivacyPage} />
       <Route path="/privacy-kz" component={PrivacyPageKz} />
@@ -289,8 +336,10 @@ function App() {
         <AuthProvider>
           <CartProvider>
             <TooltipProvider>
-              <Toaster />
-              <Router />
+              <CustomDomainProvider>
+                <Toaster />
+                <Router />
+              </CustomDomainProvider>
             </TooltipProvider>
           </CartProvider>
         </AuthProvider>

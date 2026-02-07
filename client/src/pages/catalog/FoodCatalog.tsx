@@ -31,6 +31,7 @@ import type { Product } from "@shared/schema";
 
 interface FoodCatalogProps {
   slug: string;
+  basePath: string;
   tenant: any;
   products: any[];
   categories: any[];
@@ -66,6 +67,7 @@ interface LastOrderItem {
 
 export default function FoodCatalog({
   slug,
+  basePath,
   tenant,
   products,
   categories,
@@ -243,7 +245,7 @@ export default function FoodCatalog({
           <div className="flex items-center justify-between gap-4">
             <span className="truncate">{product.name}</span>
             <a
-              href={`/c/${slug}/cart`}
+              href={`${basePath}/cart`}
               className="shrink-0 text-primary font-medium hover:underline"
             >
               Корзина
@@ -304,7 +306,7 @@ export default function FoodCatalog({
         <div className="flex items-center justify-between gap-4">
           <span className="truncate">{activeProduct.name}</span>
           <a
-            href={`/c/${slug}/cart`}
+            href={`${basePath}/cart`}
             className="shrink-0 text-primary font-medium hover:underline"
           >
             Корзина
@@ -363,7 +365,7 @@ export default function FoodCatalog({
               {tenant?.name || slug}
             </span>
           </div>
-          <Link href={`/c/${slug}/cart`}>
+          <Link href={`${basePath}/cart`}>
             <Button size="icon" variant="ghost" className="relative" data-testid="button-cart">
               <ShoppingCart className="h-5 w-5" />
             </Button>
@@ -406,7 +408,7 @@ export default function FoodCatalog({
           )}
         </div>
         <div className="flex items-center gap-1 shrink-0">
-          <Link href={`/c/${slug}/cart`}>
+          <Link href={`${basePath}/cart`}>
             <Button size="icon" variant="ghost" className="relative" data-testid="button-cart">
               <ShoppingCart className="h-5 w-5" />
               {totalItems > 0 && (
@@ -582,7 +584,7 @@ export default function FoodCatalog({
             className="fixed bottom-4 left-0 right-0 z-[1000] px-4 max-w-2xl mx-auto"
             data-testid="badge-cart-summary"
           >
-            <Link href={`/c/${slug}/cart`}>
+            <Link href={`${basePath}/cart`}>
               <div className="bg-primary text-primary-foreground rounded-md px-4 py-3 flex items-center justify-between gap-4 cursor-pointer shadow-lg min-h-[48px]">
                 <div className="flex items-center gap-3">
                   <ShoppingCart className="h-5 w-5 shrink-0" />

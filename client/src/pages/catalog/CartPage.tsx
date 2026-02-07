@@ -1,4 +1,4 @@
-import { useRoute, Link, useLocation } from "wouter";
+import { Link, useLocation } from "wouter";
 import { motion } from "framer-motion";
 import { ArrowLeft, Minus, Plus, Trash2, ShoppingCart, Package, MessageCircle } from "lucide-react";
 import { useEffect, useRef } from "react";
@@ -8,11 +8,11 @@ import { Separator } from "@/components/ui/separator";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useCart } from "@/contexts/CartContext";
 import { trackEvent, updateCartSession } from "@/lib/analytics";
+import { useCatalogSlug } from "@/hooks/useCatalogSlug";
 
 export default function CartPage() {
-  const [, params] = useRoute("/c/:slug/cart");
+  const { slug, basePath } = useCatalogSlug("/c/:slug/cart");
   const [, setLocation] = useLocation();
-  const slug = params?.slug || "";
   const { items, updateQuantity, removeItem, subtotal, totalItems, clearCart } = useCart();
   
   const trackedRef = useRef(false);
@@ -49,7 +49,7 @@ export default function CartPage() {
         <div className="max-w-7xl mx-auto px-4 md:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-3">
-              <Link href={`/c/${slug}`}>
+              <Link href={basePath || "/"}>
                 <Button variant="ghost" size="icon" data-testid="button-back">
                   <ArrowLeft className="h-5 w-5" />
                 </Button>
@@ -180,7 +180,7 @@ export default function CartPage() {
                   <span>{formatPrice(subtotal)}</span>
                 </div>
                 <div className="pt-4 space-y-2">
-                  <Link href={`/c/${slug}/checkout`}>
+                  <Link href={`${basePath}/checkout`}>
                     <Button className="w-full h-12 text-base" data-testid="button-checkout">
                       Оформить заказ
                     </Button>
@@ -208,7 +208,7 @@ export default function CartPage() {
             <p className="text-muted-foreground mb-6">
               Добавьте товары из каталога
             </p>
-            <Link href={`/c/${slug}`}>
+            <Link href={basePath || "/"}>
               <Button data-testid="button-to-catalog">
                 Перейти к каталогу
               </Button>

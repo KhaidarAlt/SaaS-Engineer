@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useRoute, Link, useLocation } from "wouter";
+import { useCatalogSlug } from "@/hooks/useCatalogSlug";
 import { motion } from "framer-motion";
 import { ArrowLeft, MessageCircle, Loader2 } from "lucide-react";
 import { useEffect } from "react";
@@ -15,10 +16,12 @@ function normalizeImageUrl(url: string | null | undefined): string {
 }
 
 export default function PromoPage() {
-  const [, params] = useRoute("/c/:slug/promo/:promoId");
+  const [, routeParams] = useRoute("/c/:slug/promo/:promoId");
+  const [, rootRouteParams] = useRoute("/promo/:promoId");
+  const { slug, basePath } = useCatalogSlug("/c/:slug/promo/:promoId");
   const [, navigate] = useLocation();
-  const slug = params?.slug || "";
-  const promoId = params?.promoId || "";
+  const promoId = routeParams?.promoId || rootRouteParams?.promoId || "";
+
 
   const { data: tenant } = useQuery<Tenant>({
     queryKey: ["/api/catalog", slug, "tenant"],
@@ -68,7 +71,7 @@ export default function PromoPage() {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
         <p className="text-muted-foreground">Акция не найдена</p>
-        <Button variant="outline" onClick={() => navigate(`/c/${slug}`)}>
+        <Button variant="outline" onClick={() => navigate(basePath || "/")}>
           <ArrowLeft className="w-4 h-4 mr-2" />
           Назад в каталог
         </Button>
@@ -80,7 +83,7 @@ export default function PromoPage() {
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
         <div className="container max-w-2xl mx-auto px-4 py-3">
-          <Link href={`/c/${slug}`} data-testid="link-back-catalog">
+          <Link href={basePath || "/"} data-testid="link-back-catalog">
             <Button variant="ghost" size="sm" className="gap-2">
               <ArrowLeft className="w-4 h-4" />
               Назад в каталог

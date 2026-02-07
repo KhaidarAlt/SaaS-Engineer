@@ -30,6 +30,7 @@ import type { Product } from "@shared/schema";
 
 interface FashionCatalogProps {
   slug: string;
+  basePath: string;
   tenant: any;
   products: any[];
   categories: any[];
@@ -90,6 +91,7 @@ const TOTAL_TOP = HEADER_HEIGHT + CATEGORIES_HEIGHT;
 
 export default function FashionCatalog({
   slug,
+  basePath,
   tenant,
   products,
   categories,
@@ -162,7 +164,7 @@ export default function FashionCatalog({
             {selectedColor ? ` — ${selectedColor}` : ""}
           </span>
           <a
-            href={`/c/${slug}/cart`}
+            href={`${basePath}/cart`}
             className="shrink-0 text-primary font-medium hover:underline"
           >
             Оформить
@@ -193,7 +195,7 @@ export default function FashionCatalog({
           <div className="flex items-center justify-between gap-4">
             <span className="truncate">{product.name}</span>
             <a
-              href={`/c/${slug}/cart`}
+              href={`${basePath}/cart`}
               className="shrink-0 text-primary font-medium hover:underline"
             >
               Оформить
@@ -244,7 +246,7 @@ export default function FashionCatalog({
           </div>
           <div className="flex items-center gap-1">
             <ThemeToggle />
-            <Link href={`/c/${slug}/cart`}>
+            <Link href={`${basePath}/cart`}>
               <Button
                 size="icon"
                 variant="ghost"
@@ -305,7 +307,7 @@ export default function FashionCatalog({
         </div>
         <div className="flex items-center gap-1">
           <ThemeToggle />
-          <Link href={`/c/${slug}/cart`}>
+          <Link href={`${basePath}/cart`}>
             <Button
               size="icon"
               variant="ghost"
@@ -483,7 +485,7 @@ export default function FashionCatalog({
               </div>
 
               <div className="absolute bottom-0 left-0 right-16 p-4 z-10">
-                <Link href={`/c/${slug}/product/${product.id}`}>
+                <Link href={`${basePath}/product/${product.id}`}>
                   <h2
                     className="text-white text-xl font-bold mb-2 line-clamp-2 cursor-pointer"
                     data-testid={`text-product-name-${product.id}`}

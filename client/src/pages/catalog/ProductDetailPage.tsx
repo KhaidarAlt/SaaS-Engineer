@@ -1,5 +1,6 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useRoute, Link } from "wouter";
+import { useCatalogSlug } from "@/hooks/useCatalogSlug";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ShoppingCart,
@@ -69,9 +70,10 @@ interface CatalogData {
 }
 
 export default function ProductDetailPage() {
-  const [, params] = useRoute("/c/:slug/product/:id");
-  const slug = params?.slug || "";
-  const productId = params?.id || "";
+  const [, routeParams] = useRoute("/c/:slug/product/:id");
+  const [, rootRouteParams] = useRoute("/product/:id");
+  const { slug, basePath } = useCatalogSlug("/c/:slug/product/:id");
+  const productId = routeParams?.id || rootRouteParams?.id || "";
   const [quantity, setQuantity] = useState(1);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [addedToCart, setAddedToCart] = useState(false);
@@ -186,7 +188,7 @@ export default function ProductDetailPage() {
         className="flex-shrink-0 w-40 md:w-48"
       >
         <Card className="overflow-hidden h-full hover-elevate flex flex-col">
-          <Link href={`/c/${slug}/product/${product.id}`}>
+          <Link href={`${basePath}/product/${product.id}`}>
             <div className="aspect-square relative overflow-hidden bg-muted cursor-pointer">
               {product.mainImageUrl ? (
                 <img
@@ -211,7 +213,7 @@ export default function ProductDetailPage() {
             </div>
           </Link>
           <CardContent className="p-3 flex flex-col flex-1">
-            <Link href={`/c/${slug}/product/${product.id}`}>
+            <Link href={`${basePath}/product/${product.id}`}>
               <h3 className="font-medium line-clamp-2 text-sm cursor-pointer text-foreground hover:text-primary mb-2" data-testid={`heading-cross-sell-${product.id}`}>
                 {product.name}
               </h3>
@@ -297,7 +299,7 @@ export default function ProductDetailPage() {
         <header className="sticky top-0 z-50 backdrop-blur-md bg-background/95 border-b border-border">
           <div className="max-w-7xl mx-auto px-4 md:px-6 lg:px-8">
             <div className="flex items-center justify-between h-16">
-              <Link href={`/c/${slug}`}>
+              <Link href={basePath || "/"}>
                 <Button variant="ghost" size="sm" className="gap-2">
                   <ArrowLeft className="h-4 w-4" />
                   Назад в каталог
@@ -314,7 +316,7 @@ export default function ProductDetailPage() {
             <p className="text-muted-foreground mb-4">
               Товар был удалён или скрыт владельцем магазина
             </p>
-            <Link href={`/c/${slug}`}>
+            <Link href={basePath || "/"}>
               <Button data-testid="button-back-catalog">
                 Вернуться в каталог
               </Button>
@@ -350,14 +352,14 @@ export default function ProductDetailPage() {
       <header className="sticky top-0 z-50 backdrop-blur-md bg-background/95 border-b border-border">
         <div className="max-w-7xl mx-auto px-4 md:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-            <Link href={`/c/${slug}`}>
+            <Link href={basePath || "/"}>
               <h1 className="text-xl font-bold tracking-tight cursor-pointer">
                 {data.tenant.name}
               </h1>
             </Link>
             <div className="flex items-center gap-3">
               <ThemeToggle />
-              <Link href={`/c/${slug}/cart`}>
+              <Link href={`${basePath}/cart`}>
                 <Button variant="outline" className="relative" data-testid="button-cart">
                   <ShoppingCart className="h-5 w-5" />
                   {totalItems > 0 && (
@@ -378,7 +380,7 @@ export default function ProductDetailPage() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 md:px-6 lg:px-8 py-8">
-        <Link href={`/c/${slug}`}>
+        <Link href={basePath || "/"}>
           <Button variant="ghost" size="sm" className="gap-2 mb-6">
             <ArrowLeft className="h-4 w-4" />
             Вернуться в каталог
