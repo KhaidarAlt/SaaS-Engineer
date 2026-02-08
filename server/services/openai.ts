@@ -72,6 +72,7 @@ interface TenantContext {
   paymentOptions?: {
     kaspiEnabled: boolean;
     autoInvoice: boolean;
+    kaspiPayLink?: string;
   };
 }
 

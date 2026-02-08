@@ -4431,6 +4431,7 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
       paymentOptions: kaspiIntegration && kaspiIntegration.status === "connected" ? {
         kaspiEnabled: true,
         autoInvoice: kaspiIntegration.autoGenerateInvoice || false,
+        kaspiPayLink: kaspiIntegration.kaspiPayLink || undefined,
       } : undefined,
     };
     
