@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
@@ -10,15 +10,15 @@ import {
   XCircle,
   Clock,
   AlertCircle,
-  RefreshCw,
-  Link as LinkIcon,
   ExternalLink,
   Loader2,
-  Smartphone,
-  Users,
-  Key,
-  CheckCircle2,
-  Copy,
+  LinkIcon,
+  Eye,
+  ThumbsUp,
+  ThumbsDown,
+  ImageIcon,
+  ShieldCheck,
+  ShieldAlert,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,17 +47,22 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { KaspiIntegration, Payment } from "@shared/schema";
 
-const SMARTCATALOG_KASPI_PHONE = "+7 776 534 84 17";
-
 const paymentStatusConfig = {
   pending: { label: "Ожидает оплаты", icon: Clock, color: "text-yellow-600", bgColor: "bg-yellow-100" },
   paid: { label: "Оплачен", icon: CheckCircle, color: "text-green-600", bgColor: "bg-green-100" },
-  failed: { label: "Ошибка", icon: XCircle, color: "text-red-600", bgColor: "bg-red-100" },
+  failed: { label: "Отклонён", icon: XCircle, color: "text-red-600", bgColor: "bg-red-100" },
   expired: { label: "Просрочен", icon: AlertCircle, color: "text-muted-foreground", bgColor: "bg-muted" },
   cancelled: { label: "Отменён", icon: XCircle, color: "text-muted-foreground", bgColor: "bg-muted" },
 };
@@ -66,13 +71,9 @@ export default function PaymentsPage() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [currentStep, setCurrentStep] = useState(1);
-  
-  const [kaspiForm, setKaspiForm] = useState({
-    iinBin: "",
-    organizationName: "",
-    apiKey: "",
-  });
+  const [kaspiPayLink, setKaspiPayLink] = useState("");
+  const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
+  const [receiptDialogOpen, setReceiptDialogOpen] = useState(false);
 
   const { data: kaspiIntegration, isLoading: kaspiLoading } = useQuery<KaspiIntegration | null>({
     queryKey: ["/api/kaspi/integration"],
@@ -82,44 +83,48 @@ export default function PaymentsPage() {
     queryKey: ["/api/payments"],
   });
 
-  useEffect(() => {
-    if (kaspiIntegration) {
-      if (kaspiIntegration.verificationStatus === "verified") {
-        setCurrentStep(3);
-      } else if (kaspiIntegration.verificationStatus === "pending" || kaspiIntegration.iinBin) {
-        setCurrentStep(2);
-      } else {
-        setCurrentStep(1);
-      }
-    }
-  }, [kaspiIntegration]);
-
-  const requestVerificationMutation = useMutation({
-    mutationFn: async (data: { iinBin: string; organizationName: string }) => {
-      return apiRequest("POST", "/api/kaspi/request-verification", data);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/kaspi/integration"] });
-      toast({ title: "Запрос на верификацию отправлен" });
-      setCurrentStep(2);
-    },
-    onError: () => {
-      toast({ title: "Ошибка отправки запроса", variant: "destructive" });
-    },
-  });
-
-  const confirmVerificationMutation = useMutation({
-    mutationFn: async (data: { apiKey: string }) => {
-      const res = await apiRequest("POST", "/api/kaspi/confirm-verification", data);
+  const connectMutation = useMutation({
+    mutationFn: async (link: string) => {
+      const res = await apiRequest("POST", "/api/kaspi/connect", { kaspiPayLink: link });
       return res.json() as Promise<{ success: boolean; message?: string }>;
     },
     onSuccess: (data) => {
       if (data.success) {
         queryClient.invalidateQueries({ queryKey: ["/api/kaspi/integration"] });
-        toast({ title: "Kaspi Business подключен!" });
-        setCurrentStep(3);
+        toast({ title: "Kaspi Pay подключен" });
+        setKaspiPayLink("");
       } else {
-        toast({ title: data.message || "Ошибка верификации", variant: "destructive" });
+        toast({ title: data.message || "Ошибка подключения", variant: "destructive" });
+      }
+    },
+    onError: () => {
+      toast({ title: "Ошибка подключения", variant: "destructive" });
+    },
+  });
+
+  const disconnectMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", "/api/kaspi/disconnect", {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/kaspi/integration"] });
+      toast({ title: "Kaspi Pay отключен" });
+    },
+  });
+
+  const confirmPaymentMutation = useMutation({
+    mutationFn: async (paymentId: string) => {
+      const res = await apiRequest("POST", `/api/payments/${paymentId}/confirm`, {});
+      return res.json() as Promise<{ success: boolean; message?: string }>;
+    },
+    onSuccess: (data) => {
+      if (data.success) {
+        queryClient.invalidateQueries({ queryKey: ["/api/payments"] });
+        toast({ title: "Оплата подтверждена" });
+        setSelectedPayment(null);
+        setReceiptDialogOpen(false);
+      } else {
+        toast({ title: data.message || "Ошибка", variant: "destructive" });
       }
     },
     onError: () => {
@@ -127,29 +132,25 @@ export default function PaymentsPage() {
     },
   });
 
-  const testKaspiMutation = useMutation({
-    mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/kaspi/test", {});
-      return res.json() as Promise<{ success: boolean; message: string }>;
+  const rejectPaymentMutation = useMutation({
+    mutationFn: async (paymentId: string) => {
+      const res = await apiRequest("POST", `/api/payments/${paymentId}/reject`, {
+        reason: "Оплата отклонена менеджером",
+      });
+      return res.json() as Promise<{ success: boolean; message?: string }>;
     },
     onSuccess: (data) => {
       if (data.success) {
-        toast({ title: "Подключение успешно" });
+        queryClient.invalidateQueries({ queryKey: ["/api/payments"] });
+        toast({ title: "Оплата отклонена" });
+        setSelectedPayment(null);
+        setReceiptDialogOpen(false);
       } else {
-        toast({ title: data.message || "Ошибка подключения", variant: "destructive" });
+        toast({ title: data.message || "Ошибка", variant: "destructive" });
       }
-      queryClient.invalidateQueries({ queryKey: ["/api/kaspi/integration"] });
     },
-  });
-
-  const disconnectKaspiMutation = useMutation({
-    mutationFn: async () => {
-      return apiRequest("DELETE", "/api/kaspi/integration", {});
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/kaspi/integration"] });
-      toast({ title: "Kaspi отключен" });
-      setCurrentStep(1);
+    onError: () => {
+      toast({ title: "Ошибка отклонения", variant: "destructive" });
     },
   });
 
@@ -163,11 +164,6 @@ export default function PaymentsPage() {
     },
   });
 
-  const copyPhone = () => {
-    navigator.clipboard.writeText("77765348417");
-    toast({ title: "Номер скопирован" });
-  };
-
   const filteredPayments = payments?.filter((payment) => {
     if (statusFilter === "all") return true;
     return payment.status === statusFilter;
@@ -175,7 +171,7 @@ export default function PaymentsPage() {
 
   const formatPrice = (price: string | number) => {
     const num = typeof price === "string" ? parseFloat(price) : price;
-    return new Intl.NumberFormat("ru-KZ").format(num) + " ₸";
+    return new Intl.NumberFormat("ru-KZ").format(num) + " \u20B8";
   };
 
   const formatDate = (date: string | Date) => {
@@ -198,50 +194,25 @@ export default function PaymentsPage() {
     );
   };
 
-  const getConnectionStatus = () => {
-    if (!kaspiIntegration) {
-      return { label: "Не подключено", color: "text-red-600", bg: "bg-red-100", icon: XCircle };
-    }
-    if (kaspiIntegration.status === "connected" && kaspiIntegration.verificationStatus === "verified") {
-      return { label: "Подключено", color: "text-green-600", bg: "bg-green-100", icon: CheckCircle };
-    }
-    if (kaspiIntegration.status === "pending_verification" || kaspiIntegration.verificationStatus === "pending") {
-      return { label: "Ожидает верификации", color: "text-yellow-600", bg: "bg-yellow-100", icon: Clock };
-    }
-    if (kaspiIntegration.status === "error" || kaspiIntegration.verificationStatus === "failed") {
-      return { label: "Ошибка верификации", color: "text-red-600", bg: "bg-red-100", icon: AlertCircle };
-    }
-    return { label: "Не подключено", color: "text-muted-foreground", bg: "bg-muted", icon: XCircle };
+  const isConnected = kaspiIntegration?.status === "connected" && kaspiIntegration?.kaspiPayLink;
+
+  const aiVerification = (payment: Payment) => {
+    const data = payment.aiVerificationData as Record<string, unknown> | null;
+    if (!data) return null;
+    return {
+      verified: data.verified as boolean,
+      confidence: data.confidence as number,
+      extractedAmount: data.extractedAmount as number | undefined,
+      details: data.details as string,
+      warnings: (data.warnings as string[]) || [],
+    };
   };
-
-  const connectionStatus = getConnectionStatus();
-
-  const verificationSteps = [
-    { 
-      step: 1, 
-      title: "Добавьте сотрудника в Kaspi Business",
-      icon: Smartphone,
-      description: "Откройте приложение Kaspi Business на телефоне"
-    },
-    { 
-      step: 2, 
-      title: "Подтвердите в Kaspi Business",
-      icon: CheckCircle2,
-      description: "Подтвердите запрос на добавление сотрудника"
-    },
-    { 
-      step: 3, 
-      title: "Введите API ключ",
-      icon: Key,
-      description: "Получите API ключ и введите его для завершения"
-    },
-  ];
 
   return (
     <DashboardLayout>
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Платежи</h1>
+          <h1 className="text-2xl font-bold tracking-tight" data-testid="text-page-title">Платежи</h1>
           <p className="text-muted-foreground">Управляйте платежами и интеграцией с Kaspi</p>
         </div>
 
@@ -264,270 +235,100 @@ export default function PaymentsPage() {
           <TabsContent value="connection" className="space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center justify-between">
-                  <span>Kaspi Business</span>
-                  <Badge className={`${connectionStatus.bg} ${connectionStatus.color} border-0`}>
-                    <connectionStatus.icon className="h-3.5 w-3.5 mr-1" />
-                    {connectionStatus.label}
+                <CardTitle className="flex items-center justify-between gap-4 flex-wrap">
+                  <span>Kaspi Pay</span>
+                  <Badge className={isConnected
+                    ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-0"
+                    : "bg-muted text-muted-foreground border-0"
+                  }>
+                    {isConnected ? (
+                      <><CheckCircle className="h-3.5 w-3.5 mr-1" /> Подключено</>
+                    ) : (
+                      <><XCircle className="h-3.5 w-3.5 mr-1" /> Не подключено</>
+                    )}
                   </Badge>
                 </CardTitle>
                 <CardDescription>
-                  Подключите ваш аккаунт Kaspi Business для приёма платежей
+                  Вставьте вашу персональную ссылку Kaspi Pay для приёма платежей
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
-                {kaspiIntegration?.verificationStatus === "verified" ? (
+                {isConnected ? (
                   <div className="space-y-4">
-                    <div className="flex items-center gap-4 p-4 rounded-lg bg-green-50 dark:bg-green-900/20">
-                      <CheckCircle className="h-8 w-8 text-green-600" />
-                      <div>
-                        <p className="font-medium">Kaspi Business подключен</p>
-                        {kaspiIntegration.organizationName && (
-                          <p className="text-sm text-muted-foreground">
-                            Организация: {kaspiIntegration.organizationName}
-                          </p>
-                        )}
-                        {kaspiIntegration.iinBin && (
-                          <p className="text-sm text-muted-foreground">
-                            ИИН/БИН: {kaspiIntegration.iinBin}
-                          </p>
-                        )}
-                        {kaspiIntegration.verifiedAt && (
-                          <p className="text-xs text-muted-foreground">
-                            Верифицирован: {formatDate(kaspiIntegration.verifiedAt)}
+                    <div className="flex items-center gap-4 p-4 rounded-md bg-green-50 dark:bg-green-900/20">
+                      <CheckCircle className="h-8 w-8 text-green-600 shrink-0" />
+                      <div className="min-w-0">
+                        <p className="font-medium">Kaspi Pay подключен</p>
+                        <p className="text-sm text-muted-foreground truncate" data-testid="text-kaspi-link">
+                          {kaspiIntegration?.kaspiPayLink}
+                        </p>
+                        {kaspiIntegration?.verifiedAt && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Подключено: {formatDate(kaspiIntegration.verifiedAt)}
                           </p>
                         )}
                       </div>
                     </div>
-                    
-                    {kaspiIntegration.lastError && (
-                      <div className="flex items-center gap-4 p-4 rounded-lg bg-yellow-50 dark:bg-yellow-900/20">
-                        <AlertCircle className="h-6 w-6 text-yellow-600" />
-                        <div>
-                          <p className="font-medium text-yellow-700">Ошибка</p>
-                          <p className="text-sm text-muted-foreground">{kaspiIntegration.lastError}</p>
-                        </div>
-                      </div>
-                    )}
 
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        onClick={() => testKaspiMutation.mutate()}
-                        disabled={testKaspiMutation.isPending}
-                        data-testid="button-test-connection"
-                      >
-                        {testKaspiMutation.isPending ? (
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        ) : (
-                          <RefreshCw className="h-4 w-4 mr-2" />
-                        )}
-                        Проверить соединение
-                      </Button>
-                      <Button
-                        variant="destructive"
-                        onClick={() => disconnectKaspiMutation.mutate()}
-                        disabled={disconnectKaspiMutation.isPending}
-                        data-testid="button-disconnect"
-                      >
-                        Отключить
-                      </Button>
+                    <div className="p-4 rounded-md bg-muted/50 space-y-2">
+                      <p className="text-sm font-medium">Как это работает:</p>
+                      <ol className="list-decimal list-inside space-y-1 text-sm text-muted-foreground">
+                        <li>ИИ отправляет клиенту ссылку для оплаты с суммой заказа</li>
+                        <li>Клиент оплачивает по ссылке в приложении Kaspi</li>
+                        <li>ИИ просит клиента отправить скриншот чека</li>
+                        <li>ИИ проверяет чек и уведомляет менеджера</li>
+                        <li>Менеджер подтверждает оплату</li>
+                        <li>Статус меняется на "Оплачен" во всех системах</li>
+                      </ol>
                     </div>
+
+                    <Button
+                      variant="destructive"
+                      onClick={() => disconnectMutation.mutate()}
+                      disabled={disconnectMutation.isPending}
+                      data-testid="button-disconnect"
+                    >
+                      {disconnectMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                      Отключить
+                    </Button>
                   </div>
                 ) : (
-                  <div className="space-y-6">
-                    <div className="flex items-center gap-2 mb-4">
-                      {verificationSteps.map((s, idx) => (
-                        <div key={s.step} className="flex items-center">
-                          <div className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-medium ${
-                            currentStep > s.step 
-                              ? "bg-green-100 text-green-700 dark:bg-green-900/30" 
-                              : currentStep === s.step 
-                                ? "bg-primary text-primary-foreground" 
-                                : "bg-muted text-muted-foreground"
-                          }`}>
-                            {currentStep > s.step ? <CheckCircle className="h-4 w-4" /> : s.step}
-                          </div>
-                          {idx < verificationSteps.length - 1 && (
-                            <div className={`w-8 h-0.5 mx-1 ${currentStep > s.step ? "bg-green-500" : "bg-muted"}`} />
-                          )}
-                        </div>
-                      ))}
+                  <div className="space-y-4">
+                    <div className="p-4 rounded-md bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+                      <h4 className="font-medium flex items-center gap-2 mb-3">
+                        <LinkIcon className="h-5 w-5 text-blue-600" />
+                        Как получить ссылку Kaspi Pay
+                      </h4>
+                      <ol className="list-decimal list-inside space-y-2 text-sm text-muted-foreground">
+                        <li>Откройте приложение <strong>Kaspi Business</strong> на телефоне</li>
+                        <li>Найдите раздел <strong>Kaspi Pay</strong> или <strong>Оплата по ссылке</strong></li>
+                        <li>Скопируйте вашу индивидуальную ссылку для оплаты</li>
+                        <li>Вставьте ссылку в поле ниже</li>
+                      </ol>
                     </div>
 
-                    {currentStep === 1 && (
-                      <div className="space-y-4">
-                        <div className="p-4 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
-                          <h4 className="font-medium flex items-center gap-2 mb-3">
-                            <Smartphone className="h-5 w-5 text-blue-600" />
-                            Шаг 1: Добавьте сотрудника в Kaspi Business
-                          </h4>
-                          <ol className="list-decimal list-inside space-y-2 text-sm text-muted-foreground">
-                            <li>Откройте приложение <strong>Kaspi Business</strong> на телефоне</li>
-                            <li>Перейдите в <strong>Настройки → Сотрудники → Добавить сотрудника</strong></li>
-                            <li>Введите номер телефона SmartCatalog:</li>
-                          </ol>
-                          <div className="flex items-center gap-2 mt-3 p-3 bg-white dark:bg-background rounded border">
-                            <span className="font-mono text-lg font-medium">{SMARTCATALOG_KASPI_PHONE}</span>
-                            <Button 
-                              size="icon" 
-                              variant="ghost" 
-                              onClick={copyPhone}
-                              data-testid="button-copy-phone"
-                            >
-                              <Copy className="h-4 w-4" />
-                            </Button>
-                          </div>
-                          <p className="text-sm text-muted-foreground mt-2">
-                            Выберите права доступа: <strong>"Бухгалтер"</strong>
-                          </p>
-                        </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="kaspiPayLink">Ссылка Kaspi Pay</Label>
+                      <Input
+                        id="kaspiPayLink"
+                        placeholder="https://pay.kaspi.kz/pay/ваш_код"
+                        value={kaspiPayLink}
+                        onChange={(e) => setKaspiPayLink(e.target.value.trim())}
+                        data-testid="input-kaspi-pay-link"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Формат: https://pay.kaspi.kz/pay/XXXX
+                      </p>
+                    </div>
 
-                        <div className="grid gap-4 sm:grid-cols-2">
-                          <div className="space-y-2">
-                            <Label htmlFor="iinBin">ИИН или БИН организации *</Label>
-                            <Input
-                              id="iinBin"
-                              placeholder="123456789012"
-                              value={kaspiForm.iinBin}
-                              onChange={(e) => setKaspiForm({ ...kaspiForm, iinBin: e.target.value.replace(/\D/g, "").slice(0, 12) })}
-                              maxLength={12}
-                              required
-                              data-testid="input-iin-bin"
-                            />
-                            <p className="text-xs text-muted-foreground">12 цифр</p>
-                          </div>
-                          <div className="space-y-2">
-                            <Label htmlFor="organizationName">Название организации</Label>
-                            <Input
-                              id="organizationName"
-                              placeholder="ИП Иванов И.И."
-                              value={kaspiForm.organizationName}
-                              onChange={(e) => setKaspiForm({ ...kaspiForm, organizationName: e.target.value })}
-                              data-testid="input-org-name"
-                            />
-                          </div>
-                        </div>
-
-                        <Button
-                          onClick={() => {
-                            if (kaspiForm.iinBin.length === 12) {
-                              requestVerificationMutation.mutate({
-                                iinBin: kaspiForm.iinBin,
-                                organizationName: kaspiForm.organizationName,
-                              });
-                            }
-                          }}
-                          disabled={kaspiForm.iinBin.length !== 12 || requestVerificationMutation.isPending}
-                          data-testid="button-request-verification"
-                        >
-                          {requestVerificationMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                          Далее
-                        </Button>
-                      </div>
-                    )}
-
-                    {currentStep === 2 && (
-                      <div className="space-y-4">
-                        <div className="p-4 rounded-lg bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800">
-                          <h4 className="font-medium flex items-center gap-2 mb-3">
-                            <CheckCircle2 className="h-5 w-5 text-yellow-600" />
-                            Шаг 2: Подтвердите в Kaspi Business
-                          </h4>
-                          <p className="text-sm text-muted-foreground">
-                            В течение 2 минут в приложении Kaspi Business появится запрос на добавление сотрудника. 
-                            Подтвердите его, чтобы продолжить.
-                          </p>
-                        </div>
-
-                        <div className="flex gap-2">
-                          <Button
-                            variant="outline"
-                            onClick={() => setCurrentStep(1)}
-                          >
-                            Назад
-                          </Button>
-                          <Button
-                            onClick={() => setCurrentStep(3)}
-                            data-testid="button-next-step"
-                          >
-                            Я подтвердил, продолжить
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-
-                    {currentStep === 3 && (
-                      <div className="space-y-4">
-                        <div className="p-4 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
-                          <h4 className="font-medium flex items-center gap-2 mb-3">
-                            <Key className="h-5 w-5 text-green-600" />
-                            Шаг 3: Введите API ключ
-                          </h4>
-                          <p className="text-sm text-muted-foreground mb-3">
-                            Получите API ключ в личном кабинете ApiPay.kz или введите ключ, если он у вас уже есть.
-                          </p>
-                        </div>
-
-                        <div className="space-y-2">
-                          <Label htmlFor="apiKey">API ключ *</Label>
-                          <Input
-                            id="apiKey"
-                            type="password"
-                            placeholder="Ваш API ключ"
-                            value={kaspiForm.apiKey}
-                            onChange={(e) => setKaspiForm({ ...kaspiForm, apiKey: e.target.value })}
-                            required
-                            data-testid="input-api-key"
-                          />
-                        </div>
-
-                        <div className="flex gap-2">
-                          <Button
-                            variant="outline"
-                            onClick={() => setCurrentStep(2)}
-                          >
-                            Назад
-                          </Button>
-                          <Button
-                            onClick={() => {
-                              if (kaspiForm.apiKey) {
-                                confirmVerificationMutation.mutate({ apiKey: kaspiForm.apiKey });
-                              }
-                            }}
-                            disabled={!kaspiForm.apiKey || confirmVerificationMutation.isPending}
-                            data-testid="button-confirm-verification"
-                          >
-                            {confirmVerificationMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                            Подключить Kaspi Business
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-
-                    {kaspiIntegration?.verificationStatus === "pending" && (
-                      <div className="p-4 rounded-lg bg-yellow-50 dark:bg-yellow-900/20">
-                        <div className="flex items-center gap-2">
-                          <Clock className="h-5 w-5 text-yellow-600 animate-pulse" />
-                          <p className="font-medium">Ожидаем подтверждения в Kaspi Business</p>
-                        </div>
-                        <p className="text-sm text-muted-foreground mt-1">
-                          Подтвердите запрос в приложении Kaspi Business, затем нажмите "Далее"
-                        </p>
-                      </div>
-                    )}
-
-                    {kaspiIntegration?.verificationError && (
-                      <div className="p-4 rounded-lg bg-red-50 dark:bg-red-900/20">
-                        <div className="flex items-center gap-2">
-                          <AlertCircle className="h-5 w-5 text-red-600" />
-                          <p className="font-medium text-red-700">Ошибка верификации</p>
-                        </div>
-                        <p className="text-sm text-muted-foreground mt-1">
-                          {kaspiIntegration.verificationError}
-                        </p>
-                      </div>
-                    )}
+                    <Button
+                      onClick={() => connectMutation.mutate(kaspiPayLink)}
+                      disabled={!kaspiPayLink || connectMutation.isPending}
+                      data-testid="button-connect-kaspi"
+                    >
+                      {connectMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                      Подключить Kaspi Pay
+                    </Button>
                   </div>
                 )}
               </CardContent>
@@ -543,16 +344,16 @@ export default function PaymentsPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-4 flex-wrap">
                   <div className="space-y-0.5">
                     <Label>Автоматически формировать счёт</Label>
                     <p className="text-sm text-muted-foreground">
-                      Создавать счёт на оплату после оформления заказа
+                      Создавать запрос на оплату после оформления заказа
                     </p>
                   </div>
                   <Switch
                     checked={kaspiIntegration?.autoGenerateInvoice ?? true}
-                    onCheckedChange={(checked) => 
+                    onCheckedChange={(checked) =>
                       updateSettingsMutation.mutate({ autoGenerateInvoice: checked })
                     }
                     disabled={!kaspiIntegration}
@@ -560,7 +361,7 @@ export default function PaymentsPage() {
                   />
                 </div>
 
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-4 flex-wrap">
                   <div className="space-y-0.5">
                     <Label>Таймаут оплаты (минуты)</Label>
                     <p className="text-sm text-muted-foreground">
@@ -569,7 +370,7 @@ export default function PaymentsPage() {
                   </div>
                   <Select
                     value={String(kaspiIntegration?.paymentTimeout ?? 30)}
-                    onValueChange={(value) => 
+                    onValueChange={(value) =>
                       updateSettingsMutation.mutate({ paymentTimeout: parseInt(value) })
                     }
                     disabled={!kaspiIntegration}
@@ -586,7 +387,7 @@ export default function PaymentsPage() {
                   </Select>
                 </div>
 
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-4 flex-wrap">
                   <div className="space-y-0.5">
                     <Label>Напоминание клиенту</Label>
                     <p className="text-sm text-muted-foreground">
@@ -595,7 +396,7 @@ export default function PaymentsPage() {
                   </div>
                   <Switch
                     checked={kaspiIntegration?.sendReminder ?? true}
-                    onCheckedChange={(checked) => 
+                    onCheckedChange={(checked) =>
                       updateSettingsMutation.mutate({ sendReminder: checked })
                     }
                     disabled={!kaspiIntegration}
@@ -604,9 +405,9 @@ export default function PaymentsPage() {
                 </div>
 
                 <div className="border-t pt-6 space-y-4">
-                  <h4 className="font-medium">Действия после оплаты</h4>
-                  
-                  <div className="flex items-center justify-between">
+                  <h4 className="font-medium">Действия после подтверждения оплаты</h4>
+
+                  <div className="flex items-center justify-between gap-4 flex-wrap">
                     <div className="space-y-0.5">
                       <Label>Перевести заказ в "Оплачен"</Label>
                       <p className="text-sm text-muted-foreground">
@@ -615,7 +416,7 @@ export default function PaymentsPage() {
                     </div>
                     <Switch
                       checked={kaspiIntegration?.updateOrderStatus ?? true}
-                      onCheckedChange={(checked) => 
+                      onCheckedChange={(checked) =>
                         updateSettingsMutation.mutate({ updateOrderStatus: checked })
                       }
                       disabled={!kaspiIntegration}
@@ -623,7 +424,7 @@ export default function PaymentsPage() {
                     />
                   </div>
 
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-4 flex-wrap">
                     <div className="space-y-0.5">
                       <Label>Уведомить менеджера</Label>
                       <p className="text-sm text-muted-foreground">
@@ -632,7 +433,7 @@ export default function PaymentsPage() {
                     </div>
                     <Switch
                       checked={kaspiIntegration?.notifyManager ?? true}
-                      onCheckedChange={(checked) => 
+                      onCheckedChange={(checked) =>
                         updateSettingsMutation.mutate({ notifyManager: checked })
                       }
                       disabled={!kaspiIntegration}
@@ -640,7 +441,7 @@ export default function PaymentsPage() {
                     />
                   </div>
 
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-4 flex-wrap">
                     <div className="space-y-0.5">
                       <Label>Синхронизировать с CRM</Label>
                       <p className="text-sm text-muted-foreground">
@@ -649,7 +450,7 @@ export default function PaymentsPage() {
                     </div>
                     <Switch
                       checked={kaspiIntegration?.syncWithCrm ?? true}
-                      onCheckedChange={(checked) => 
+                      onCheckedChange={(checked) =>
                         updateSettingsMutation.mutate({ syncWithCrm: checked })
                       }
                       disabled={!kaspiIntegration}
@@ -664,7 +465,7 @@ export default function PaymentsPage() {
           <TabsContent value="history" className="space-y-4">
             <Card>
               <CardHeader>
-                <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center justify-between gap-4 flex-wrap">
                   <div>
                     <CardTitle>История платежей</CardTitle>
                     <CardDescription>
@@ -679,7 +480,7 @@ export default function PaymentsPage() {
                       <SelectItem value="all">Все статусы</SelectItem>
                       <SelectItem value="pending">Ожидает оплаты</SelectItem>
                       <SelectItem value="paid">Оплачен</SelectItem>
-                      <SelectItem value="failed">Ошибка</SelectItem>
+                      <SelectItem value="failed">Отклонён</SelectItem>
                       <SelectItem value="expired">Просрочен</SelectItem>
                     </SelectContent>
                   </Select>
@@ -694,9 +495,9 @@ export default function PaymentsPage() {
                         <TableHead>Клиент</TableHead>
                         <TableHead>Сумма</TableHead>
                         <TableHead>Статус</TableHead>
-                        <TableHead>Источник</TableHead>
+                        <TableHead>Чек</TableHead>
                         <TableHead>Дата</TableHead>
-                        <TableHead className="w-16"></TableHead>
+                        <TableHead className="w-28">Действия</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -709,56 +510,107 @@ export default function PaymentsPage() {
                           </TableRow>
                         ))
                       ) : filteredPayments && filteredPayments.length > 0 ? (
-                        filteredPayments.map((payment, index) => (
-                          <motion.tr
-                            key={payment.id}
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            transition={{ delay: index * 0.03 }}
-                          >
-                            <TableCell>
-                              <button
-                                onClick={() => navigate(`/dashboard/orders/${payment.orderId}`)}
-                                className="text-primary hover:underline font-medium"
-                                data-testid={`link-order-${payment.orderId}`}
-                              >
-                                Заказ
-                              </button>
-                            </TableCell>
-                            <TableCell>
-                              <div>
-                                <p className="font-medium">{payment.customerName}</p>
-                                <p className="text-sm text-muted-foreground">{payment.customerPhone}</p>
-                              </div>
-                            </TableCell>
-                            <TableCell className="font-medium">
-                              {formatPrice(payment.amount)}
-                            </TableCell>
-                            <TableCell>
-                              {getStatusBadge(payment.status)}
-                            </TableCell>
-                            <TableCell>
-                              <Badge variant="secondary">
-                                {payment.source === "auto" ? "Автоматически" : "Вручную"}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-muted-foreground">
-                              {formatDate(payment.createdAt)}
-                            </TableCell>
-                            <TableCell>
-                              {payment.paymentUrl && payment.status === "pending" && (
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => window.open(payment.paymentUrl!, "_blank")}
-                                  data-testid={`link-payment-${payment.id}`}
+                        filteredPayments.map((payment, index) => {
+                          const ai = aiVerification(payment);
+                          return (
+                            <motion.tr
+                              key={payment.id}
+                              initial={{ opacity: 0 }}
+                              animate={{ opacity: 1 }}
+                              transition={{ delay: index * 0.03 }}
+                            >
+                              <TableCell>
+                                <button
+                                  onClick={() => navigate(`/dashboard/orders/${payment.orderId}`)}
+                                  className="text-primary hover:underline font-medium"
+                                  data-testid={`link-order-${payment.orderId}`}
                                 >
-                                  <ExternalLink className="h-4 w-4" />
-                                </Button>
-                              )}
-                            </TableCell>
-                          </motion.tr>
-                        ))
+                                  Заказ
+                                </button>
+                              </TableCell>
+                              <TableCell>
+                                <div>
+                                  <p className="font-medium">{payment.customerName}</p>
+                                  <p className="text-sm text-muted-foreground">{payment.customerPhone}</p>
+                                </div>
+                              </TableCell>
+                              <TableCell className="font-medium">
+                                {formatPrice(payment.amount)}
+                              </TableCell>
+                              <TableCell>
+                                {getStatusBadge(payment.status)}
+                              </TableCell>
+                              <TableCell>
+                                {payment.receiptImageUrl ? (
+                                  <div className="flex items-center gap-1">
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={() => {
+                                        setSelectedPayment(payment);
+                                        setReceiptDialogOpen(true);
+                                      }}
+                                      data-testid={`button-view-receipt-${payment.id}`}
+                                    >
+                                      <Eye className="h-4 w-4" />
+                                    </Button>
+                                    {ai && (
+                                      ai.verified ? (
+                                        <ShieldCheck className="h-4 w-4 text-green-600" />
+                                      ) : (
+                                        <ShieldAlert className="h-4 w-4 text-yellow-600" />
+                                      )
+                                    )}
+                                  </div>
+                                ) : (
+                                  <span className="text-sm text-muted-foreground">---</span>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-muted-foreground">
+                                {formatDate(payment.createdAt)}
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex items-center gap-1">
+                                  {payment.status === "pending" && (
+                                    <>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => confirmPaymentMutation.mutate(payment.id)}
+                                        disabled={confirmPaymentMutation.isPending}
+                                        title="Подтвердить оплату"
+                                        data-testid={`button-confirm-${payment.id}`}
+                                      >
+                                        <ThumbsUp className="h-4 w-4 text-green-600" />
+                                      </Button>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => rejectPaymentMutation.mutate(payment.id)}
+                                        disabled={rejectPaymentMutation.isPending}
+                                        title="Отклонить оплату"
+                                        data-testid={`button-reject-${payment.id}`}
+                                      >
+                                        <ThumbsDown className="h-4 w-4 text-red-600" />
+                                      </Button>
+                                    </>
+                                  )}
+                                  {payment.paymentUrl && payment.status === "pending" && (
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={() => window.open(payment.paymentUrl!, "_blank")}
+                                      title="Открыть ссылку оплаты"
+                                      data-testid={`link-payment-${payment.id}`}
+                                    >
+                                      <ExternalLink className="h-4 w-4" />
+                                    </Button>
+                                  )}
+                                </div>
+                              </TableCell>
+                            </motion.tr>
+                          );
+                        })
                       ) : (
                         <TableRow>
                           <TableCell colSpan={7} className="h-48">
@@ -780,6 +632,115 @@ export default function PaymentsPage() {
           </TabsContent>
         </Tabs>
       </div>
+
+      <Dialog open={receiptDialogOpen} onOpenChange={setReceiptDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Чек оплаты</DialogTitle>
+            <DialogDescription>
+              Проверьте чек и подтвердите или отклоните оплату
+            </DialogDescription>
+          </DialogHeader>
+          {selectedPayment && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <div>
+                  <p className="text-sm text-muted-foreground">Сумма</p>
+                  <p className="text-lg font-bold">{formatPrice(selectedPayment.amount)}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Клиент</p>
+                  <p className="font-medium">{selectedPayment.customerName}</p>
+                </div>
+              </div>
+
+              {selectedPayment.receiptImageUrl && (
+                <div className="border rounded-md overflow-hidden">
+                  <img
+                    src={selectedPayment.receiptImageUrl}
+                    alt="Чек оплаты"
+                    className="w-full max-h-96 object-contain bg-muted"
+                    data-testid="img-receipt"
+                  />
+                </div>
+              )}
+
+              {(() => {
+                const ai = aiVerification(selectedPayment);
+                if (!ai) return null;
+                return (
+                  <div className={`p-3 rounded-md ${ai.verified ? "bg-green-50 dark:bg-green-900/20" : "bg-yellow-50 dark:bg-yellow-900/20"}`}>
+                    <div className="flex items-center gap-2 mb-1">
+                      {ai.verified ? (
+                        <ShieldCheck className="h-5 w-5 text-green-600" />
+                      ) : (
+                        <ShieldAlert className="h-5 w-5 text-yellow-600" />
+                      )}
+                      <span className="font-medium text-sm">
+                        {ai.verified ? "AI: Чек подтверждён" : "AI: Требует проверки"}
+                      </span>
+                      <Badge variant="secondary" className="ml-auto">
+                        {Math.round(ai.confidence * 100)}%
+                      </Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground">{ai.details}</p>
+                    {ai.extractedAmount !== undefined && (
+                      <p className="text-sm mt-1">
+                        Сумма на чеке: <span className="font-medium">{formatPrice(ai.extractedAmount)}</span>
+                      </p>
+                    )}
+                    {ai.warnings.length > 0 && (
+                      <div className="mt-2 space-y-1">
+                        {ai.warnings.map((w, i) => (
+                          <p key={i} className="text-xs text-yellow-700 dark:text-yellow-400">{w}</p>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {selectedPayment.status === "pending" && (
+                <div className="flex gap-2 pt-2">
+                  <Button
+                    className="flex-1"
+                    onClick={() => confirmPaymentMutation.mutate(selectedPayment.id)}
+                    disabled={confirmPaymentMutation.isPending}
+                    data-testid="button-dialog-confirm"
+                  >
+                    {confirmPaymentMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                    <ThumbsUp className="h-4 w-4 mr-2" />
+                    Подтвердить оплату
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    className="flex-1"
+                    onClick={() => rejectPaymentMutation.mutate(selectedPayment.id)}
+                    disabled={rejectPaymentMutation.isPending}
+                    data-testid="button-dialog-reject"
+                  >
+                    {rejectPaymentMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                    <ThumbsDown className="h-4 w-4 mr-2" />
+                    Отклонить
+                  </Button>
+                </div>
+              )}
+
+              {selectedPayment.status === "paid" && (
+                <div className="flex items-center gap-2 p-3 rounded-md bg-green-50 dark:bg-green-900/20">
+                  <CheckCircle className="h-5 w-5 text-green-600" />
+                  <span className="font-medium text-green-700 dark:text-green-400">Оплата подтверждена</span>
+                  {selectedPayment.confirmedAt && (
+                    <span className="text-sm text-muted-foreground ml-auto">
+                      {formatDate(selectedPayment.confirmedAt)}
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 }

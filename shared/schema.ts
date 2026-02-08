@@ -1192,17 +1192,18 @@ export type CrmSyncLog = typeof crmSyncLogs.$inferSelect;
 export const kaspiIntegrations = pgTable("kaspi_integrations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
-  status: text("status").notNull().default("disconnected"), // connected, disconnected, error, pending_verification
-  
-  // Kaspi Business verification (like ApiPay model)
-  iinBin: text("iin_bin"), // ИИН (12 digits) or БИН (12 digits)
-  organizationName: text("organization_name"), // Название организации
-  verificationStatus: text("verification_status").default("not_started"), // not_started, pending, verified, failed, expired
+  status: text("status").notNull().default("disconnected"), // connected, disconnected
+
+  // Kaspi Pay link (e.g. https://pay.kaspi.kz/pay/9iqtschb)
+  kaspiPayLink: text("kaspi_pay_link"),
+
+  // Legacy fields (kept for backward compat, no longer used for new flow)
+  iinBin: text("iin_bin"),
+  organizationName: text("organization_name"),
+  verificationStatus: text("verification_status").default("not_started"),
   verificationRequestedAt: timestamp("verification_requested_at"),
   verifiedAt: timestamp("verified_at"),
   verificationError: text("verification_error"),
-  
-  // Kaspi credentials (after verification)
   merchantId: text("merchant_id"),
   apiToken: text("api_token"),
   webhookSecret: text("webhook_secret"),
@@ -1260,6 +1261,13 @@ export const payments = pgTable("payments", {
   failedAt: timestamp("failed_at"),
   failureReason: text("failure_reason"),
   
+  // Receipt verification (for Kaspi Pay link flow)
+  receiptImageUrl: text("receipt_image_url"),
+  aiVerified: boolean("ai_verified").default(false),
+  aiVerificationData: jsonb("ai_verification_data"),
+  confirmedBy: varchar("confirmed_by"),
+  confirmedAt: timestamp("confirmed_at"),
+
   // Webhook data
   webhookData: jsonb("webhook_data"),
   webhookReceivedAt: timestamp("webhook_received_at"),

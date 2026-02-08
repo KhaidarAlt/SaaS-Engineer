@@ -1,346 +1,296 @@
 import { storage } from "../../storage";
 import type { KaspiIntegration, Order, Payment } from "@shared/schema";
-import crypto from "crypto";
+import OpenAI from "openai";
 
-export interface KaspiInvoiceResult {
+const openai = new OpenAI({
+  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+});
+
+export interface ReceiptVerificationResult {
+  verified: boolean;
+  confidence: number;
+  extractedAmount?: number;
+  extractedDate?: string;
+  extractedRecipient?: string;
+  details: string;
+  warnings: string[];
+}
+
+export interface KaspiConnectResult {
   success: boolean;
-  invoiceId?: string;
-  paymentUrl?: string;
-  qrToken?: string;
   error?: string;
 }
-
-export interface KaspiInvoiceStatus {
-  status: "pending" | "paid" | "cancelled" | "expired" | "refunded";
-  paidAt?: Date;
-  clientName?: string;
-  clientPhone?: string;
-}
-
-export interface VerificationResult {
-  success: boolean;
-  status: "pending" | "verified" | "failed" | "expired";
-  organizationName?: string;
-  error?: string;
-}
-
-const SMARTCATALOG_KASPI_PHONE = "77765348417";
-
-const KASPI_BUSINESS_API_BASE = "https://bpapi.bazarbay.site/api";
 
 class KaspiBusinessService {
-  
-  private async callApi(
-    apiKey: string,
-    endpoint: string,
-    method: "GET" | "POST" | "PUT" | "DELETE" = "GET",
-    body?: Record<string, unknown>,
-    queryParams?: Record<string, string>
-  ): Promise<unknown> {
-    let url = `${KASPI_BUSINESS_API_BASE}${endpoint}`;
-    
-    if (queryParams) {
-      const params = new URLSearchParams(queryParams);
-      url = `${url}?${params.toString()}`;
+
+  validateKaspiPayLink(link: string): { valid: boolean; error?: string } {
+    if (!link || link.trim().length === 0) {
+      return { valid: false, error: "Ссылка не может быть пустой" };
     }
 
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-      "X-API-Key": apiKey,
-    };
+    const trimmed = link.trim();
 
-    try {
-      const response = await fetch(url, {
-        method,
-        headers,
-        body: body ? JSON.stringify(body) : undefined,
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`Kaspi Business API error: ${response.status} - ${errorText}`);
-        throw new Error(`Kaspi API error: ${response.status}`);
-      }
-
-      return response.json();
-    } catch (error) {
-      console.error("Kaspi Business API call failed:", error);
-      throw error;
+    const pattern = /^https:\/\/pay\.kaspi\.kz\/pay\/[a-zA-Z0-9]+$/;
+    if (!pattern.test(trimmed)) {
+      return {
+        valid: false,
+        error: "Ссылка должна быть в формате https://pay.kaspi.kz/pay/XXXX",
+      };
     }
+
+    return { valid: true };
   }
 
-  async requestVerification(
-    integration: KaspiIntegration,
-    iinBin: string
-  ): Promise<VerificationResult> {
-    if (!iinBin || iinBin.length !== 12 || !/^\d{12}$/.test(iinBin)) {
-      return {
-        success: false,
-        status: "failed",
-        error: "ИИН/БИН должен содержать 12 цифр",
-      };
+  async connect(tenantId: string, kaspiPayLink: string): Promise<KaspiConnectResult> {
+    const validation = this.validateKaspiPayLink(kaspiPayLink);
+    if (!validation.valid) {
+      return { success: false, error: validation.error };
     }
 
-    try {
-      await storage.updateKaspiIntegration(integration.tenantId, {
-        iinBin,
-        verificationStatus: "pending",
-        verificationRequestedAt: new Date(),
-        status: "pending_verification",
-        verificationError: null,
-      });
+    const existing = await storage.getKaspiIntegration(tenantId);
 
-      return {
-        success: true,
-        status: "pending",
-      };
-    } catch (error) {
-      return {
-        success: false,
-        status: "failed",
-        error: error instanceof Error ? error.message : "Ошибка запроса верификации",
-      };
-    }
-  }
-
-  async checkVerificationStatus(integration: KaspiIntegration): Promise<VerificationResult> {
-    if (!integration.iinBin) {
-      return {
-        success: false,
-        status: "failed",
-        error: "ИИН/БИН не указан",
-      };
-    }
-
-    if (integration.verificationStatus === "verified") {
-      return {
-        success: true,
-        status: "verified",
-        organizationName: integration.organizationName || undefined,
-      };
-    }
-
-    return {
-      success: true,
-      status: integration.verificationStatus as "pending" | "verified" | "failed" | "expired",
-      organizationName: integration.organizationName || undefined,
-    };
-  }
-
-  async confirmVerification(
-    integration: KaspiIntegration,
-    apiKey: string
-  ): Promise<VerificationResult> {
-    try {
-      await this.callApi(apiKey, "/invoices", "GET", undefined, {
-        page: "1",
-        per_page: "1",
-      });
-
-      await storage.updateKaspiIntegration(integration.tenantId, {
-        apiToken: apiKey,
+    if (existing) {
+      await storage.updateKaspiIntegration(tenantId, {
+        kaspiPayLink: kaspiPayLink.trim(),
+        status: "connected",
         verificationStatus: "verified",
         verifiedAt: new Date(),
-        status: "connected",
         verificationError: null,
+        lastError: null,
+        lastErrorAt: null,
       });
-
-      return {
-        success: true,
-        status: "verified",
-      };
-    } catch (error) {
-      await storage.updateKaspiIntegration(integration.tenantId, {
-        verificationStatus: "failed",
-        verificationError: error instanceof Error ? error.message : "Ошибка проверки API ключа",
+    } else {
+      await storage.createKaspiIntegration({
+        tenantId,
+        kaspiPayLink: kaspiPayLink.trim(),
+        status: "connected",
+        verificationStatus: "verified",
+        verifiedAt: new Date(),
       });
-
-      return {
-        success: false,
-        status: "failed",
-        error: error instanceof Error ? error.message : "Не удалось подтвердить верификацию",
-      };
     }
+
+    return { success: true };
   }
 
-  async testConnection(integration: KaspiIntegration): Promise<boolean> {
-    if (!integration.apiToken) {
-      return false;
-    }
-
-    try {
-      await this.callApi(integration.apiToken, "/invoices", "GET", undefined, {
-        page: "1",
-        per_page: "1",
-      });
-      return true;
-    } catch {
-      return false;
-    }
+  async disconnect(tenantId: string): Promise<void> {
+    await storage.updateKaspiIntegration(tenantId, {
+      kaspiPayLink: null,
+      status: "disconnected",
+      verificationStatus: "not_started",
+      verifiedAt: null,
+      verificationError: null,
+      apiToken: null,
+      merchantId: null,
+      webhookSecret: null,
+    });
   }
 
-  async createInvoice(
-    integration: KaspiIntegration,
+  getPaymentLink(integration: KaspiIntegration): string | null {
+    return integration.kaspiPayLink || null;
+  }
+
+  buildPaymentMessage(
     order: Order,
-    phoneNumber: string
-  ): Promise<KaspiInvoiceResult> {
-    if (!integration.apiToken) {
-      return {
-        success: false,
-        error: "API ключ не настроен",
-      };
-    }
+    kaspiPayLink: string,
+    storeName: string
+  ): string {
+    return `Здравствуйте, ${order.customerName}!
 
-    if (integration.verificationStatus !== "verified") {
-      return {
-        success: false,
-        error: "Kaspi Business не верифицирован",
-      };
-    }
+Ваш заказ #${order.orderNumber} на сумму ${order.total} ₸ оформлен в ${storeName}.
 
+Для оплаты через Kaspi перейдите по ссылке:
+${kaspiPayLink}
+
+Введите сумму: ${order.total} ₸
+В комментарии укажите: Заказ #${order.orderNumber}
+
+После оплаты, пожалуйста, отправьте скриншот чека для подтверждения.
+
+Спасибо за заказ!`;
+  }
+
+  async verifyReceipt(
+    imageUrl: string,
+    expectedAmount: number,
+    orderNumber: string
+  ): Promise<ReceiptVerificationResult> {
     try {
-      const formattedPhone = this.formatPhoneNumber(phoneNumber);
-      
-      const invoiceData = {
-        amount: parseFloat(order.total),
-        phone_number: formattedPhone,
-        description: `Заказ #${order.orderNumber}`,
-        external_order_id: order.id,
-      };
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content: `Ты — система верификации платёжных чеков Kaspi. Проанализируй изображение чека и извлеки данные.
 
-      const result = await this.callApi(
-        integration.apiToken,
-        "/invoices",
-        "POST",
-        invoiceData
-      ) as {
-        id: number;
-        kaspi_invoice_id: string;
-        kaspi_qr_token: string;
-        payment_url: string;
-        amount: string;
-        status: string;
-      };
+Верни JSON в формате:
+{
+  "verified": true/false,
+  "confidence": 0.0-1.0,
+  "extractedAmount": число (сумма в тенге),
+  "extractedDate": "дата платежа",
+  "extractedRecipient": "получатель",
+  "details": "краткое описание",
+  "warnings": ["предупреждение1"]
+}
 
+Правила верификации:
+- Проверь что это реальный чек Kaspi (логотип, формат)
+- Извлеки сумму платежа
+- Ожидаемая сумма: ${expectedAmount} ₸
+- Номер заказа: ${orderNumber}
+- Допустимое отклонение суммы: ±1 ₸
+- Если сумма совпадает и чек выглядит подлинным — verified: true
+- Если есть сомнения — добавь предупреждения в warnings
+- confidence показывает уверенность в подлинности чека`,
+          },
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: `Проверь этот чек оплаты. Ожидаемая сумма: ${expectedAmount} ₸, заказ #${orderNumber}`,
+              },
+              {
+                type: "image_url",
+                image_url: { url: imageUrl },
+              },
+            ],
+          },
+        ],
+        response_format: { type: "json_object" },
+        max_tokens: 500,
+      });
+
+      const content = response.choices[0]?.message?.content;
+      if (!content) {
+        return {
+          verified: false,
+          confidence: 0,
+          details: "Не удалось проанализировать изображение",
+          warnings: ["AI не вернул ответ"],
+        };
+      }
+
+      const result = JSON.parse(content) as ReceiptVerificationResult;
       return {
-        success: true,
-        invoiceId: result.id.toString(),
-        paymentUrl: result.payment_url,
-        qrToken: result.kaspi_qr_token,
+        verified: result.verified ?? false,
+        confidence: result.confidence ?? 0,
+        extractedAmount: result.extractedAmount,
+        extractedDate: result.extractedDate,
+        extractedRecipient: result.extractedRecipient,
+        details: result.details || "Анализ завершён",
+        warnings: result.warnings || [],
       };
     } catch (error) {
+      console.error("[KaspiBusiness] Receipt verification error:", error);
       return {
-        success: false,
-        error: error instanceof Error ? error.message : "Ошибка создания счёта",
+        verified: false,
+        confidence: 0,
+        details: "Ошибка при анализе чека",
+        warnings: [error instanceof Error ? error.message : "Неизвестная ошибка"],
       };
     }
   }
 
-  async getInvoiceStatus(
-    integration: KaspiIntegration,
-    invoiceId: string
-  ): Promise<KaspiInvoiceStatus> {
-    if (!integration.apiToken) {
-      return { status: "pending" };
+  async confirmPayment(
+    payment: Payment,
+    confirmedBy: string,
+    kaspiIntegration: KaspiIntegration
+  ): Promise<{ success: boolean; error?: string }> {
+    if (payment.status === "paid") {
+      return { success: false, error: "Платёж уже подтверждён" };
     }
 
-    try {
-      const result = await this.callApi(
-        integration.apiToken,
-        `/invoices/${invoiceId}`,
-        "GET"
-      ) as {
-        status: string;
-        paid_at?: string;
-        client_name?: string;
-        client_phone?: string;
-      };
+    const tenantId = payment.tenantId;
 
-      return {
-        status: result.status as KaspiInvoiceStatus["status"],
-        paidAt: result.paid_at ? new Date(result.paid_at) : undefined,
-        clientName: result.client_name,
-        clientPhone: result.client_phone,
-      };
-    } catch {
-      return { status: "pending" };
-    }
-  }
+    await storage.updatePayment(payment.id, {
+      status: "paid",
+      paidAt: new Date(),
+      confirmedBy,
+      confirmedAt: new Date(),
+    });
 
-  async cancelInvoice(
-    integration: KaspiIntegration,
-    invoiceId: string
-  ): Promise<boolean> {
-    if (!integration.apiToken) {
-      return false;
+    const order = await storage.getOrder(payment.orderId, tenantId);
+    if (!order) {
+      return { success: true };
     }
 
-    try {
-      await this.callApi(
-        integration.apiToken,
-        `/invoices/${invoiceId}/cancel`,
-        "POST"
-      );
-      return true;
-    } catch {
-      return false;
-    }
-  }
+    const updateData: Record<string, unknown> = {
+      paymentStatus: "paid",
+      paidAt: new Date(),
+      paymentSource: "manual",
+    };
 
-  validateWebhook(
-    webhookSecret: string,
-    signature: string,
-    payload: string
-  ): boolean {
-    if (!webhookSecret || !signature) {
-      return false;
+    if (kaspiIntegration.updateOrderStatus) {
+      updateData.status = "paid";
     }
 
-    const expectedSignature = "sha256=" + crypto
-      .createHmac("sha256", webhookSecret)
-      .update(payload)
-      .digest("hex");
+    await storage.updateOrderWithPayment(order.id, tenantId, updateData);
 
-    try {
-      return crypto.timingSafeEqual(
-        Buffer.from(expectedSignature),
-        Buffer.from(signature)
-      );
-    } catch {
-      return false;
-    }
-  }
+    await storage.logOrderStatusChange({
+      orderId: order.id,
+      oldStatus: order.status,
+      newStatus: kaspiIntegration.updateOrderStatus ? "paid" : order.status,
+      oldPaymentStatus: order.paymentStatus || "pending",
+      newPaymentStatus: "paid",
+      changedBy: confirmedBy,
+      source: "manager_confirm",
+    });
 
-  private formatPhoneNumber(phone: string): string {
-    const digits = phone.replace(/\D/g, "");
-    
-    if (digits.startsWith("7") && digits.length === 11) {
-      return "8" + digits.slice(1);
-    }
-    if (digits.startsWith("8") && digits.length === 11) {
-      return digits;
-    }
-    if (digits.length === 10) {
-      return "8" + digits;
-    }
-    
-    return digits;
-  }
+    const tenant = await storage.getTenant(tenantId);
 
-  getSmartCatalogPhone(): string {
-    return SMARTCATALOG_KASPI_PHONE;
-  }
+    if (kaspiIntegration.notifyManager && tenant?.telegramBotToken && tenant?.telegramChatId) {
+      try {
+        const { sendTelegramMessage } = await import("../telegram");
+        await sendTelegramMessage({
+          botToken: tenant.telegramBotToken,
+          chatId: tenant.telegramChatId,
+          message: `Оплата подтверждена!\n\nЗаказ: #${order.orderNumber}\nСумма: ${order.total} ₸\nКлиент: ${order.customerName}\nПодтвердил: менеджер`,
+        });
+      } catch (err) {
+        console.error("Failed to send Telegram notification:", err);
+      }
+    }
 
-  getVerificationInstructions(): string[] {
-    return [
-      `Откройте приложение Kaspi Business на телефоне`,
-      `Перейдите в Настройки → Сотрудники → Добавить сотрудника`,
-      `Введите номер телефона: +7 ${SMARTCATALOG_KASPI_PHONE.slice(1, 4)} ${SMARTCATALOG_KASPI_PHONE.slice(4, 7)} ${SMARTCATALOG_KASPI_PHONE.slice(7)}`,
-      `Выберите права доступа: "Бухгалтер"`,
-      `Подтвердите добавление сотрудника`,
-      `Вернитесь в SmartCatalog и введите ваш ИИН или БИН`,
-      `Подтвердите запрос в приложении Kaspi Business (появится в течение 2 минут)`,
-    ];
+    if (order.customerPhone) {
+      try {
+        const { wahaService } = await import("../waha");
+        const wahaInstances = await storage.getWahaInstances(tenantId);
+        const activeInstance = wahaInstances.find(i => i.status === "active");
+
+        if (activeInstance) {
+          const customerChatId = order.customerPhone.replace(/\D/g, "") + "@c.us";
+          const storeName = tenant?.name || "SmartCatalog";
+          const confirmationMessage = `Оплата получена!\n\nВаш заказ #${order.orderNumber} на сумму ${order.total} ₸ в ${storeName} успешно оплачен.\n\nСпасибо за покупку! Мы свяжемся с вами для уточнения деталей доставки.`;
+
+          await wahaService.sendTextMessage(
+            activeInstance.instanceName,
+            customerChatId,
+            confirmationMessage
+          );
+        }
+      } catch (whatsappErr) {
+        console.error("Failed to send WhatsApp confirmation:", whatsappErr);
+      }
+    }
+
+    if (kaspiIntegration.syncWithCrm && order) {
+      try {
+        const { syncOrderStatusToCrm } = await import("../crm");
+        syncOrderStatusToCrm(order, "paid").catch(err =>
+          console.error("Failed to sync with CRM:", err)
+        );
+      } catch (err) {
+        console.error("CRM sync error:", err);
+      }
+    }
+
+    await storage.updatePayment(payment.id, {
+      crmSynced: kaspiIntegration.syncWithCrm || false,
+    });
+
+    return { success: true };
   }
 }
 
