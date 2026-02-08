@@ -3500,7 +3500,7 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
           }));
           
           // Get all context data in parallel
-          const [tenant, products, aiSettings, salesScripts, tagRules, faqItems, knowledge, policies, promotions, discounts] = await Promise.all([
+          const [tenant, products, aiSettings, salesScripts, tagRules, faqItems, knowledge, policies, promotions, discounts, kaspiIntegration] = await Promise.all([
             storage.getTenant(tenantId),
             storage.getProducts(tenantId),
             storage.getAiSettings(tenantId),
@@ -3511,6 +3511,7 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
             storage.getAiPolicies(tenantId),
             storage.getPromotions(tenantId),
             storage.getDiscounts(tenantId),
+            storage.getKaspiIntegration(tenantId),
           ]);
           
           // Get active sales script
@@ -3580,6 +3581,11 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
             contactPhone: tenant?.contactPhone || undefined,
             aiLanguages: (tenant as any).aiLanguages || ["ru"],
             aiSystemPrompt: (tenant as any).aiSystemPrompt || undefined,
+            paymentOptions: kaspiIntegration && kaspiIntegration.status === "connected" ? {
+              kaspiEnabled: true,
+              autoInvoice: kaspiIntegration.autoGenerateInvoice || false,
+              kaspiPayLink: kaspiIntegration.kaspiPayLink || undefined,
+            } : undefined,
           };
           
           try {
