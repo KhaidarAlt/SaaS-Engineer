@@ -46,6 +46,6 @@ integrations = ["javascript_database:1.0.0", "javascript_openai_ai_integrations:
 [userenv.shared]
 WAHA_BASE_URL = "https://waha.botfactory.kz"
 APP_URL = "https://botfactory.kz"
-PLATFORM_DOMAIN = "577efa68-2b86-4bc5-87ad-96e21e86b9c1-00-19w11wa31m48d.worf.replit.dev"
+PLATFORM_DOMAIN = "botfactory.kz"
 
 [userenv.production]

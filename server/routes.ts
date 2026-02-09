@@ -1062,23 +1062,37 @@ export async function registerRoutes(
         details.push({ method: "HTTP", result: err.message || "Connection failed" });
       }
 
-      // Method 2: DNS CNAME check
+      // Method 2: DNS check (CNAME or A-record resolution)
       try {
         const dns = await import("dns");
         const { promisify } = await import("util");
         const resolveCname = promisify(dns.resolveCname);
-        const cnameRecords = await resolveCname(domain);
-        const cnameMatch = cnameRecords.some((r: string) => 
-          r.toLowerCase().includes(platformDomain.toLowerCase())
-        );
-        if (cnameMatch) {
-          dnsResolved = true;
-          details.push({ method: "CNAME", result: `Points to ${cnameRecords[0]}` });
-        } else {
-          details.push({ method: "CNAME", result: `Points to ${cnameRecords.join(", ")} (expected ${platformDomain})` });
+        try {
+          const cnameRecords = await resolveCname(domain);
+          const cnameMatch = cnameRecords.some((r: string) => 
+            r.toLowerCase().includes(platformDomain.toLowerCase())
+          );
+          if (cnameMatch) {
+            dnsResolved = true;
+            details.push({ method: "CNAME", result: `OK - ${cnameRecords[0]}` });
+          } else {
+            details.push({ method: "CNAME", result: `${cnameRecords.join(", ")} (ожидается ${platformDomain})` });
+          }
+        } catch {
+          // CNAME not found — check if domain resolves at all (Cloudflare proxy hides CNAME)
+          const resolve4 = promisify(dns.resolve4);
+          try {
+            const ips = await resolve4(domain);
+            if (ips && ips.length > 0) {
+              dnsResolved = true;
+              details.push({ method: "DNS", result: `OK - домен резолвится (${ips[0]}), вероятно через Cloudflare proxy` });
+            }
+          } catch {
+            details.push({ method: "DNS", result: "Домен не резолвится. Проверьте NS-записи и настройки Cloudflare." });
+          }
         }
       } catch {
-        details.push({ method: "CNAME", result: "No CNAME record found (may use Cloudflare proxy)" });
+        details.push({ method: "DNS", result: "Ошибка DNS-проверки" });
       }
 
       let status: string;
@@ -1090,7 +1104,7 @@ export async function registerRoutes(
         await storage.updateTenant(tenant.id, { domainVerified: true });
       } else if (dnsResolved) {
         status = "partial";
-        message = `CNAME запись настроена правильно, но HTTP-проверка не прошла. Возможно, нужно подождать распространения DNS или включить проксирование в Cloudflare.`;
+        message = `DNS настроен (домен резолвится), но HTTP-проверка не прошла. Убедитесь, что CNAME указывает на ${platformDomain}, Cloudflare Proxy включен (оранжевое облако), и SSL режим — Full. Ожидайте до 10 минут.`;
         await storage.updateTenant(tenant.id, { domainVerified: false });
       } else {
         status = "not_configured";
