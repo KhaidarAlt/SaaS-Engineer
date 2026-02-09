@@ -637,7 +637,7 @@ export async function registerRoutes(
     try {
       const tenant = await storage.getTenantByCustomDomain(hostWithoutWww)
         || await storage.getTenantByCustomDomain(host);
-      if (tenant && tenant.domainVerified) {
+      if (tenant) {
         return res.json({ customDomain: true, slug: tenant.slug, tenantName: tenant.name });
       }
     } catch (err) {
@@ -675,7 +675,7 @@ export async function registerRoutes(
       const hostWithoutWww = host.replace(/^www\./, "");
       const tenant = await storage.getTenantByCustomDomain(hostWithoutWww) 
         || await storage.getTenantByCustomDomain(host);
-      if (tenant && tenant.domainVerified) {
+      if (tenant) {
         const originalQuery = req.originalUrl.includes("?") ? req.originalUrl.substring(req.originalUrl.indexOf("?")) : "";
         const subPath = req.path === "/" ? "" : req.path;
         const catalogUrl = `/c/${tenant.slug}${subPath}${originalQuery}`;
