@@ -447,12 +447,11 @@ export default function SettingsPage() {
   }, [tenant, form]);
 
   const getCatalogBaseUrl = (slug: string, updatedAt?: string | Date) => {
-    const version = updatedAt ? new Date(updatedAt).getTime() : Date.now();
     const t = tenant as any;
-    if (t?.customDomain && t?.domainVerified) {
-      return `https://${t.customDomain}?v=${version}`;
+    if (t?.customDomain) {
+      return `https://${t.customDomain}`;
     }
-    return `${window.location.origin}/c/${slug}?v=${version}`;
+    return `${window.location.origin}/c/${slug}`;
   };
 
   const generateQRCode = async (slug: string, updatedAt?: string | Date) => {

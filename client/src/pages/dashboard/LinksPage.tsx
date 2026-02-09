@@ -95,7 +95,7 @@ export default function LinksPage() {
   const addCatalogLink = () => {
     if (!tenant?.slug) return;
     const t = tenant as any;
-    const catalogUrl = t.customDomain && t.domainVerified
+    const catalogUrl = t.customDomain
       ? `https://${t.customDomain}`
       : `${window.location.origin}/c/${tenant.slug}`;
     createMutation.mutate({ title: `Каталог ${tenant.name}`, url: catalogUrl });

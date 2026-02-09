@@ -2396,6 +2396,7 @@ export async function registerRoutes(
       const productContext = {
         storeName: tenant.name,
         slug: tenant.slug,
+        customDomain: (tenant as any)?.customDomain || undefined,
         storeDescription: tenant.description || undefined,
         contactPhone: tenant.contactPhone || undefined,
         products: [{
@@ -3542,6 +3543,7 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
           const context = {
             storeName: tenant?.name || "Магазин",
             slug: tenant?.slug || "catalog",
+            customDomain: (tenant as any)?.customDomain || undefined,
             storeDescription: tenant?.description || undefined,
             tone: aiSettings?.tone || "friendly",
             products: products.slice(0, 20).map(p => ({
@@ -4399,6 +4401,7 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
     const context = {
       storeName: tenant.name,
       slug: tenant.slug,
+      customDomain: (tenant as any)?.customDomain || undefined,
       storeDescription: tenant.description || undefined,
       contactPhone: tenant.contactPhone || undefined,
       products: products.slice(0, 50).map(p => ({
@@ -6271,7 +6274,9 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
       // Use https for production (Replit proxy uses x-forwarded-proto)
       const protocol = req.get("x-forwarded-proto") || req.protocol;
       const baseUrl = `${protocol}://${req.get("host")}`;
-      const canonicalUrl = `${baseUrl}/c/${encodeURIComponent(slug)}`;
+      const canonicalUrl = (tenant as any).customDomain 
+        ? `https://${(tenant as any).customDomain}`
+        : `${baseUrl}/c/${encodeURIComponent(slug)}`;
       
       // Ensure og:image is a full URL
       const ogImage = ogImageRaw ? (ogImageRaw.startsWith("http") ? ogImageRaw : `${baseUrl}${ogImageRaw}`) : "";

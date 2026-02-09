@@ -46,6 +46,7 @@ interface DiscountInfo {
 interface TenantContext {
   storeName: string;
   slug: string;
+  customDomain?: string;
   storeDescription?: string;
   contactPhone?: string;
   products?: Array<{ name: string; price: number; description?: string; category?: string }>;
@@ -96,7 +97,9 @@ export async function generateAiResponse(
 ): Promise<AiResponseResult> {
   const baseDomain = process.env.BASE_URL || 
     (process.env.NODE_ENV === 'production' ? 'https://botfactory.kz' : `https://${process.env.REPLIT_DEV_DOMAIN || 'localhost:5000'}`);
-  const catalogUrl = `${baseDomain}/c/${context.slug}`;
+  const catalogUrl = context.customDomain 
+    ? `https://${context.customDomain}`
+    : `${baseDomain}/c/${context.slug}`;
   
   // Check for handoff request first
   if (isHandoffRequest(userMessage)) {
