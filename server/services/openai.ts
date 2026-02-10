@@ -95,11 +95,10 @@ export async function generateAiResponse(
   conversationHistory: ChatMessage[],
   context: TenantContext
 ): Promise<AiResponseResult> {
-  const baseDomain = process.env.BASE_URL || 
-    (process.env.NODE_ENV === 'production' ? 'https://botfactory.kz' : `https://${process.env.REPLIT_DEV_DOMAIN || 'localhost:5000'}`);
+  const platformDomain = process.env.PLATFORM_DOMAIN || "botfactory.kz";
   const catalogUrl = context.customDomain 
     ? `https://${context.customDomain}`
-    : `${baseDomain}/c/${context.slug}`;
+    : `https://${context.slug}.${platformDomain}`;
   
   // Check for handoff request first
   if (isHandoffRequest(userMessage)) {

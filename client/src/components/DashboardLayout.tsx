@@ -192,7 +192,7 @@ export function DashboardLayout({ children, isSuperAdmin = false }: DashboardLay
   const catalogUrl = t ? (
     t.customDomain
       ? `https://${t.customDomain}`
-      : `/c/${t.slug}`
+      : `https://${t.slug}.botfactory.kz`
   ) : null;
 
   const handleLogout = async () => {

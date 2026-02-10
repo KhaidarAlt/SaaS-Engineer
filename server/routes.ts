@@ -620,10 +620,34 @@ export async function registerRoutes(
     res.json({ platformDomain });
   });
 
+  function extractSubdomain(host: string): string | null {
+    const platformDomain = (process.env.PLATFORM_DOMAIN || "").toLowerCase();
+    if (!platformDomain) return null;
+    const cleanHost = host.replace(/^www\./, "");
+    if (cleanHost === platformDomain) return null;
+    if (cleanHost.endsWith(`.${platformDomain}`)) {
+      const sub = cleanHost.slice(0, -(platformDomain.length + 1));
+      if (sub && !sub.includes(".")) return sub;
+    }
+    return null;
+  }
+
   app.get("/api/domain-detect", async (req: Request, res: Response) => {
     const host = (req.hostname || req.get("host") || "").toLowerCase().replace(/:\d+$/, "");
     const hostWithoutWww = host.replace(/^www\./, "");
     
+    const subdomain = extractSubdomain(host);
+    if (subdomain) {
+      try {
+        const tenant = await storage.getTenantBySlug(subdomain);
+        if (tenant) {
+          return res.json({ customDomain: true, slug: tenant.slug, tenantName: tenant.name, isSubdomain: true });
+        }
+      } catch (err) {
+        console.error("[DomainDetect] Subdomain error:", err);
+      }
+    }
+
     if (
       !host ||
       host === "localhost" ||
@@ -646,17 +670,13 @@ export async function registerRoutes(
     return res.json({ customDomain: false });
   });
 
-  // Custom domain middleware: redirect custom domains to tenant catalog
+  // Subdomain + custom domain middleware: route to tenant catalog
   app.use(async (req: Request, res: Response, next: NextFunction) => {
     const host = (req.hostname || req.get("host") || "").toLowerCase().replace(/:\d+$/, "");
     
-    // Skip for known app domains, API routes, static assets, and existing catalog routes
     if (
       !host ||
       host === "localhost" ||
-      host.includes("replit") ||
-      host.includes("botfactory.kz") ||
-      host.includes("worf.replit.dev") ||
       req.path.startsWith("/api") ||
       req.path.startsWith("/c/") ||
       req.path.startsWith("/.well-known") ||
@@ -671,7 +691,27 @@ export async function registerRoutes(
     }
 
     try {
-      // Try both with and without www prefix
+      const subdomain = extractSubdomain(host);
+      if (subdomain) {
+        const tenant = await storage.getTenantBySlug(subdomain);
+        if (tenant) {
+          const originalQuery = req.originalUrl.includes("?") ? req.originalUrl.substring(req.originalUrl.indexOf("?")) : "";
+          const subPath = req.path === "/" ? "" : req.path;
+          const catalogUrl = `/c/${tenant.slug}${subPath}${originalQuery}`;
+          req.url = catalogUrl;
+          console.log(`[Subdomain] ${host} → ${catalogUrl}`);
+          return next();
+        }
+      }
+
+      if (
+        host.includes("replit") ||
+        host.includes("botfactory.kz") ||
+        host.includes("worf.replit.dev")
+      ) {
+        return next();
+      }
+
       const hostWithoutWww = host.replace(/^www\./, "");
       const tenant = await storage.getTenantByCustomDomain(hostWithoutWww) 
         || await storage.getTenantByCustomDomain(host);
@@ -683,7 +723,7 @@ export async function registerRoutes(
         console.log(`[CustomDomain] ${host} → ${catalogUrl}`);
       }
     } catch (err) {
-      console.error("[CustomDomain] Error:", err);
+      console.error("[DomainMiddleware] Error:", err);
     }
     next();
   });
@@ -6274,9 +6314,10 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
       // Use https for production (Replit proxy uses x-forwarded-proto)
       const protocol = req.get("x-forwarded-proto") || req.protocol;
       const baseUrl = `${protocol}://${req.get("host")}`;
+      const platformDomain = process.env.PLATFORM_DOMAIN || "botfactory.kz";
       const canonicalUrl = (tenant as any).customDomain 
         ? `https://${(tenant as any).customDomain}`
-        : `${baseUrl}/c/${encodeURIComponent(slug)}`;
+        : `https://${encodeURIComponent(slug)}.${platformDomain}`;
       
       // Ensure og:image is a full URL
       const ogImage = ogImageRaw ? (ogImageRaw.startsWith("http") ? ogImageRaw : `${baseUrl}${ogImageRaw}`) : "";

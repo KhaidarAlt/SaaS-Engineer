@@ -97,7 +97,7 @@ export default function LinksPage() {
     const t = tenant as any;
     const catalogUrl = t.customDomain
       ? `https://${t.customDomain}`
-      : `${window.location.origin}/c/${tenant.slug}`;
+      : `https://${tenant.slug}.botfactory.kz`;
     createMutation.mutate({ title: `Каталог ${tenant.name}`, url: catalogUrl });
   };
 

@@ -67,6 +67,32 @@ function DnsCopyRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+function SubdomainCopyButton({ slug }: { slug: string }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = () => {
+    if (!slug) return;
+    navigator.clipboard.writeText(`https://${slug}.botfactory.kz`);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+  return (
+    <Button
+      type="button"
+      size="icon"
+      variant="outline"
+      onClick={handleCopy}
+      disabled={!slug}
+      data-testid="button-copy-subdomain"
+    >
+      {copied ? (
+        <Check className="h-4 w-4 text-green-600" />
+      ) : (
+        <Copy className="h-4 w-4" />
+      )}
+    </Button>
+  );
+}
+
 function DomainVerificationStatus({ domain, savedDomain, tenantDomainVerified }: { domain: string; savedDomain?: string; tenantDomainVerified?: boolean }) {
   const [verifyResult, setVerifyResult] = useState<{
     status: string;
@@ -451,7 +477,7 @@ export default function SettingsPage() {
     if (t?.customDomain) {
       return `https://${t.customDomain}`;
     }
-    return `${window.location.origin}/c/${slug}`;
+    return `https://${slug}.botfactory.kz`;
   };
 
   const generateQRCode = async (slug: string, updatedAt?: string | Date) => {
@@ -994,33 +1020,68 @@ export default function SettingsPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.12 }}
           >
-            <Card data-testid="card-custom-domain">
+            <Card data-testid="card-subdomain">
               <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2">
                   <Globe className="h-5 w-5" />
-                  Свой домен
+                  Адрес каталога
+                </CardTitle>
+                <CardDescription>
+                  Ваш каталог доступен по субдомену на платформе
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Субдомен каталога</Label>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 flex items-center gap-0 border rounded-md overflow-hidden">
+                      <span className="px-3 py-2 bg-muted text-sm text-muted-foreground border-r whitespace-nowrap">https://</span>
+                      <span className="px-3 py-2 text-sm font-medium" data-testid="text-subdomain-slug">{form.watch("slug") || "myshop"}</span>
+                      <span className="px-3 py-2 bg-muted text-sm text-muted-foreground border-l whitespace-nowrap">.botfactory.kz</span>
+                    </div>
+                    <SubdomainCopyButton slug={form.watch("slug") || ""} />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Субдомен формируется автоматически из ссылки каталога. Измените ссылку каталога выше, чтобы изменить субдомен.
+                  </p>
+                </div>
+
+                {form.watch("slug") && (
+                  <div className="flex items-center gap-2 p-3 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-lg">
+                    <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400 shrink-0" />
+                    <p className="text-sm text-green-800 dark:text-green-200">
+                      Каталог доступен по адресу <a href={`https://${form.watch("slug")}.botfactory.kz`} target="_blank" rel="noopener noreferrer" className="font-medium underline" data-testid="link-subdomain">{form.watch("slug")}.botfactory.kz</a>
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.13 }}
+          >
+            <Card data-testid="card-custom-domain">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Globe className="h-5 w-5 text-muted-foreground" />
+                  Собственный домен
+                  <Badge variant="outline" className="ml-auto text-xs">Скоро</Badge>
                 </CardTitle>
                 <CardDescription>
                   Подключите свой домен для каталога (например, myshop.kz)
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="customDomain">Доменное имя</Label>
-                  <Input
-                    id="customDomain"
-                    placeholder="myshop.kz"
-                    {...form.register("customDomain")}
-                    data-testid="input-custom-domain"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Укажите ваш домен без http:// и без слеша в конце (например, myshop.kz)
+              <CardContent>
+                <div className="p-6 text-center border rounded-lg bg-muted/50">
+                  <Globe className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
+                  <p className="font-medium mb-1">Функция в разработке</p>
+                  <p className="text-sm text-muted-foreground">
+                    Возможность подключить собственный домен (например, myshop.kz) будет доступна в ближайшее время. Сейчас ваш каталог доступен по субдомену выше.
                   </p>
                 </div>
-
-                <DomainVerificationStatus domain={form.watch("customDomain") || ""} savedDomain={(tenant as any)?.customDomain || ""} tenantDomainVerified={(tenant as any)?.domainVerified} />
-                
-                <DomainSetupInstructions domain={form.watch("customDomain") || "myshop.kz"} />
               </CardContent>
             </Card>
           </motion.div>
