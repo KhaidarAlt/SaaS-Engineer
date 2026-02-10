@@ -7,8 +7,7 @@ import { motion } from "framer-motion";
 import { 
   Save, Store, MessageCircle, Bell, ExternalLink, Upload, Image, 
   Share2, QrCode, Download, Clock, MapPin, Link2, Copy, Check, 
-  Loader2, Phone, Trash2, CheckCircle, AlertCircle, RefreshCw, Lock, Send, Globe,
-  ChevronDown, Info, Server
+  Loader2, Phone, Trash2, CheckCircle, AlertCircle, RefreshCw, Lock, Send, Globe
 } from "lucide-react";
 import { SiWhatsapp, SiTelegram } from "react-icons/si";
 import { z } from "zod";
@@ -94,119 +93,6 @@ function SubdomainCopyButton({ slug }: { slug: string }) {
   );
 }
 
-function CopyValue({ value, label }: { value: string; label?: string }) {
-  const [copied, setCopied] = useState(false);
-  const handleCopy = () => {
-    navigator.clipboard.writeText(value);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-  return (
-    <div className="flex items-center gap-2">
-      <code className="flex-1 px-3 py-2 text-sm bg-muted rounded-md font-mono break-all" data-testid={`text-copy-${label || 'value'}`}>
-        {value}
-      </code>
-      <Button type="button" size="icon" variant="outline" onClick={handleCopy} data-testid={`button-copy-${label || 'value'}`}>
-        {copied ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
-      </Button>
-    </div>
-  );
-}
-
-function DnsSetupGuide({ slug }: { slug: string }) {
-  const [isOpen, setIsOpen] = useState(false);
-  const { data: platformData } = useQuery<{ platformDomain: string; cnameTarget: string }>({
-    queryKey: ["/api/platform-domain"],
-    staleTime: Infinity,
-  });
-
-  const cnameTarget = platformData?.cnameTarget || "";
-
-  return (
-    <div className="border rounded-lg" data-testid="dns-setup-guide">
-      <button
-        type="button"
-        className="w-full flex items-center gap-2 p-3 text-left hover-elevate rounded-lg"
-        onClick={() => setIsOpen(!isOpen)}
-        data-testid="button-toggle-dns-guide"
-      >
-        <Info className="h-4 w-4 text-blue-500 shrink-0" />
-        <span className="text-sm font-medium flex-1">Как настроить субдомен?</span>
-        <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${isOpen ? "rotate-180" : ""}`} />
-      </button>
-      
-      {isOpen && (
-        <div className="px-3 pb-4 space-y-4">
-          <div className="border-t pt-3" />
-          
-          <p className="text-sm text-muted-foreground">
-            Чтобы адрес <strong>{slug || "myshop"}.botfactory.kz</strong> заработал, 
-            владельцу домена botfactory.kz нужно добавить wildcard DNS-запись в Cloudflare:
-          </p>
-
-          <div className="space-y-3">
-            <div className="flex gap-3">
-              <div className="flex items-center justify-center h-6 w-6 rounded-full bg-primary text-primary-foreground text-xs font-bold shrink-0 mt-0.5">1</div>
-              <div className="space-y-1">
-                <p className="text-sm font-medium">Откройте Cloudflare для домена botfactory.kz</p>
-                <p className="text-xs text-muted-foreground">Перейдите в раздел DNS → Records</p>
-              </div>
-            </div>
-
-            <div className="flex gap-3">
-              <div className="flex items-center justify-center h-6 w-6 rounded-full bg-primary text-primary-foreground text-xs font-bold shrink-0 mt-0.5">2</div>
-              <div className="space-y-2 flex-1">
-                <p className="text-sm font-medium">Добавьте CNAME-запись:</p>
-                <div className="space-y-2 text-sm">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <Badge variant="outline">Тип</Badge>
-                    <span className="font-mono text-xs">CNAME</span>
-                  </div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <Badge variant="outline">Имя</Badge>
-                    <span className="font-mono text-xs">*</span>
-                    <span className="text-xs text-muted-foreground">(звёздочка — wildcard)</span>
-                  </div>
-                  {cnameTarget && (
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <Badge variant="outline">Цель</Badge>
-                      </div>
-                      <CopyValue value={cnameTarget} label="cname-target" />
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div className="flex gap-3">
-              <div className="flex items-center justify-center h-6 w-6 rounded-full bg-primary text-primary-foreground text-xs font-bold shrink-0 mt-0.5">3</div>
-              <div className="space-y-1">
-                <p className="text-sm font-medium">Включите Proxy (оранжевое облако)</p>
-                <p className="text-xs text-muted-foreground">Cloudflare автоматически выдаст SSL-сертификат для всех субдоменов</p>
-              </div>
-            </div>
-
-            <div className="flex gap-3">
-              <div className="flex items-center justify-center h-6 w-6 rounded-full bg-primary text-primary-foreground text-xs font-bold shrink-0 mt-0.5">4</div>
-              <div className="space-y-1">
-                <p className="text-sm font-medium">Подождите 1–5 минут</p>
-                <p className="text-xs text-muted-foreground">DNS-записи распространяются быстро с Cloudflare Proxy</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg">
-            <p className="text-xs text-amber-800 dark:text-amber-200">
-              <strong>Важно:</strong> Эта настройка делается один раз для всех магазинов платформы. 
-              После добавления wildcard-записи все субдомены (megashop.botfactory.kz, mystore.botfactory.kz и т.д.) заработают автоматически.
-            </p>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
 
 function DomainVerificationStatus({ domain, savedDomain, tenantDomainVerified }: { domain: string; savedDomain?: string; tenantDomainVerified?: boolean }) {
   const [verifyResult, setVerifyResult] = useState<{
@@ -1170,7 +1056,6 @@ export default function SettingsPage() {
                   </div>
                 )}
 
-                <DnsSetupGuide slug={form.watch("slug") || ""} />
               </CardContent>
             </Card>
           </motion.div>

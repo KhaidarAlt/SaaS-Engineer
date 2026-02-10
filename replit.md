@@ -51,6 +51,9 @@ Preferred communication style: Simple, everyday language.
 - **Subdomain System**: Primary catalog access via subdomains: `{slug}.botfactory.kz` (e.g., megashop.botfactory.kz). Requires wildcard DNS `*.botfactory.kz` pointing to platform. Server middleware `extractSubdomain()` parses host header, matches subdomain to tenant slug via `getTenantBySlug()`, and rewrites URL to `/c/{slug}`. Cloudflare handles wildcard SSL automatically. All catalog URLs (QR codes, copy links, AI assistant, sidebar, OG meta) use subdomain format. Settings page shows subdomain with copy button. Custom first-level domains (e.g., myshop.kz) are marked as "coming soon" in settings UI — planned via Cloudflare for SaaS or dedicated server approach. Legacy custom domain middleware still works for any tenant with `customDomain` field set. Schema fields: customDomain, domainVerified. Client-side uses `useCatalogSlug` hook (client/src/hooks/useCatalogSlug.ts) and `basePath` prop pattern for clean URLs on custom domains.
 - **Business Consultant**: AI-powered business consultant with 5 modes (Analyst, Marketer, ROP, Finance, Support) for data-driven insights and platform guidance.
 
+## Platform Admin Setup (one-time)
+- **Wildcard DNS**: Add CNAME record in Cloudflare for `botfactory.kz`: Name=`*`, Target=`saa-s-engineer--m528dpa.replit.app`, Proxy=ON. This enables all tenant subdomains (`*.botfactory.kz`) to resolve and get SSL automatically. This is a one-time setup by the platform owner — tenant users do not need to configure anything.
+
 ## External Dependencies
 ### Database
 - PostgreSQL
