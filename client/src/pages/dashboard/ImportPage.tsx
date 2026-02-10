@@ -40,6 +40,11 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -697,15 +702,39 @@ export default function ImportPage() {
                                 <TableCell>
                                   {row.isValid ? (
                                     row.autoFixes && row.autoFixes.length > 0 ? (
-                                      <Badge variant="outline" className="text-xs border-blue-500 text-blue-600 dark:text-blue-400" title={row.autoFixes.join("; ")}>
-                                        <CheckCircle2 className="h-3 w-3 mr-1" />
-                                        Авто
-                                      </Badge>
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <Badge variant="outline" className="text-xs border-blue-500 text-blue-600 dark:text-blue-400 cursor-help">
+                                            <CheckCircle2 className="h-3 w-3 mr-1" />
+                                            Авто
+                                          </Badge>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="right" className="max-w-xs">
+                                          <div className="space-y-1">
+                                            <p className="font-medium text-xs">Автоисправления:</p>
+                                            {row.autoFixes.map((fix, i) => (
+                                              <p key={i} className="text-xs">{fix}</p>
+                                            ))}
+                                          </div>
+                                        </TooltipContent>
+                                      </Tooltip>
                                     ) : row.warnings.length > 0 ? (
-                                      <Badge variant="secondary" className="text-xs" title={row.warnings.join(", ")}>
-                                        <AlertTriangle className="h-3 w-3 mr-1" />
-                                        Предупр.
-                                      </Badge>
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <Badge variant="secondary" className="text-xs cursor-help">
+                                            <AlertTriangle className="h-3 w-3 mr-1" />
+                                            Предупр.
+                                          </Badge>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="right" className="max-w-xs">
+                                          <div className="space-y-1">
+                                            <p className="font-medium text-xs">Предупреждения:</p>
+                                            {row.warnings.map((w, i) => (
+                                              <p key={i} className="text-xs">{w}</p>
+                                            ))}
+                                          </div>
+                                        </TooltipContent>
+                                      </Tooltip>
                                     ) : (
                                       <Badge variant="outline" className="text-xs text-green-600">
                                         <CheckCircle2 className="h-3 w-3 mr-1" />
@@ -713,10 +742,29 @@ export default function ImportPage() {
                                       </Badge>
                                     )
                                   ) : (
-                                    <Badge variant="destructive" className="text-xs" title={row.errors.join(", ")}>
-                                      <AlertCircle className="h-3 w-3 mr-1" />
-                                      Ошибка
-                                    </Badge>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Badge variant="destructive" className="text-xs cursor-help">
+                                          <AlertCircle className="h-3 w-3 mr-1" />
+                                          Ошибка
+                                        </Badge>
+                                      </TooltipTrigger>
+                                      <TooltipContent side="right" className="max-w-xs">
+                                        <div className="space-y-1.5">
+                                          <p className="font-medium text-xs">Причина ошибки:</p>
+                                          {row.errors.map((err, i) => (
+                                            <div key={i} className="text-xs space-y-0.5">
+                                              <p>{err}</p>
+                                              <p className="text-muted-foreground">
+                                                {err.includes("артикул") && "Добавьте колонку с артикулом (SKU) в файл или укажите маппинг"}
+                                                {err.includes("название") && "Добавьте колонку с названием товара в файл или укажите маппинг"}
+                                                {err.includes("не является числом") && "Укажите цену цифрами, например: 15000"}
+                                              </p>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </TooltipContent>
+                                    </Tooltip>
                                   )}
                                 </TableCell>
                                 {columnMappings
