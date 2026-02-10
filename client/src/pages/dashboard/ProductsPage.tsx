@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { motion } from "framer-motion";
@@ -11,6 +11,8 @@ import {
   Eye,
   EyeOff,
   Package,
+  Tag,
+  Check,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,6 +31,10 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
 } from "@/components/ui/dropdown-menu";
 import {
   Select,
@@ -37,11 +43,108 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { TableRowSkeleton } from "@/components/LoadingSpinner";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Product, Category } from "@shared/schema";
+
+const AVAILABLE_TAGS = [
+  { value: "hit", label: "Хит продаж" },
+  { value: "new", label: "Новинка" },
+  { value: "best_price", label: "Лучшая цена" },
+  { value: "sale", label: "Распродажа" },
+  { value: "delivery_today", label: "Доставка сегодня" },
+  { value: "in_stock", label: "В наличии" },
+  { value: "low_stock", label: "Мало на складе" },
+];
+
+function InlinePrice({ product }: { product: Product }) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(product.price);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    if (editing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [editing]);
+
+  useEffect(() => {
+    setValue(product.price);
+  }, [product.price]);
+
+  const mutation = useMutation({
+    mutationFn: async (newPrice: string) => {
+      await apiRequest("PATCH", `/api/products/${product.id}`, { price: newPrice });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      toast({ title: "Цена обновлена" });
+      setEditing(false);
+    },
+    onError: () => {
+      toast({ title: "Ошибка обновления цены", variant: "destructive" });
+      setValue(product.price);
+      setEditing(false);
+    },
+  });
+
+  const handleSave = () => {
+    const numVal = parseFloat(value);
+    if (isNaN(numVal) || numVal < 0) {
+      toast({ title: "Некорректная цена", variant: "destructive" });
+      setValue(product.price);
+      setEditing(false);
+      return;
+    }
+    if (value !== product.price) {
+      mutation.mutate(String(numVal));
+    } else {
+      setEditing(false);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      handleSave();
+    } else if (e.key === "Escape") {
+      setValue(product.price);
+      setEditing(false);
+    }
+  };
+
+  if (editing) {
+    return (
+      <Input
+        ref={inputRef}
+        type="number"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={handleSave}
+        onKeyDown={handleKeyDown}
+        className="w-28 text-right"
+        data-testid={`input-price-${product.id}`}
+        disabled={mutation.isPending}
+      />
+    );
+  }
+
+  const formatted = new Intl.NumberFormat("ru-KZ").format(parseFloat(product.price)) + " ₸";
+
+  return (
+    <span
+      onClick={() => setEditing(true)}
+      className="cursor-pointer font-medium transition-colors border-b border-dashed border-muted-foreground/30"
+      data-testid={`text-price-${product.id}`}
+    >
+      {formatted}
+    </span>
+  );
+}
 
 export default function ProductsPage() {
   const [search, setSearch] = useState("");
@@ -70,13 +173,16 @@ export default function ProductsPage() {
     },
   });
 
-  const toggleActiveMutation = useMutation({
-    mutationFn: async ({ id, isActive }: { id: string; isActive: boolean }) => {
-      await apiRequest("PATCH", `/api/products/${id}`, { isActive });
+  const updateFieldMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: Record<string, any> }) => {
+      await apiRequest("PATCH", `/api/products/${id}`, data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/products"] });
-      toast({ title: "Статус обновлён" });
+      toast({ title: "Товар обновлён" });
+    },
+    onError: () => {
+      toast({ title: "Ошибка обновления", variant: "destructive" });
     },
   });
 
@@ -93,18 +199,43 @@ export default function ProductsPage() {
     return matchesSearch && matchesCategory && matchesStock;
   });
 
-  const formatPrice = (price: string) => {
-    return new Intl.NumberFormat("ru-KZ").format(parseFloat(price)) + " ₸";
+  const getStockSelectValue = (product: Product): string => {
+    if (product.alwaysInStock) return "always";
+    if (product.stockQty > 0) return "in_stock";
+    return "out_of_stock";
   };
 
-  const getStockStatus = (product: Product) => {
-    if (product.alwaysInStock) {
-      return { label: "Всегда в наличии", variant: "default" as const };
+  const handleStockChange = (product: Product, newValue: string) => {
+    const data: Record<string, any> = {};
+    if (newValue === "always") {
+      data.alwaysInStock = true;
+    } else if (newValue === "in_stock") {
+      data.alwaysInStock = false;
+      if (product.stockQty <= 0) {
+        data.stockQty = 1;
+      }
+    } else {
+      data.alwaysInStock = false;
+      data.stockQty = 0;
     }
-    if (product.stockQty > 0) {
-      return { label: `${product.stockQty} шт.`, variant: "secondary" as const };
-    }
-    return { label: "Нет в наличии", variant: "destructive" as const };
+    updateFieldMutation.mutate({ id: product.id, data });
+  };
+
+  const handleCategoryChange = (product: Product, newCategoryId: string) => {
+    const catId = newCategoryId === "none" ? null : newCategoryId;
+    updateFieldMutation.mutate({ id: product.id, data: { categoryId: catId } });
+  };
+
+  const handleToggleActive = (product: Product, checked: boolean) => {
+    updateFieldMutation.mutate({ id: product.id, data: { isActive: checked } });
+  };
+
+  const handleToggleTag = (product: Product, tag: string) => {
+    const currentTags = product.tags || [];
+    const newTags = currentTags.includes(tag)
+      ? currentTags.filter((t) => t !== tag)
+      : [...currentTags, tag];
+    updateFieldMutation.mutate({ id: product.id, data: { tags: newTags } });
   };
 
   return (
@@ -190,7 +321,7 @@ export default function ProductsPage() {
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       transition={{ delay: index * 0.05 }}
-                      className="group"
+                      className="group border-b"
                     >
                       <TableCell>
                         <div className="w-12 h-12 rounded-lg bg-muted overflow-hidden">
@@ -207,21 +338,77 @@ export default function ProductsPage() {
                           )}
                         </div>
                       </TableCell>
-                      <TableCell className="font-medium">{product.name}</TableCell>
+                      <TableCell className="font-medium">
+                        <div className="flex flex-col gap-1">
+                          <span>{product.name}</span>
+                          {product.tags && product.tags.length > 0 && (
+                            <div className="flex flex-wrap gap-1">
+                              {product.tags.map((tag) => {
+                                const tagInfo = AVAILABLE_TAGS.find((t) => t.value === tag);
+                                return (
+                                  <Badge key={tag} variant="outline" className="text-xs">
+                                    {tagInfo?.label || tag}
+                                  </Badge>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      </TableCell>
                       <TableCell className="text-muted-foreground">{product.sku}</TableCell>
                       <TableCell>
-                        {categories?.find((c) => c.id === product.categoryId)?.name || "—"}
+                        <Select
+                          value={product.categoryId || "none"}
+                          onValueChange={(val) => handleCategoryChange(product, val)}
+                        >
+                          <SelectTrigger
+                            className="w-40 border-dashed"
+                            data-testid={`select-inline-category-${product.id}`}
+                          >
+                            <SelectValue placeholder="Без категории" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">Без категории</SelectItem>
+                            {categories?.map((cat) => (
+                              <SelectItem key={cat.id} value={cat.id}>
+                                {cat.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </TableCell>
-                      <TableCell className="font-medium">{formatPrice(product.price)}</TableCell>
                       <TableCell>
-                        <Badge variant={getStockStatus(product).variant}>
-                          {getStockStatus(product).label}
-                        </Badge>
+                        <InlinePrice product={product} />
                       </TableCell>
                       <TableCell>
-                        <Badge variant={product.isActive ? "default" : "secondary"}>
-                          {product.isActive ? "Активен" : "Скрыт"}
-                        </Badge>
+                        <Select
+                          value={getStockSelectValue(product)}
+                          onValueChange={(val) => handleStockChange(product, val)}
+                        >
+                          <SelectTrigger
+                            className="w-44 border-dashed"
+                            data-testid={`select-inline-stock-${product.id}`}
+                          >
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="out_of_stock">Нет в наличии</SelectItem>
+                            <SelectItem value="in_stock">В наличии</SelectItem>
+                            <SelectItem value="always">Всегда в наличии</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Switch
+                            checked={product.isActive}
+                            onCheckedChange={(checked) => handleToggleActive(product, checked)}
+                            data-testid={`switch-active-${product.id}`}
+                          />
+                          <span className="text-sm text-muted-foreground">
+                            {product.isActive ? "Активен" : "Скрыт"}
+                          </span>
+                        </div>
                       </TableCell>
                       <TableCell>
                         <DropdownMenu>
@@ -239,9 +426,9 @@ export default function ProductsPage() {
                             </Link>
                             <DropdownMenuItem
                               onClick={() =>
-                                toggleActiveMutation.mutate({
+                                updateFieldMutation.mutate({
                                   id: product.id,
-                                  isActive: !product.isActive,
+                                  data: { isActive: !product.isActive },
                                 })
                               }
                             >
@@ -257,6 +444,36 @@ export default function ProductsPage() {
                                 </>
                               )}
                             </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuSub>
+                              <DropdownMenuSubTrigger>
+                                <Tag className="h-4 w-4 mr-2" />
+                                Теги
+                              </DropdownMenuSubTrigger>
+                              <DropdownMenuSubContent>
+                                {AVAILABLE_TAGS.map((tag) => {
+                                  const isSelected = (product.tags || []).includes(tag.value);
+                                  return (
+                                    <DropdownMenuItem
+                                      key={tag.value}
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        handleToggleTag(product, tag.value);
+                                      }}
+                                      data-testid={`tag-${tag.value}-${product.id}`}
+                                    >
+                                      <div className="flex items-center gap-2 w-full">
+                                        <div className="w-4 h-4 rounded-sm border flex items-center justify-center">
+                                          {isSelected && <Check className="h-3 w-3" />}
+                                        </div>
+                                        <span>{tag.label}</span>
+                                      </div>
+                                    </DropdownMenuItem>
+                                  );
+                                })}
+                              </DropdownMenuSubContent>
+                            </DropdownMenuSub>
+                            <DropdownMenuSeparator />
                             <DropdownMenuItem
                               className="text-destructive"
                               onClick={() => deleteMutation.mutate(product.id)}
