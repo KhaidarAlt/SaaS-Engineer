@@ -381,22 +381,31 @@ export default function ProductsPage() {
                         <InlinePrice product={product} />
                       </TableCell>
                       <TableCell>
-                        <Select
-                          value={getStockSelectValue(product)}
-                          onValueChange={(val) => handleStockChange(product, val)}
-                        >
-                          <SelectTrigger
-                            className="w-44 border-dashed"
-                            data-testid={`select-inline-stock-${product.id}`}
-                          >
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="out_of_stock">Нет в наличии</SelectItem>
-                            <SelectItem value="in_stock">В наличии</SelectItem>
-                            <SelectItem value="always">Всегда в наличии</SelectItem>
-                          </SelectContent>
-                        </Select>
+                        {(() => {
+                          const stockVal = getStockSelectValue(product);
+                          const isAvailable = stockVal === "in_stock" || stockVal === "always";
+                          const triggerClass = isAvailable
+                            ? "w-44 border-green-500 bg-green-50 text-green-700 dark:border-green-600 dark:bg-green-950 dark:text-green-400"
+                            : "w-44 border-red-500 bg-red-50 text-red-700 dark:border-red-600 dark:bg-red-950 dark:text-red-400";
+                          return (
+                            <Select
+                              value={stockVal}
+                              onValueChange={(val) => handleStockChange(product, val)}
+                            >
+                              <SelectTrigger
+                                className={triggerClass}
+                                data-testid={`select-inline-stock-${product.id}`}
+                              >
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="out_of_stock">Нет в наличии</SelectItem>
+                                <SelectItem value="in_stock">В наличии</SelectItem>
+                                <SelectItem value="always">Всегда в наличии</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          );
+                        })()}
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
