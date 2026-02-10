@@ -617,7 +617,8 @@ export async function registerRoutes(
 
   app.get("/api/platform-domain", (_req: Request, res: Response) => {
     const platformDomain = process.env.PLATFORM_DOMAIN || process.env.REPLIT_DOMAINS?.split(",")[0] || "";
-    res.json({ platformDomain });
+    const cnameTarget = process.env.REPLIT_DOMAINS?.split(",")[0] || "";
+    res.json({ platformDomain, cnameTarget });
   });
 
   function extractSubdomain(host: string): string | null {
