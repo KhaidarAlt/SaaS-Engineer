@@ -66,6 +66,8 @@ interface ParsedRow {
   warnings: string[];
   autoFixes: string[];
   isValid: boolean;
+  isDuplicate?: boolean;
+  duplicateSource?: string;
 }
 
 interface ColumnMapping {
@@ -109,6 +111,10 @@ export default function ImportPage() {
     queryKey: ["/api/categories"],
   });
 
+  const { data: existingProducts } = useQuery<any[]>({
+    queryKey: ["/api/products"],
+  });
+
   const autoMapColumn = (columnName: string): string | null => {
     const normalized = columnName.toLowerCase().trim().replace(/[\s_-]/g, "");
     
@@ -150,9 +156,24 @@ export default function ImportPage() {
       }));
       setColumnMappings(mappings);
 
+      const skuField = mappings.find(m => m.targetField === "sku")?.sourceColumn;
+      const nameField = mappings.find(m => m.targetField === "name")?.sourceColumn;
+      const priceField = mappings.find(m => m.targetField === "price")?.sourceColumn;
+      const categoryField = mappings.find(m => m.targetField === "category")?.sourceColumn;
+
+      const existingNamesSet = new Set<string>(
+        (existingProducts || []).map(p => (p.name || "").toLowerCase().trim()).filter(Boolean)
+      );
+
+      const seenNamesInFile = new Map<string, number>();
+      let fileDuplicates = 0;
+      let platformDuplicates = 0;
+
       const rows: ParsedRow[] = [];
-      for (let i = 1; i < Math.min(jsonData.length, 21); i++) {
+      for (let i = 1; i < jsonData.length; i++) {
         const rowData = jsonData[i] as any[];
+        if (!rowData || rowData.every(cell => cell === null || cell === undefined || String(cell).trim() === "")) continue;
+        
         const data: Record<string, string> = {};
         headers.forEach((header, idx) => {
           data[header] = String(rowData[idx] ?? "").trim();
@@ -161,11 +182,8 @@ export default function ImportPage() {
         const errors: string[] = [];
         const warnings: string[] = [];
         const autoFixes: string[] = [];
-
-        const skuField = mappings.find(m => m.targetField === "sku")?.sourceColumn;
-        const nameField = mappings.find(m => m.targetField === "name")?.sourceColumn;
-        const priceField = mappings.find(m => m.targetField === "price")?.sourceColumn;
-        const categoryField = mappings.find(m => m.targetField === "category")?.sourceColumn;
+        let isDuplicate = false;
+        let duplicateSource = "";
 
         if (!skuField || !data[skuField]) {
           errors.push("Отсутствует артикул (SKU)");
@@ -192,23 +210,50 @@ export default function ImportPage() {
           }
         }
 
+        if (nameField && data[nameField]) {
+          const normalizedName = data[nameField].toLowerCase().trim();
+          
+          if (existingNamesSet.has(normalizedName)) {
+            isDuplicate = true;
+            duplicateSource = "Товар с таким названием уже есть на платформе";
+            platformDuplicates++;
+          }
+          
+          if (seenNamesInFile.has(normalizedName)) {
+            isDuplicate = true;
+            const firstRow = seenNamesInFile.get(normalizedName)!;
+            duplicateSource = isDuplicate && duplicateSource 
+              ? duplicateSource + ` и дублируется в файле (строка ${firstRow})`
+              : `Дубль в файле (совпадает со строкой ${firstRow})`;
+            fileDuplicates++;
+          } else {
+            seenNamesInFile.set(normalizedName, i + 1);
+          }
+        }
+
         rows.push({
           rowNumber: i + 1,
           data,
           errors,
           warnings,
           autoFixes,
-          isValid: errors.length === 0,
+          isValid: errors.length === 0 && !isDuplicate,
+          isDuplicate,
+          duplicateSource,
         });
       }
 
       setParsedData(rows);
-      toast({ title: `Загружено ${jsonData.length - 1} строк` });
+      const totalDupes = fileDuplicates + platformDuplicates;
+      const msg = totalDupes > 0
+        ? `Загружено ${rows.length} строк. Найдено дублей: ${totalDupes} (в файле: ${fileDuplicates}, на платформе: ${platformDuplicates}). Дубли будут пропущены при импорте.`
+        : `Загружено ${rows.length} строк`;
+      toast({ title: msg, variant: totalDupes > 0 ? "default" : "default" });
     } catch (error) {
       console.error("Parse error:", error);
       toast({ title: "Ошибка чтения файла", variant: "destructive" });
     }
-  }, [categories, toast]);
+  }, [categories, existingProducts, toast]);
 
   const handleZipSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
@@ -405,9 +450,10 @@ export default function ImportPage() {
   };
 
   const validRows = parsedData.filter(r => r.isValid).length;
-  const errorRows = parsedData.filter(r => !r.isValid).length;
+  const errorRows = parsedData.filter(r => !r.isValid && !r.isDuplicate).length;
   const warningRows = parsedData.filter(r => r.warnings.length > 0).length;
-  const autoFixRows = parsedData.filter(r => r.autoFixes && r.autoFixes.length > 0).length;
+  const autoFixRows = parsedData.filter(r => r.autoFixes && r.autoFixes.length > 0 && r.isValid).length;
+  const duplicateRows = parsedData.filter(r => r.isDuplicate).length;
 
   return (
     <DashboardLayout>
@@ -595,6 +641,12 @@ export default function ImportPage() {
                             {autoFixRows} автоисправлений
                           </Badge>
                         )}
+                        {duplicateRows > 0 && (
+                          <Badge variant="outline" className="gap-1 border-orange-500 text-orange-600 dark:text-orange-400">
+                            <AlertTriangle className="h-3 w-3" />
+                            {duplicateRows} дублей удалено
+                          </Badge>
+                        )}
                         {errorRows > 0 && (
                           <Badge variant="destructive" className="gap-1">
                             <AlertCircle className="h-3 w-3" />
@@ -692,10 +744,19 @@ export default function ImportPage() {
                           </TableHeader>
                           <TableBody>
                             {parsedData.map((row) => (
-                              <TableRow key={row.rowNumber} className={!row.isValid ? "bg-destructive/5" : ""}>
+                              <TableRow key={row.rowNumber} className={row.isDuplicate ? "bg-orange-500/5" : !row.isValid ? "bg-destructive/5" : ""}>
                                 <TableCell className="font-mono text-xs">{row.rowNumber}</TableCell>
                                 <TableCell>
-                                  {row.isValid ? (
+                                  {row.isDuplicate ? (
+                                    <div className="space-y-1">
+                                      <Badge variant="outline" className="text-xs border-orange-500 text-orange-600 dark:text-orange-400">
+                                        <AlertTriangle className="h-3 w-3 mr-1" />
+                                        Дубль
+                                      </Badge>
+                                      <p className="text-[11px] font-medium text-orange-600 dark:text-orange-400">{row.duplicateSource}</p>
+                                      <p className="text-[11px] text-muted-foreground">Строка будет пропущена при импорте</p>
+                                    </div>
+                                  ) : row.isValid ? (
                                     row.autoFixes && row.autoFixes.length > 0 ? (
                                       <div className="space-y-1">
                                         <Badge variant="outline" className="text-xs border-blue-500 text-blue-600 dark:text-blue-400">
