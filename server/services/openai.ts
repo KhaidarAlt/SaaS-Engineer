@@ -418,6 +418,107 @@ ${context.aiSystemPrompt}`;
   return prompt;
 }
 
+export async function generateProductDescription(params: {
+  name: string;
+  category?: string;
+  price?: string;
+  attributes?: Record<string, string>;
+  currentText?: string;
+  style: string;
+  options?: string[];
+  action?: string;
+}): Promise<{ description: string; bullets: string[] }> {
+  const styleGuides: Record<string, string> = {
+    selling: "Продающий стиль: 3–5 предложений, через выгоды для покупателя, 1–2 сценария применения, мягкий призыв к действию.",
+    informative: "Информативный стиль: нейтрально и по делу, факты и назначение, без давления на покупку.",
+    marketplace: "Стиль для маркетплейса: короткие абзацы, преимущества списком, практическая польза.",
+    trustful: "Доверительный стиль: тон помощника, закрытие сомнений, спокойный язык.",
+    short: "Короткий стиль: 2–3 строки, только ключевая польза.",
+    expert: "Экспертный стиль: деловой тон, умеренные детали, акцент на надёжности.",
+  };
+
+  const styleInstruction = styleGuides[params.style] || styleGuides.selling;
+
+  let optionsText = "";
+  if (params.options && params.options.length > 0) {
+    const optionLabels: Record<string, string> = {
+      bullets: "Добавь преимущества списком",
+      objections: "Закрой частые возражения покупателей",
+      benefits: "Сделай упор на выгоды",
+      scenarios: "Добавь сценарии использования",
+      shorter: "Сделай текст короче",
+    };
+    optionsText = "\n\nДополнительные требования:\n" + params.options.map(o => `- ${optionLabels[o] || o}`).join("\n");
+  }
+
+  let actionInstruction = "";
+  if (params.action === "improve" && params.currentText) {
+    actionInstruction = `\n\nЗАДАЧА: Улучши существующий текст описания, сохранив его смысл, но сделав более привлекательным.\nТекущий текст: "${params.currentText}"`;
+  } else if (params.action === "shorter" && params.currentText) {
+    actionInstruction = `\n\nЗАДАЧА: Сократи текущее описание, оставив только самое важное.\nТекущий текст: "${params.currentText}"`;
+  } else if (params.action === "more_selling" && params.currentText) {
+    actionInstruction = `\n\nЗАДАЧА: Сделай текущее описание более продающим, добавь выгоды и призыв к действию.\nТекущий текст: "${params.currentText}"`;
+  } else {
+    actionInstruction = "\n\nЗАДАЧА: Сгенерируй новое описание товара.";
+  }
+
+  const systemPrompt = `Ты — универсальный генератор описаний для e-commerce.
+
+АЛГОРИТМ:
+
+ШАГ 1. Проанализируй поле "Название" и определи:
+- тип товара/услуги
+- назначение
+- сферу применения
+- кому это может быть полезно
+
+ШАГ 2. Используй как контекст:
+- Категория: ${params.category || "не указана"}
+- Цена: ${params.price || "не указана"}
+- Атрибуты: ${params.attributes ? JSON.stringify(params.attributes) : "не указаны"}
+
+ШАГ 3. Сгенерируй описание в стиле:
+${styleInstruction}
+
+СТРОГИЕ ПРАВИЛА:
+- опирайся на название как главный источник смысла
+- не придумывай функции и характеристики, которых нет в данных
+- не используй запрещённые обещания
+- пиши простым понятным языком на русском
+- без привязки к конкретному бренду или нише платформы
+${optionsText}${actionInstruction}
+
+ФОРМАТ ОТВЕТА — строго JSON:
+{
+  "description": "текст описания",
+  "bullets": ["преимущество 1", "преимущество 2"]
+}
+
+Если опция "Добавь преимущества списком" не выбрана, верни bullets как пустой массив.`;
+
+  const response = await openai.chat.completions.create({
+    model: "gpt-4o-mini",
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: `Название товара: "${params.name}"` },
+    ],
+    temperature: 0.7,
+    max_tokens: 1000,
+    response_format: { type: "json_object" },
+  });
+
+  const content = response.choices[0]?.message?.content || '{"description":"","bullets":[]}';
+  try {
+    const parsed = JSON.parse(content);
+    return {
+      description: parsed.description || "",
+      bullets: Array.isArray(parsed.bullets) ? parsed.bullets : [],
+    };
+  } catch {
+    return { description: content, bullets: [] };
+  }
+}
+
 export function isOpenAiConfigured(): boolean {
   return !!(process.env.AI_INTEGRATIONS_OPENAI_BASE_URL && process.env.AI_INTEGRATIONS_OPENAI_API_KEY);
 }

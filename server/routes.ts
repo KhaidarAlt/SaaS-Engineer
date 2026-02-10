@@ -1382,6 +1382,38 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/products/generate-description", requireAuth, async (req, res) => {
+    try {
+      const { name, category, price, attributes, currentText, style, options, action } = req.body;
+      
+      if (!name || !name.trim()) {
+        return res.status(400).json({ message: "Заполните название товара для генерации описания" });
+      }
+
+      const { generateProductDescription, isOpenAiConfigured } = await import("./services/openai");
+      
+      if (!isOpenAiConfigured()) {
+        return res.status(503).json({ message: "AI сервис не настроен" });
+      }
+
+      const result = await generateProductDescription({
+        name,
+        category,
+        price,
+        attributes,
+        currentText,
+        style: style || "selling",
+        options,
+        action,
+      });
+
+      res.json(result);
+    } catch (error: any) {
+      console.error("AI description generation error:", error);
+      res.status(500).json({ message: "Ошибка генерации описания" });
+    }
+  });
+
   app.post("/api/import/product", requireAuth, async (req, res) => {
     try {
       const { mode, fieldsToUpdate, ...productData } = req.body;

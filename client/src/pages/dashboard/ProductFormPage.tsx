@@ -25,6 +25,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { AiDescriptionGenerator } from "@/components/AiDescriptionGenerator";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { PageLoader } from "@/components/LoadingSpinner";
 import { ProductVariantsSection } from "@/components/ProductVariantsSection";
@@ -480,7 +481,16 @@ export default function ProductFormPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="description">Описание</Label>
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <Label htmlFor="description">Описание</Label>
+                  <AiDescriptionGenerator
+                    productName={form.watch("name") || ""}
+                    category={categories?.find(c => c.id === form.watch("categoryId"))?.name}
+                    price={form.watch("price")}
+                    currentText={form.watch("description")}
+                    onInsert={(text) => form.setValue("description", text, { shouldDirty: true })}
+                  />
+                </div>
                 <Textarea
                   id="description"
                   placeholder="Описание товара..."
