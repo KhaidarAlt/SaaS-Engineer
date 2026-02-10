@@ -64,6 +64,7 @@ interface ParsedRow {
   data: Record<string, string>;
   errors: string[];
   warnings: string[];
+  autoFixes: string[];
   isValid: boolean;
 }
 
@@ -159,6 +160,7 @@ export default function ImportPage() {
 
         const errors: string[] = [];
         const warnings: string[] = [];
+        const autoFixes: string[] = [];
 
         const skuField = mappings.find(m => m.targetField === "sku")?.sourceColumn;
         const nameField = mappings.find(m => m.targetField === "name")?.sourceColumn;
@@ -172,7 +174,13 @@ export default function ImportPage() {
           errors.push("Отсутствует название");
         }
         if (priceField && data[priceField] && isNaN(parseFloat(data[priceField]))) {
-          errors.push("Цена не является числом");
+          const cleaned = data[priceField].replace(/[^\d.,]/g, "").replace(",", ".");
+          if (cleaned && !isNaN(parseFloat(cleaned))) {
+            autoFixes.push(`Цена исправлена: "${data[priceField]}" → ${cleaned}`);
+            data[priceField] = cleaned;
+          } else {
+            errors.push("Цена не является числом");
+          }
         }
         if (categoryField && data[categoryField]) {
           const cat = categories?.find(c => 
@@ -180,13 +188,8 @@ export default function ImportPage() {
             c.slug === data[categoryField].toLowerCase()
           );
           if (!cat) {
-            warnings.push(`Категория "${data[categoryField]}" не найдена`);
+            autoFixes.push(`Категория "${data[categoryField]}" будет создана автоматически`);
           }
-        }
-
-        const stockField = mappings.find(m => m.targetField === "stockQty")?.sourceColumn;
-        if (!stockField || !data[stockField]) {
-          warnings.push("Остаток не указан (будет 0)");
         }
 
         rows.push({
@@ -194,6 +197,7 @@ export default function ImportPage() {
           data,
           errors,
           warnings,
+          autoFixes,
           isValid: errors.length === 0,
         });
       }
@@ -278,6 +282,41 @@ export default function ImportPage() {
       const stockField = columnMappings.find(m => m.targetField === "stockQty")?.sourceColumn;
       const descField = columnMappings.find(m => m.targetField === "description")?.sourceColumn;
 
+      const createdCategories = new Map<string, string>();
+
+      const categoryNamesMap = new Map<string, string>();
+      for (const row of parsedData) {
+        if (!row.isValid) continue;
+        if (categoryField && row.data[categoryField]) {
+          const catName = row.data[categoryField].trim();
+          if (catName) {
+            const normalizedKey = catName.toLowerCase().trim();
+            const existing = categories?.find(c =>
+              c.name.toLowerCase().trim() === normalizedKey ||
+              c.slug === normalizedKey
+            );
+            if (!existing && !categoryNamesMap.has(normalizedKey)) {
+              categoryNamesMap.set(normalizedKey, catName);
+            }
+          }
+        }
+      }
+
+      for (const [normalizedKey, catName] of categoryNamesMap) {
+        try {
+          const newCat = await apiRequest("POST", "/api/categories", {
+            name: catName,
+          });
+          createdCategories.set(normalizedKey, newCat.id);
+        } catch (error) {
+          console.error(`Failed to create category "${catName}":`, error);
+        }
+      }
+
+      if (createdCategories.size > 0) {
+        await queryClient.invalidateQueries({ queryKey: ["/api/categories"] });
+      }
+
       for (const row of parsedData) {
         if (!row.isValid) {
           stats.skipped++;
@@ -288,22 +327,28 @@ export default function ImportPage() {
 
         const sku = skuField ? row.data[skuField] : "";
         const name = nameField ? row.data[nameField] : "";
-        const price = priceField ? row.data[priceField] : "0";
+        const rawPrice = priceField ? row.data[priceField] : "0";
+        const price = rawPrice.replace(/[^\d.,]/g, "").replace(",", ".") || "0";
         const categoryName = categoryField ? row.data[categoryField] : "";
         const stockQty = stockField ? parseInt(row.data[stockField]) || 0 : 0;
         const description = descField ? row.data[descField] : "";
 
-        const category = categories?.find(c => 
-          c.name.toLowerCase() === categoryName.toLowerCase() ||
-          c.slug === categoryName.toLowerCase()
-        );
+        let categoryId: string | undefined;
+        if (fieldsToUpdate.category && categoryName) {
+          const normalizedCat = categoryName.toLowerCase().trim();
+          const existingCat = categories?.find(c =>
+            c.name.toLowerCase().trim() === normalizedCat ||
+            c.slug === normalizedCat
+          );
+          categoryId = existingCat?.id || createdCategories.get(normalizedCat);
+        }
 
         const productData = {
           sku,
           name,
           price,
           description: fieldsToUpdate.description ? description : undefined,
-          categoryId: fieldsToUpdate.category && category ? category.id : undefined,
+          categoryId,
           stockQty: fieldsToUpdate.stockQty ? stockQty : undefined,
           inStock: true,
           alwaysInStock: false,
@@ -333,9 +378,14 @@ export default function ImportPage() {
 
       setImportStats(stats);
       queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/categories"] });
+      
+      const autoFixMsg = createdCategories.size > 0
+        ? `, Категорий создано: ${createdCategories.size}`
+        : "";
       toast({ 
         title: "Импорт завершён",
-        description: `Создано: ${stats.created}, Обновлено: ${stats.updated}, Ошибок: ${stats.errors}`,
+        description: `Создано: ${stats.created}, Обновлено: ${stats.updated}, Ошибок: ${stats.errors}${autoFixMsg}`,
       });
     } catch (error) {
       toast({ title: "Ошибка импорта", variant: "destructive" });
@@ -357,6 +407,7 @@ export default function ImportPage() {
   const validRows = parsedData.filter(r => r.isValid).length;
   const errorRows = parsedData.filter(r => !r.isValid).length;
   const warningRows = parsedData.filter(r => r.warnings.length > 0).length;
+  const autoFixRows = parsedData.filter(r => r.autoFixes && r.autoFixes.length > 0).length;
 
   return (
     <DashboardLayout>
@@ -538,6 +589,12 @@ export default function ImportPage() {
                           <CheckCircle2 className="h-3 w-3 text-green-500" />
                           {validRows} готово
                         </Badge>
+                        {autoFixRows > 0 && (
+                          <Badge variant="outline" className="gap-1 border-blue-500 text-blue-600 dark:text-blue-400">
+                            <CheckCircle2 className="h-3 w-3" />
+                            {autoFixRows} автоисправлений
+                          </Badge>
+                        )}
                         {errorRows > 0 && (
                           <Badge variant="destructive" className="gap-1">
                             <AlertCircle className="h-3 w-3" />
@@ -639,7 +696,12 @@ export default function ImportPage() {
                                 <TableCell className="font-mono text-xs">{row.rowNumber}</TableCell>
                                 <TableCell>
                                   {row.isValid ? (
-                                    row.warnings.length > 0 ? (
+                                    row.autoFixes && row.autoFixes.length > 0 ? (
+                                      <Badge variant="outline" className="text-xs border-blue-500 text-blue-600 dark:text-blue-400" title={row.autoFixes.join("; ")}>
+                                        <CheckCircle2 className="h-3 w-3 mr-1" />
+                                        Авто
+                                      </Badge>
+                                    ) : row.warnings.length > 0 ? (
                                       <Badge variant="secondary" className="text-xs" title={row.warnings.join(", ")}>
                                         <AlertTriangle className="h-3 w-3 mr-1" />
                                         Предупр.
