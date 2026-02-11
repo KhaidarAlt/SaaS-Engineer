@@ -484,16 +484,27 @@ export default function PromoZonePage() {
                       className="w-full h-full object-cover"
                       data-testid="img-preview"
                     />
-                    <Button
-                      type="button"
-                      variant="destructive"
-                      size="icon"
-                      className="absolute top-2 right-2"
-                      onClick={removeImage}
-                      data-testid="button-remove-image"
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
+                    <div className="absolute top-2 right-2 flex items-center gap-1">
+                      <Button
+                        type="button"
+                        size="icon"
+                        className="bg-black/60 text-white border-0 hover:bg-black/80"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={isUploading}
+                        data-testid="button-replace-image"
+                      >
+                        {isUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="icon"
+                        onClick={removeImage}
+                        data-testid="button-remove-image"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
                 ) : (
                   <Button
