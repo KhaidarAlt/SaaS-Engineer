@@ -307,7 +307,7 @@ export default function PromoZonePage() {
           method: "POST",
           headers: {
             "Content-Type": file.type,
-            "X-Original-Filename": file.name,
+            "X-Original-Filename": encodeURIComponent(file.name),
           },
           credentials: "include",
           body: file,
