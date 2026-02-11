@@ -139,7 +139,7 @@ const promoBlockFormSchema = z.object({
   imageUrl: z.string().min(1, "Медиа файл обязателен"),
   mediaType: z.enum(["image", "video"]).default("image"),
   title: z.string().optional(),
-  description: z.string().max(300, "Максимум 300 символов").optional(),
+  description: z.string().optional(),
   buttonText: z.string().default("Купить"),
   linkType: z.enum(["whatsapp", "crm"]),
   linkUrl: z.string().optional(),
