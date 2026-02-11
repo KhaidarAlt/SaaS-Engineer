@@ -1637,6 +1637,43 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/uploads/video", requireAuth, express.raw({ type: ["video/mp4", "video/quicktime", "video/webm", "video/x-msvideo"], limit: "50mb" }), async (req, res) => {
+    try {
+      const allowedVideoTypes = ["video/mp4", "video/quicktime", "video/webm", "video/x-msvideo"];
+      const contentType = req.headers["content-type"]?.split(";")[0]?.trim();
+      if (!contentType || !allowedVideoTypes.includes(contentType)) {
+        return res.status(400).json({ error: "Неверный формат. Только MP4, MOV, WebM, AVI." });
+      }
+
+      const { optimizeVideo } = await import("./services/video-optimizer.js");
+      const originalName = (req.headers["x-original-filename"] as string) || "video.mp4";
+      const inputBuffer = req.body as Buffer;
+
+      if (!inputBuffer || inputBuffer.length === 0) {
+        return res.status(400).json({ error: "Видео файл не получен" });
+      }
+
+      if (inputBuffer.length > 50 * 1024 * 1024) {
+        return res.status(400).json({ error: "Файл слишком большой. Максимум 50MB." });
+      }
+
+      const { buffer: optimizedBuffer, mimeType } = await optimizeVideo(inputBuffer, originalName);
+
+      const videoObjectStorage = new ObjectStorageService();
+      const objectPath = await videoObjectStorage.uploadBuffer(optimizedBuffer, mimeType);
+
+      res.json({
+        objectPath,
+        originalSize: inputBuffer.length,
+        optimizedSize: optimizedBuffer.length,
+        savedPercent: Math.round((1 - optimizedBuffer.length / inputBuffer.length) * 100),
+      });
+    } catch (error: any) {
+      console.error("Video upload/optimize error:", error);
+      res.status(500).json({ error: error.message || "Ошибка обработки видео" });
+    }
+  });
+
   app.get("/api/orders", requireAuth, async (req, res) => {
     try {
       const orders = await storage.getOrders(req.user!.tenantId!);

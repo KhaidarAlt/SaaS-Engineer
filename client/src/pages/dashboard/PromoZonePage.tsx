@@ -3,7 +3,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { Plus, Pencil, Trash2, Image as ImageIcon, MoreHorizontal, Upload, X, GripVertical, MousePointer, MessageCircle, Bot, Save, Loader2 } from "lucide-react";
+import { Plus, Pencil, Trash2, Image as ImageIcon, MoreHorizontal, Upload, X, GripVertical, MousePointer, MessageCircle, Bot, Save, Loader2, Play, Film } from "lucide-react";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -136,7 +136,8 @@ function AiDescriptionBlock({ block }: { block: PromoBlock }) {
 }
 
 const promoBlockFormSchema = z.object({
-  imageUrl: z.string().min(1, "Изображение обязательно"),
+  imageUrl: z.string().min(1, "Медиа файл обязателен"),
+  mediaType: z.enum(["image", "video"]).default("image"),
   title: z.string().optional(),
   description: z.string().max(300, "Максимум 300 символов").optional(),
   buttonText: z.string().default("Купить"),
@@ -148,9 +149,20 @@ const promoBlockFormSchema = z.object({
 
 type PromoBlockFormData = z.infer<typeof promoBlockFormSchema>;
 
+function isVideoFile(file: File): boolean {
+  return file.type.startsWith("video/");
+}
+
+function isVideoUrl(url: string, mediaType?: string): boolean {
+  if (mediaType === "video") return true;
+  return /\.(mp4|webm|mov|avi)$/i.test(url);
+}
+
 export default function PromoZonePage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingBlock, setEditingBlock] = useState<PromoBlock | null>(null);
+  const [isUploadingVideo, setIsUploadingVideo] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState("");
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -168,6 +180,7 @@ export default function PromoZonePage() {
     resolver: zodResolver(promoBlockFormSchema),
     defaultValues: {
       imageUrl: "",
+      mediaType: "image",
       title: "",
       description: "",
       buttonText: "Купить",
@@ -180,6 +193,8 @@ export default function PromoZonePage() {
 
   const description = form.watch("description") || "";
   const imageUrl = form.watch("imageUrl");
+  const mediaType = form.watch("mediaType");
+  const anyUploading = isUploading || isUploadingVideo;
 
   const createMutation = useMutation({
     mutationFn: async (data: PromoBlockFormData) => {
@@ -229,6 +244,7 @@ export default function PromoZonePage() {
     setEditingBlock(block);
     form.reset({
       imageUrl: block.imageUrl,
+      mediaType: (block.mediaType as "image" | "video") || "image",
       title: block.title || "",
       description: block.description || "",
       buttonText: block.buttonText || "Купить",
@@ -244,6 +260,7 @@ export default function PromoZonePage() {
     setEditingBlock(null);
     form.reset({
       imageUrl: "",
+      mediaType: "image",
       title: "",
       description: "",
       buttonText: "Купить",
@@ -267,47 +284,85 @@ export default function PromoZonePage() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const validTypes = ["image/jpeg", "image/png", "image/jpg"];
-    if (!validTypes.includes(file.type)) {
-      toast({ title: "Неверный формат", description: "Только JPG/PNG файлы", variant: "destructive" });
+    const imageTypes = ["image/jpeg", "image/png", "image/jpg"];
+    const videoTypes = ["video/mp4", "video/quicktime", "video/webm", "video/x-msvideo"];
+    const allValidTypes = [...imageTypes, ...videoTypes];
+
+    if (!allValidTypes.includes(file.type)) {
+      toast({ title: "Неверный формат", description: "Поддерживаются JPG, PNG, MP4, MOV, WebM, AVI", variant: "destructive" });
       return;
     }
 
-    if (file.size > 2 * 1024 * 1024) {
-      toast({ title: "Файл слишком большой", description: "Максимум 2MB", variant: "destructive" });
-      return;
-    }
-
-    const result = await uploadFile(file);
-    if (result) {
-      // Make the file publicly accessible
-      try {
-        const response = await fetch("/api/uploads/set-public", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ objectPath: result.objectPath }),
-          credentials: "include",
-        });
-        
-        if (!response.ok) {
-          const error = await response.json().catch(() => ({}));
-          console.error("Failed to set public access:", error);
-          toast({ 
-            title: "Предупреждение", 
-            description: "Изображение загружено, но могут быть проблемы с отображением", 
-            variant: "destructive" 
-          });
-        }
-      } catch (e) {
-        console.error("Failed to set public access:", e);
-        toast({ 
-          title: "Предупреждение", 
-          description: "Изображение загружено, но могут быть проблемы с отображением", 
-          variant: "destructive" 
-        });
+    if (isVideoFile(file)) {
+      if (file.size > 50 * 1024 * 1024) {
+        toast({ title: "Файл слишком большой", description: "Максимум 50MB для видео", variant: "destructive" });
+        return;
       }
-      // Store full URL path for display (objectPath already includes /objects/ prefix)
-      form.setValue("imageUrl", result.objectPath);
+
+      setIsUploadingVideo(true);
+      setUploadProgress("Загрузка видео...");
+      try {
+        setUploadProgress("Оптимизация видео...");
+        const response = await fetch("/api/uploads/video", {
+          method: "POST",
+          headers: {
+            "Content-Type": file.type,
+            "X-Original-Filename": file.name,
+          },
+          credentials: "include",
+          body: file,
+        });
+
+        if (!response.ok) {
+          const err = await response.json().catch(() => ({}));
+          throw new Error(err.error || "Ошибка загрузки видео");
+        }
+
+        const result = await response.json();
+        form.setValue("imageUrl", result.objectPath);
+        form.setValue("mediaType", "video");
+
+        const savedMB = ((result.originalSize - result.optimizedSize) / 1024 / 1024).toFixed(1);
+        toast({
+          title: "Видео загружено",
+          description: `Оптимизировано: сэкономлено ${savedMB} MB (${result.savedPercent}%)`,
+        });
+      } catch (error: any) {
+        toast({ title: "Ошибка", description: error.message || "Не удалось загрузить видео", variant: "destructive" });
+      } finally {
+        setIsUploadingVideo(false);
+        setUploadProgress("");
+      }
+    } else {
+      if (file.size > 5 * 1024 * 1024) {
+        toast({ title: "Файл слишком большой", description: "Максимум 5MB для изображений", variant: "destructive" });
+        return;
+      }
+
+      const result = await uploadFile(file);
+      if (result) {
+        try {
+          const response = await fetch("/api/uploads/set-public", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ objectPath: result.objectPath }),
+            credentials: "include",
+          });
+
+          if (!response.ok) {
+            console.error("Failed to set public access");
+            toast({
+              title: "Предупреждение",
+              description: "Изображение загружено, но могут быть проблемы с отображением",
+              variant: "destructive"
+            });
+          }
+        } catch (e) {
+          console.error("Failed to set public access:", e);
+        }
+        form.setValue("imageUrl", result.objectPath);
+        form.setValue("mediaType", "image");
+      }
     }
 
     if (fileInputRef.current) {
@@ -317,6 +372,7 @@ export default function PromoZonePage() {
 
   const removeImage = () => {
     form.setValue("imageUrl", "");
+    form.setValue("mediaType", "image");
   };
 
   const getLinkTypeLabel = (type: string) => {
@@ -357,18 +413,36 @@ export default function PromoZonePage() {
                 <Card className="hover-elevate overflow-hidden" data-testid={`card-promo-block-${block.id}`}>
                   <div className="relative aspect-[3/1] bg-muted">
                     {block.imageUrl ? (
-                      <img
-                        src={normalizeImageUrl(block.imageUrl)}
-                        alt={block.title || "Промо-блок"}
-                        className="w-full h-full object-cover"
-                        data-testid={`img-promo-block-${block.id}`}
-                      />
+                      block.mediaType === "video" ? (
+                        <video
+                          src={normalizeImageUrl(block.imageUrl)}
+                          className="w-full h-full object-cover"
+                          muted
+                          loop
+                          autoPlay
+                          playsInline
+                          data-testid={`video-promo-block-${block.id}`}
+                        />
+                      ) : (
+                        <img
+                          src={normalizeImageUrl(block.imageUrl)}
+                          alt={block.title || "Промо-блок"}
+                          className="w-full h-full object-cover"
+                          data-testid={`img-promo-block-${block.id}`}
+                        />
+                      )
                     ) : (
                       <div className="w-full h-full flex items-center justify-center">
                         <ImageIcon className="h-12 w-12 text-muted-foreground/50" />
                       </div>
                     )}
                     <div className="absolute top-2 right-2 flex items-center gap-2">
+                      {block.mediaType === "video" && (
+                        <Badge variant="secondary" className="gap-1">
+                          <Film className="h-3 w-3" />
+                          Видео
+                        </Badge>
+                      )}
                       <Badge variant={block.isActive ? "default" : "secondary"} data-testid={`badge-status-${block.id}`}>
                         {block.isActive ? "Активен" : "Неактивен"}
                       </Badge>
@@ -467,33 +541,56 @@ export default function PromoZonePage() {
             </DialogHeader>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
               <div className="space-y-2">
-                <Label>Изображение *</Label>
+                <Label>Медиа (фото или видео) *</Label>
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="image/jpeg,image/png,image/jpg"
+                  accept="image/jpeg,image/png,image/jpg,video/mp4,video/quicktime,video/webm,video/x-msvideo"
                   onChange={handleFileSelect}
                   className="hidden"
                   data-testid="input-file-upload"
                 />
-                {imageUrl ? (
+                {isUploadingVideo ? (
+                  <div className="flex flex-col items-center justify-center h-24 rounded-lg border border-dashed gap-2">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">{uploadProgress}</span>
+                  </div>
+                ) : imageUrl ? (
                   <div className="relative aspect-[3/1] rounded-lg overflow-hidden bg-muted">
-                    <img
-                      src={normalizeImageUrl(imageUrl)}
-                      alt="Превью"
-                      className="w-full h-full object-cover"
-                      data-testid="img-preview"
-                    />
+                    {mediaType === "video" ? (
+                      <video
+                        src={normalizeImageUrl(imageUrl)}
+                        className="w-full h-full object-cover"
+                        muted
+                        loop
+                        autoPlay
+                        playsInline
+                        data-testid="video-preview"
+                      />
+                    ) : (
+                      <img
+                        src={normalizeImageUrl(imageUrl)}
+                        alt="Превью"
+                        className="w-full h-full object-cover"
+                        data-testid="img-preview"
+                      />
+                    )}
                     <div className="absolute top-2 right-2 flex items-center gap-1">
+                      {mediaType === "video" && (
+                        <Badge variant="secondary" className="gap-1 mr-1">
+                          <Film className="h-3 w-3" />
+                          Видео
+                        </Badge>
+                      )}
                       <Button
                         type="button"
                         size="icon"
                         className="bg-black/60 text-white border-0 hover:bg-black/80"
                         onClick={() => fileInputRef.current?.click()}
-                        disabled={isUploading}
+                        disabled={anyUploading}
                         data-testid="button-replace-image"
                       >
-                        {isUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                        {anyUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
                       </Button>
                       <Button
                         type="button"
@@ -512,17 +609,17 @@ export default function PromoZonePage() {
                     variant="outline"
                     className="w-full h-24 border-dashed"
                     onClick={() => fileInputRef.current?.click()}
-                    disabled={isUploading}
-                    data-testid="button-upload-image"
+                    disabled={anyUploading}
+                    data-testid="button-upload-media"
                   >
                     <div className="flex flex-col items-center gap-2">
                       <Upload className="h-6 w-6" />
-                      <span>{isUploading ? "Загрузка..." : "Загрузить изображение"}</span>
+                      <span>{anyUploading ? "Загрузка..." : "Загрузить фото или видео"}</span>
                     </div>
                   </Button>
                 )}
                 <p className="text-xs text-muted-foreground">
-                  Рекомендуемый размер 1200×400, JPG/PNG, до 2MB
+                  Фото: JPG/PNG, до 5MB. Видео: MP4/MOV/WebM/AVI, до 50MB (5-7 сек, автосжатие)
                 </p>
                 {form.formState.errors.imageUrl && (
                   <p className="text-sm text-destructive">{form.formState.errors.imageUrl.message}</p>

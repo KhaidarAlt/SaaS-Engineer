@@ -597,13 +597,25 @@ function PromoCarousel({
                   transition={{ duration: 0.4, delay: index * 0.1 }}
                   className="relative aspect-[21/9] md:aspect-[3/1] rounded-lg overflow-hidden hover:shadow-lg transition-shadow"
                 >
-                  <img
-                    src={normalizeImageUrl(block.imageUrl)}
-                    alt={block.title || "Promo"}
-                    className="w-full h-full object-cover"
-                    loading={index === 0 ? "eager" : "lazy"}
-                    data-testid={`img-promo-${block.id}`}
-                  />
+                  {block.mediaType === "video" ? (
+                    <video
+                      src={normalizeImageUrl(block.imageUrl)}
+                      className="w-full h-full object-cover"
+                      autoPlay
+                      muted
+                      loop
+                      playsInline
+                      data-testid={`video-promo-${block.id}`}
+                    />
+                  ) : (
+                    <img
+                      src={normalizeImageUrl(block.imageUrl)}
+                      alt={block.title || "Promo"}
+                      className="w-full h-full object-cover"
+                      loading={index === 0 ? "eager" : "lazy"}
+                      data-testid={`img-promo-${block.id}`}
+                    />
+                  )}
                 </motion.div>
               </Link>
             ))}

@@ -101,12 +101,25 @@ export default function PromoPage() {
         >
           {promo.imageUrl && (
             <div className="relative aspect-video rounded-lg overflow-hidden">
-              <img
-                src={normalizeImageUrl(promo.imageUrl)}
-                alt={promo.title || "Промо"}
-                className="w-full h-full object-cover"
-                data-testid="img-promo-banner"
-              />
+              {promo.mediaType === "video" ? (
+                <video
+                  src={normalizeImageUrl(promo.imageUrl)}
+                  className="w-full h-full object-cover"
+                  autoPlay
+                  muted
+                  loop
+                  playsInline
+                  controls
+                  data-testid="video-promo-banner"
+                />
+              ) : (
+                <img
+                  src={normalizeImageUrl(promo.imageUrl)}
+                  alt={promo.title || "Промо"}
+                  className="w-full h-full object-cover"
+                  data-testid="img-promo-banner"
+                />
+              )}
             </div>
           )}
 
