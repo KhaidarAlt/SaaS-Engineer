@@ -341,6 +341,7 @@ export const promoBlocks = pgTable("promo_blocks", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
   imageUrl: text("image_url").notNull(),
+  mediaType: text("media_type").notNull().default("image"), // image | video
   title: text("title"),
   description: text("description"), // до 300 символов
   buttonText: text("button_text").notNull().default("Купить"),
