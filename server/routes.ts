@@ -597,37 +597,45 @@ export async function registerRoutes(
   
   registerObjectStorageRoutes(app);
 
+  app.get("/__ping", (_req: Request, res: Response) => {
+    res.type("text/plain").status(200).send("pong");
+  });
+
   app.get("/api/internal/caddy/allow", async (req: Request, res: Response) => {
     try {
-      const token = String(req.query.token || "");
-      const domain = String(req.query.domain || "").toLowerCase().trim();
-
+      const token = req.get("X-Ask-Token") || "";
       if (!process.env.CADDY_ASK_TOKEN || token !== process.env.CADDY_ASK_TOKEN) {
-        return res.status(403).send("forbidden");
+        return res.type("text/plain").status(403).send("forbidden");
       }
 
-      if (!domain || net.isIP(domain)) {
-        return res.status(403).send("forbidden");
+      const rawDomain = String(req.query.domain || "");
+      if (!rawDomain) {
+        return res.type("text/plain").status(400).send("bad request");
       }
 
-      if (domain === "botfactory.kz" || domain === "waha.botfactory.kz") {
-        return res.status(200).send("ok");
+      const domain = rawDomain.toLowerCase().trim().replace(/\.+$/, "");
+
+      if (!domain || !domain.includes(".") || domain === "localhost" || net.isIP(domain)) {
+        console.log(`[caddy-ask] deny domain=${domain} reason=invalid`);
+        return res.type("text/plain").status(403).send("forbidden");
       }
 
-      if (domain.endsWith(".botfactory.kz")) {
-        const slug = domain.replace(".botfactory.kz", "");
-        if (!/^[a-z0-9-]{3,50}$/.test(slug)) {
-          return res.status(403).send("forbidden");
-        }
-        const r = await pool.query("SELECT 1 FROM tenants WHERE slug = $1 LIMIT 1", [slug]);
-        return r.rowCount ? res.status(200).send("ok") : res.status(403).send("forbidden");
+      if (domain === "botfactory.kz" || domain.endsWith(".botfactory.kz")) {
+        console.log(`[caddy-ask] allow domain=${domain} reason=platform`);
+        return res.type("text/plain").status(200).send("ok");
       }
 
-      const r2 = await pool.query("SELECT 1 FROM tenants WHERE custom_domain = $1 LIMIT 1", [domain]);
-      return r2.rowCount ? res.status(200).send("ok") : res.status(403).send("forbidden");
+      const r = await pool.query("SELECT 1 FROM tenants WHERE custom_domain = $1 LIMIT 1", [domain]);
+      if (r.rowCount) {
+        console.log(`[caddy-ask] allow domain=${domain} reason=custom_domain`);
+        return res.type("text/plain").status(200).send("ok");
+      }
+
+      console.log(`[caddy-ask] deny domain=${domain} reason=not_found`);
+      return res.type("text/plain").status(403).send("forbidden");
     } catch (e) {
-      console.error("Caddy allow check error:", e);
-      return res.status(500).send("error");
+      console.error("[caddy-ask] error:", e);
+      return res.type("text/plain").status(500).send("error");
     }
   });
 
