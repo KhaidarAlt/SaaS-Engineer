@@ -203,6 +203,9 @@ export const products = pgTable("products", {
   weight: text("weight"),
   calories: integer("calories"),
   allergens: text("allergens").array(),
+  videoUrl: text("video_url"),
+  videoFormat: text("video_format"), // "16:9", "9:16", "1:1"
+  videoPosterUrl: text("video_poster_url"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
