@@ -603,35 +603,50 @@ export async function registerRoutes(
 
   app.get("/api/internal/caddy/allow", async (req: Request, res: Response) => {
     try {
-      const token = req.get("X-Ask-Token") || "";
+      const headerToken = req.get("X-Ask-Token") || "";
+      const queryToken = String(req.query.token || "");
+      const token = headerToken || queryToken;
+      const tokenSource = headerToken ? "header" : queryToken ? "query" : "none";
+
       if (!process.env.CADDY_ASK_TOKEN || token !== process.env.CADDY_ASK_TOKEN) {
+        console.log(`[caddy-ask] deny tokenSource=${tokenSource} reason=bad_token`);
         return res.type("text/plain").status(403).send("forbidden");
       }
 
-      const rawDomain = String(req.query.domain || "");
+      const rawDomain = String(req.query.domain || "").toLowerCase().trim();
       if (!rawDomain) {
-        return res.type("text/plain").status(400).send("bad request");
+        console.log(`[caddy-ask] deny reason=no_domain`);
+        return res.type("text/plain").status(403).send("forbidden");
       }
 
-      const domain = rawDomain.toLowerCase().trim().replace(/\.+$/, "");
+      const domain = rawDomain.replace(/\.+$/, "");
 
-      if (!domain || !domain.includes(".") || domain === "localhost" || net.isIP(domain)) {
-        console.log(`[caddy-ask] deny domain=${domain} reason=invalid`);
+      if (!domain || net.isIP(domain)) {
+        console.log(`[caddy-ask] deny domain=${domain} tokenSource=${tokenSource} reason=invalid`);
         return res.type("text/plain").status(403).send("forbidden");
       }
 
       if (domain === "botfactory.kz" || domain.endsWith(".botfactory.kz")) {
-        console.log(`[caddy-ask] allow domain=${domain} reason=platform`);
+        console.log(`[caddy-ask] allow domain=${domain} tokenSource=${tokenSource} reason=platform`);
         return res.type("text/plain").status(200).send("ok");
+      }
+
+      const allowedCustom = process.env.ALLOWED_CUSTOM_DOMAINS;
+      if (allowedCustom) {
+        const list = allowedCustom.split(",").map(d => d.trim().toLowerCase()).filter(Boolean);
+        if (list.includes(domain)) {
+          console.log(`[caddy-ask] allow domain=${domain} tokenSource=${tokenSource} reason=env_whitelist`);
+          return res.type("text/plain").status(200).send("ok");
+        }
       }
 
       const r = await pool.query("SELECT 1 FROM tenants WHERE custom_domain = $1 LIMIT 1", [domain]);
       if (r.rowCount) {
-        console.log(`[caddy-ask] allow domain=${domain} reason=custom_domain`);
+        console.log(`[caddy-ask] allow domain=${domain} tokenSource=${tokenSource} reason=custom_domain`);
         return res.type("text/plain").status(200).send("ok");
       }
 
-      console.log(`[caddy-ask] deny domain=${domain} reason=not_found`);
+      console.log(`[caddy-ask] deny domain=${domain} tokenSource=${tokenSource} reason=not_found`);
       return res.type("text/plain").status(403).send("forbidden");
     } catch (e) {
       console.error("[caddy-ask] error:", e);
