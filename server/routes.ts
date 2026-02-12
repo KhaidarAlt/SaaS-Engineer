@@ -15,6 +15,8 @@ import type { User, Tenant, Subscription, Plan } from "@shared/schema";
 import { ObjectStorageService, registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import { sendPasswordResetEmail } from "./services/gmail";
 import { randomBytes } from "crypto";
+import net from "node:net";
+import { pool } from "./db";
 
 const SessionStore = MemoryStore(session);
 
@@ -571,10 +573,7 @@ export async function registerRoutes(
   // Migrate legacy local uploads to object storage
   await migrateLegacyUploads();
 
-  // Trust proxy in production (required for secure cookies behind reverse proxy)
-  if (process.env.NODE_ENV === "production") {
-    app.set("trust proxy", 1);
-  }
+  app.set("trust proxy", 1);
 
   app.use(
     session({
@@ -597,7 +596,41 @@ export async function registerRoutes(
   app.use(passport.session());
   
   registerObjectStorageRoutes(app);
-  
+
+  app.get("/api/internal/caddy/allow", async (req: Request, res: Response) => {
+    try {
+      const token = String(req.query.token || "");
+      const domain = String(req.query.domain || "").toLowerCase().trim();
+
+      if (!process.env.CADDY_ASK_TOKEN || token !== process.env.CADDY_ASK_TOKEN) {
+        return res.status(403).send("forbidden");
+      }
+
+      if (!domain || net.isIP(domain)) {
+        return res.status(403).send("forbidden");
+      }
+
+      if (domain === "botfactory.kz" || domain === "waha.botfactory.kz") {
+        return res.status(200).send("ok");
+      }
+
+      if (domain.endsWith(".botfactory.kz")) {
+        const slug = domain.replace(".botfactory.kz", "");
+        if (!/^[a-z0-9-]{3,50}$/.test(slug)) {
+          return res.status(403).send("forbidden");
+        }
+        const r = await pool.query("SELECT 1 FROM tenants WHERE slug = $1 LIMIT 1", [slug]);
+        return r.rowCount ? res.status(200).send("ok") : res.status(403).send("forbidden");
+      }
+
+      const r2 = await pool.query("SELECT 1 FROM tenants WHERE custom_domain = $1 LIMIT 1", [domain]);
+      return r2.rowCount ? res.status(200).send("ok") : res.status(403).send("forbidden");
+    } catch (e) {
+      console.error("Caddy allow check error:", e);
+      return res.status(500).send("error");
+    }
+  });
+
   // Serve legacy local uploads (for backward compatibility)
   app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
