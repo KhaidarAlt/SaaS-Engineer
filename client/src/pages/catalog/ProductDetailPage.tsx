@@ -336,10 +336,12 @@ export default function ProductDetailPage() {
   const product = data.product;
   const videoUrl = (product as any).videoUrl ? normalizeImageUrl((product as any).videoUrl) : null;
   const videoPosterUrl = (product as any).videoPosterUrl ? normalizeImageUrl((product as any).videoPosterUrl) : null;
+  const isVideoPrimary = (product as any).videoPrimary;
   const allMedia: string[] = [
-    ...(videoUrl ? [videoUrl] : []),
+    ...(videoUrl && isVideoPrimary ? [videoUrl] : []),
     ...(product.mainImageUrl ? [normalizeImageUrl(product.mainImageUrl)] : []),
     ...((product.galleryUrls || []).map((u: string) => normalizeImageUrl(u))),
+    ...(videoUrl && !isVideoPrimary ? [videoUrl] : []),
   ].filter(Boolean) as string[];
   const allImages = allMedia;
 
@@ -422,7 +424,7 @@ export default function ProductDetailPage() {
                         autoPlay
                         muted
                         playsInline
-                        className="w-full h-full object-cover"
+                        className="w-full h-full object-contain bg-black"
                         data-testid={`video-product-${product.id}`}
                       />
                     </motion.div>
@@ -505,7 +507,7 @@ export default function ProductDetailPage() {
                           poster={videoPosterUrl || normalizeImageUrl(product.mainImageUrl)}
                           muted
                           playsInline
-                          className="w-full h-full object-cover"
+                          className="w-full h-full object-contain bg-black"
                         />
                       ) : (
                         <img

@@ -834,7 +834,7 @@ function DishCard({
 
       <div className="relative shrink-0 w-24 h-24 sm:w-28 sm:h-28">
         <div className="w-full h-full rounded-md overflow-hidden bg-muted">
-          {product.videoUrl ? (
+          {product.videoUrl && product.videoPrimary ? (
             <video
               src={normalizeImageUrl(product.videoUrl)}
               poster={normalizeImageUrl(product.videoPosterUrl || product.mainImageUrl)}
@@ -842,7 +842,7 @@ function DishCard({
               muted
               loop
               playsInline
-              className="w-full h-full object-cover"
+              className="w-full h-full object-contain bg-black"
               data-testid={`video-product-${product.id}`}
             />
           ) : imgUrl ? (

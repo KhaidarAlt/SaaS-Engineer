@@ -187,7 +187,7 @@ function ProductCard({
           <div
             className="aspect-square relative overflow-hidden bg-muted cursor-pointer"
           >
-            {(product as any).videoUrl ? (
+            {(product as any).videoUrl && (product as any).videoPrimary ? (
               <video
                 src={normalizeImageUrl((product as any).videoUrl)}
                 poster={normalizeImageUrl((product as any).videoPosterUrl || product.mainImageUrl)}
@@ -195,7 +195,7 @@ function ProductCard({
                 muted
                 loop
                 playsInline
-                className="w-full h-full object-cover"
+                className="w-full h-full object-contain bg-black"
                 data-testid={`video-product-${product.id}`}
               />
             ) : product.mainImageUrl ? (

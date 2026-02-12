@@ -143,6 +143,7 @@ export default function ProductFormPage() {
   const [videoUrl, setVideoUrl] = useState<string>("");
   const [videoFormat, setVideoFormat] = useState<string>("");
   const [videoPosterUrl, setVideoPosterUrl] = useState<string>("");
+  const [videoPrimary, setVideoPrimary] = useState(false);
   const [isUploadingVideo, setIsUploadingVideo] = useState(false);
   const [videoUploadProgress, setVideoUploadProgress] = useState("");
   const [autoGeneratePoster, setAutoGeneratePoster] = useState(true);
@@ -213,6 +214,7 @@ export default function ProductFormPage() {
       setVideoUrl((product as any).videoUrl || "");
       setVideoFormat((product as any).videoFormat || "");
       setVideoPosterUrl((product as any).videoPosterUrl || "");
+      setVideoPrimary((product as any).videoPrimary || false);
       
       form.reset({
         sku: product.sku,
@@ -241,6 +243,7 @@ export default function ProductFormPage() {
         videoUrl: videoUrl || null,
         videoFormat: videoFormat || null,
         videoPosterUrl: videoPosterUrl || null,
+        videoPrimary: videoPrimary,
       };
       
       if (catalogTemplate === "fashion") {
@@ -1391,6 +1394,23 @@ export default function ProductFormPage() {
                   data-testid="switch-auto-poster"
                 />
               </div>
+
+              {videoUrl && (
+                <div className="flex items-center justify-between py-2">
+                  <div>
+                    <Label htmlFor="videoPrimary">Показывать видео первым</Label>
+                    <p className="text-sm text-muted-foreground">
+                      Видео будет отображаться вместо фото в карточке товара
+                    </p>
+                  </div>
+                  <Switch
+                    id="videoPrimary"
+                    checked={videoPrimary}
+                    onCheckedChange={setVideoPrimary}
+                    data-testid="switch-video-primary"
+                  />
+                </div>
+              )}
 
               {isUploadingVideo ? (
                 <div className="flex flex-col items-center justify-center h-32 rounded-lg border border-dashed gap-2" data-testid="video-upload-progress">
