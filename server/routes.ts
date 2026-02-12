@@ -1657,7 +1657,7 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Файл слишком большой. Максимум 50MB." });
       }
 
-      const { buffer: optimizedBuffer, mimeType } = await optimizeVideo(inputBuffer, originalName);
+      const { buffer: optimizedBuffer, mimeType } = await optimizeVideo(inputBuffer, originalName, { maxDuration: 15 });
 
       const videoObjectStorage = new ObjectStorageService();
       const objectPath = await videoObjectStorage.uploadBuffer(optimizedBuffer, mimeType);
@@ -1670,6 +1670,62 @@ export async function registerRoutes(
       });
     } catch (error: any) {
       console.error("Video upload/optimize error:", error);
+      res.status(500).json({ error: error.message || "Ошибка обработки видео" });
+    }
+  });
+
+  app.post("/api/uploads/product-video", requireAuth, express.raw({ type: ["video/mp4", "video/quicktime", "video/webm", "video/x-msvideo"], limit: "50mb" }), async (req, res) => {
+    try {
+      const allowedVideoTypes = ["video/mp4", "video/quicktime", "video/webm", "video/x-msvideo"];
+      const contentType = req.headers["content-type"]?.split(";")[0]?.trim();
+      if (!contentType || !allowedVideoTypes.includes(contentType)) {
+        return res.status(400).json({ error: "Неверный формат. Только MP4, MOV, WebM, AVI." });
+      }
+
+      const { optimizeVideo } = await import("./services/video-optimizer.js");
+      const originalName = decodeURIComponent((req.headers["x-original-filename"] as string) || "video.mp4");
+      const aspectRatio = (req.headers["x-aspect-ratio"] as string) || "16:9";
+      const generatePoster = req.headers["x-generate-poster"] === "true";
+      const maxDuration = parseInt(req.headers["x-max-duration"] as string) || 30;
+      const inputBuffer = req.body as Buffer;
+
+      if (!inputBuffer || inputBuffer.length === 0) {
+        return res.status(400).json({ error: "Видео файл не получен" });
+      }
+
+      if (inputBuffer.length > 50 * 1024 * 1024) {
+        return res.status(400).json({ error: "Файл слишком большой. Максимум 50MB." });
+      }
+
+      const validAspects = ["16:9", "9:16", "1:1"];
+      if (!validAspects.includes(aspectRatio)) {
+        return res.status(400).json({ error: "Неверный формат видео. Допустимые: 16:9, 9:16, 1:1" });
+      }
+
+      const result = await optimizeVideo(inputBuffer, originalName, {
+        aspectRatio: aspectRatio as any,
+        maxDuration,
+        generatePoster,
+      });
+
+      const videoStorage = new ObjectStorageService();
+      const videoPath = await videoStorage.uploadBuffer(result.buffer, result.mimeType);
+
+      let posterPath: string | undefined;
+      if (result.posterBuffer && result.posterMimeType) {
+        posterPath = await videoStorage.uploadBuffer(result.posterBuffer, result.posterMimeType);
+      }
+
+      res.json({
+        videoPath,
+        posterPath,
+        aspectRatio,
+        originalSize: inputBuffer.length,
+        optimizedSize: result.buffer.length,
+        savedPercent: Math.round((1 - result.buffer.length / inputBuffer.length) * 100),
+      });
+    } catch (error: any) {
+      console.error("Product video upload error:", error);
       res.status(500).json({ error: error.message || "Ошибка обработки видео" });
     }
   });

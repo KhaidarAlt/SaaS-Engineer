@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation, useRoute } from "wouter";
 import { motion } from "framer-motion";
-import { ArrowLeft, Save, Package, Wand2, Plus, X, Palette, Users, Tag, UtensilsCrossed } from "lucide-react";
+import { ArrowLeft, Save, Package, Wand2, Plus, X, Palette, Users, Tag, UtensilsCrossed, Video, Upload, Loader2, Image as ImageIcon } from "lucide-react";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -140,6 +140,13 @@ export default function ProductFormPage() {
   const [allergens, setAllergens] = useState<string[]>([]);
   const [modifiers, setModifiers] = useState<{name: string; options: {label: string; price: number}[]}[]>([]);
 
+  const [videoUrl, setVideoUrl] = useState<string>("");
+  const [videoFormat, setVideoFormat] = useState<string>("");
+  const [videoPosterUrl, setVideoPosterUrl] = useState<string>("");
+  const [isUploadingVideo, setIsUploadingVideo] = useState(false);
+  const [videoUploadProgress, setVideoUploadProgress] = useState("");
+  const [autoGeneratePoster, setAutoGeneratePoster] = useState(true);
+
   const [brand, setBrand] = useState("");
   const [unitOfMeasure, setUnitOfMeasure] = useState("шт");
   const [specs, setSpecs] = useState<{name: string; value: string}[]>([]);
@@ -202,6 +209,10 @@ export default function ProductFormPage() {
       setCalories((product as any).calories || undefined);
       setAllergens((product as any).allergens || []);
       setModifiers((product as any).modifiers || []);
+
+      setVideoUrl((product as any).videoUrl || "");
+      setVideoFormat((product as any).videoFormat || "");
+      setVideoPosterUrl((product as any).videoPosterUrl || "");
       
       form.reset({
         sku: product.sku,
@@ -227,6 +238,9 @@ export default function ProductFormPage() {
       const payload: Record<string, any> = {
         ...data,
         tags: selectedTags,
+        videoUrl: videoUrl || null,
+        videoFormat: videoFormat || null,
+        videoPosterUrl: videoPosterUrl || null,
       };
       
       if (catalogTemplate === "fashion") {
@@ -364,6 +378,99 @@ export default function ProductFormPage() {
       }
       return [...prev, { size, colorHex, qty: Math.max(0, qty) }];
     });
+  };
+
+  const normalizeMediaUrl = (url: string | null | undefined): string => {
+    if (!url) return "";
+    if (url.startsWith("http") || url.startsWith("/")) return url;
+    return `/objects/${url}`;
+  };
+
+  const getVideoFormats = (): {value: string; label: string}[] => {
+    switch (catalogTemplate) {
+      case "universal": return [
+        { value: "16:9", label: "Горизонтальный (16:9)" },
+        { value: "1:1", label: "Квадратный (1:1)" },
+      ];
+      case "fashion": return [
+        { value: "9:16", label: "Вертикальный (9:16)" },
+      ];
+      case "food": return [
+        { value: "1:1", label: "Квадратный (1:1)" },
+      ];
+      default: return [{ value: "16:9", label: "Горизонтальный (16:9)" }];
+    }
+  };
+
+  const getMaxDuration = (): number => {
+    return catalogTemplate === "universal" ? 30 : 15;
+  };
+
+  const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const allowedTypes = ["video/mp4", "video/quicktime", "video/webm", "video/x-msvideo"];
+    if (!allowedTypes.includes(file.type)) {
+      toast({ title: "Неверный формат", description: "Только MP4, MOV, WebM, AVI", variant: "destructive" });
+      return;
+    }
+
+    if (file.size > 50 * 1024 * 1024) {
+      toast({ title: "Файл слишком большой", description: "Максимум 50MB для видео", variant: "destructive" });
+      return;
+    }
+
+    const formats = getVideoFormats();
+    const selectedFormat = videoFormat || formats[0].value;
+    if (!videoFormat) setVideoFormat(selectedFormat);
+
+    setIsUploadingVideo(true);
+    setVideoUploadProgress("Оптимизация видео...");
+
+    try {
+      const response = await fetch("/api/uploads/product-video", {
+        method: "POST",
+        headers: {
+          "Content-Type": file.type,
+          "X-Original-Filename": encodeURIComponent(file.name),
+          "X-Aspect-Ratio": selectedFormat,
+          "X-Generate-Poster": autoGeneratePoster ? "true" : "false",
+          "X-Max-Duration": String(getMaxDuration()),
+        },
+        credentials: "include",
+        body: file,
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error || "Ошибка загрузки видео");
+      }
+
+      const result = await response.json();
+      setVideoUrl(result.videoPath);
+      setVideoFormat(result.aspectRatio);
+      if (result.posterPath) {
+        setVideoPosterUrl(result.posterPath);
+      }
+
+      setVideoUploadProgress("");
+      toast({
+        title: "Видео загружено",
+        description: `Сжатие: ${result.savedPercent}%`,
+      });
+    } catch (error: any) {
+      toast({ title: "Ошибка", description: error.message, variant: "destructive" });
+      setVideoUploadProgress("");
+    } finally {
+      setIsUploadingVideo(false);
+    }
+  };
+
+  const handleRemoveVideo = () => {
+    setVideoUrl("");
+    setVideoFormat("");
+    setVideoPosterUrl("");
   };
 
   if (productLoading && isEdit) {
@@ -1236,6 +1343,132 @@ export default function ProductFormPage() {
             </CardContent>
           </Card>
 
+          {isEdit && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Video className="h-5 w-5" />
+                Видео товара
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label>Формат видео</Label>
+                {getVideoFormats().length === 1 ? (
+                  <p className="text-sm text-muted-foreground" data-testid="text-video-format">
+                    {getVideoFormats()[0].label}
+                  </p>
+                ) : (
+                  <Select
+                    value={videoFormat || getVideoFormats()[0].value}
+                    onValueChange={(value) => setVideoFormat(value)}
+                  >
+                    <SelectTrigger data-testid="select-video-format">
+                      <SelectValue placeholder="Выберите формат" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {getVideoFormats().map((fmt) => (
+                        <SelectItem key={fmt.value} value={fmt.value}>
+                          {fmt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+
+              <div className="flex items-center justify-between py-2">
+                <div>
+                  <Label htmlFor="autoGeneratePoster">Автогенерация обложки</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Создать обложку из первого кадра видео
+                  </p>
+                </div>
+                <Switch
+                  id="autoGeneratePoster"
+                  checked={autoGeneratePoster}
+                  onCheckedChange={setAutoGeneratePoster}
+                  data-testid="switch-auto-poster"
+                />
+              </div>
+
+              {isUploadingVideo ? (
+                <div className="flex flex-col items-center justify-center h-32 rounded-lg border border-dashed gap-2" data-testid="video-upload-progress">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  <span className="text-sm text-muted-foreground">{videoUploadProgress}</span>
+                </div>
+              ) : videoUrl ? (
+                <div className="space-y-3">
+                  <div className="relative rounded-lg overflow-hidden bg-muted">
+                    <video
+                      src={normalizeMediaUrl(videoUrl)}
+                      className={`w-full ${
+                        videoFormat === "9:16" ? "aspect-[9/16] max-h-[400px] mx-auto" :
+                        videoFormat === "1:1" ? "aspect-square" :
+                        "aspect-video"
+                      } object-cover`}
+                      controls
+                      muted
+                      playsInline
+                      data-testid="video-preview"
+                    />
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="icon"
+                      className="absolute top-2 right-2"
+                      onClick={handleRemoveVideo}
+                      data-testid="button-remove-video"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  {videoPosterUrl && (
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Обложка видео</Label>
+                      <div className="w-24 h-24 rounded-md overflow-hidden bg-muted">
+                        <img
+                          src={normalizeMediaUrl(videoPosterUrl)}
+                          alt="Обложка видео"
+                          className="w-full h-full object-cover"
+                          data-testid="img-video-poster"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div>
+                  <input
+                    type="file"
+                    accept="video/mp4,video/quicktime,video/webm,video/x-msvideo"
+                    onChange={handleVideoUpload}
+                    className="hidden"
+                    id="video-upload-input"
+                    data-testid="input-video-upload"
+                  />
+                  <label htmlFor="video-upload-input">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full"
+                      onClick={() => document.getElementById("video-upload-input")?.click()}
+                      data-testid="button-upload-video"
+                    >
+                      <Upload className="h-4 w-4 mr-2" />
+                      Загрузить видео
+                    </Button>
+                  </label>
+                </div>
+              )}
+
+              <p className="text-xs text-muted-foreground">
+                MP4, MOV, WebM, AVI. Макс. {getMaxDuration()} сек, до 50MB
+              </p>
+            </CardContent>
+          </Card>
+          )}
+
           <Card>
             <CardHeader>
               <CardTitle className="text-lg">Наличие и статус</CardTitle>
@@ -1311,7 +1544,7 @@ export default function ProductFormPage() {
             >
               Отмена
             </Button>
-            <Button type="submit" disabled={mutation.isPending || isCompressingImages} data-testid="button-save">
+            <Button type="submit" disabled={mutation.isPending || isCompressingImages || isUploadingVideo} data-testid="button-save">
               {mutation.isPending ? (
                 <span className="flex items-center gap-2">
                   <span className="animate-spin rounded-full h-4 w-4 border-2 border-primary-foreground border-t-transparent" />

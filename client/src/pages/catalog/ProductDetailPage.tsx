@@ -36,6 +36,12 @@ import { trackEvent } from "@/lib/analytics";
 import { apiRequest } from "@/lib/queryClient";
 import type { Product, Category, Promotion, Tenant } from "@shared/schema";
 
+function normalizeImageUrl(url: string | null | undefined): string {
+  if (!url) return "";
+  if (url.startsWith("http") || url.startsWith("/objects/")) return url;
+  return `/objects/${url}`;
+}
+
 interface ChatMessage {
   id: string;
   role: "user" | "assistant";
@@ -328,10 +334,14 @@ export default function ProductDetailPage() {
   }
 
   const product = data.product;
-  const allImages = [
-    product.mainImageUrl,
-    ...(product.galleryUrls || []),
+  const videoUrl = (product as any).videoUrl ? normalizeImageUrl((product as any).videoUrl) : null;
+  const videoPosterUrl = (product as any).videoPosterUrl ? normalizeImageUrl((product as any).videoPosterUrl) : null;
+  const allMedia: string[] = [
+    ...(videoUrl ? [videoUrl] : []),
+    ...(product.mainImageUrl ? [normalizeImageUrl(product.mainImageUrl)] : []),
+    ...((product.galleryUrls || []).map((u: string) => normalizeImageUrl(u))),
   ].filter(Boolean) as string[];
+  const allImages = allMedia;
 
   const nextImage = () => {
     if (allImages.length > 1) {
@@ -396,16 +406,38 @@ export default function ProductDetailPage() {
             <div className="relative aspect-square rounded-xl overflow-hidden bg-muted">
               <AnimatePresence mode="wait">
                 {allImages.length > 0 ? (
-                  <motion.img
-                    key={currentImageIndex}
-                    src={allImages[currentImageIndex]}
-                    alt={product.name}
-                    className="w-full h-full object-cover"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.2 }}
-                  />
+                  videoUrl && allImages[currentImageIndex] === videoUrl ? (
+                    <motion.div
+                      key="video"
+                      className="w-full h-full"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      <video
+                        src={videoUrl}
+                        poster={videoPosterUrl || normalizeImageUrl(product.mainImageUrl)}
+                        controls
+                        autoPlay
+                        muted
+                        playsInline
+                        className="w-full h-full object-cover"
+                        data-testid={`video-product-${product.id}`}
+                      />
+                    </motion.div>
+                  ) : (
+                    <motion.img
+                      key={currentImageIndex}
+                      src={allImages[currentImageIndex]}
+                      alt={product.name}
+                      className="w-full h-full object-cover"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.2 }}
+                    />
+                  )
                 ) : (
                   <div className="w-full h-full flex items-center justify-center">
                     <Package className="h-24 w-24 text-muted-foreground/30" />
@@ -454,24 +486,37 @@ export default function ProductDetailPage() {
 
             {allImages.length > 1 && (
               <div className="flex gap-2 overflow-x-auto pb-2">
-                {allImages.map((img, index) => (
-                  <button
-                    key={index}
-                    onClick={() => setCurrentImageIndex(index)}
-                    className={`relative flex-shrink-0 w-20 h-20 rounded-lg overflow-hidden border-2 ${
-                      index === currentImageIndex
-                        ? "border-primary"
-                        : "border-border"
-                    }`}
-                    data-testid={`button-thumbnail-${index}`}
-                  >
-                    <img
-                      src={img}
-                      alt={`${product.name} ${index + 1}`}
-                      className="w-full h-full object-cover"
-                    />
-                  </button>
-                ))}
+                {allImages.map((img, index) => {
+                  const isVideo = videoUrl && img === videoUrl;
+                  return (
+                    <button
+                      key={index}
+                      onClick={() => setCurrentImageIndex(index)}
+                      className={`relative flex-shrink-0 w-20 h-20 rounded-lg overflow-hidden border-2 ${
+                        index === currentImageIndex
+                          ? "border-primary"
+                          : "border-border"
+                      }`}
+                      data-testid={`button-thumbnail-${index}`}
+                    >
+                      {isVideo ? (
+                        <video
+                          src={img}
+                          poster={videoPosterUrl || normalizeImageUrl(product.mainImageUrl)}
+                          muted
+                          playsInline
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <img
+                          src={img}
+                          alt={`${product.name} ${index + 1}`}
+                          className="w-full h-full object-cover"
+                        />
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             )}
           </motion.div>

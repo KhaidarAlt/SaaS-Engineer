@@ -184,10 +184,23 @@ function ProductCard({
     >
       <Card className="overflow-hidden h-full hover-elevate">
         <Link href={`${basePath}/product/${product.id}`}>
-          <div className="aspect-square relative overflow-hidden bg-muted cursor-pointer">
-            {product.mainImageUrl ? (
+          <div
+            className="aspect-square relative overflow-hidden bg-muted cursor-pointer"
+          >
+            {(product as any).videoUrl ? (
+              <video
+                src={normalizeImageUrl((product as any).videoUrl)}
+                poster={normalizeImageUrl((product as any).videoPosterUrl || product.mainImageUrl)}
+                autoPlay
+                muted
+                loop
+                playsInline
+                className="w-full h-full object-cover"
+                data-testid={`video-product-${product.id}`}
+              />
+            ) : product.mainImageUrl ? (
               <img
-                src={product.mainImageUrl}
+                src={normalizeImageUrl(product.mainImageUrl)}
                 alt={product.name}
                 className="w-full h-full object-cover"
                 loading="lazy"

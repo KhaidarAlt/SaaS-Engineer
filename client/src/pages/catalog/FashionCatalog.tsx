@@ -383,7 +383,18 @@ export default function FashionCatalog({
               data-testid={`card-product-${product.id}`}
             >
               <div className="absolute inset-0 bg-black">
-                {imageUrl ? (
+                {(product as any).videoUrl ? (
+                  <video
+                    src={normalizeImageUrl((product as any).videoUrl)}
+                    poster={normalizeImageUrl((product as any).videoPosterUrl || product.mainImageUrl)}
+                    autoPlay
+                    muted
+                    loop
+                    playsInline
+                    className="w-full h-full object-cover"
+                    data-testid={`video-product-${product.id}`}
+                  />
+                ) : imageUrl ? (
                   <img
                     src={imageUrl}
                     alt={product.name}
