@@ -1419,14 +1419,10 @@ export default function ProductFormPage() {
                 </div>
               ) : videoUrl ? (
                 <div className="space-y-3">
-                  <div className="relative rounded-lg overflow-hidden bg-muted">
+                  <div className="relative rounded-lg overflow-hidden bg-neutral-900 flex items-center justify-center">
                     <video
                       src={normalizeMediaUrl(videoUrl)}
-                      className={`w-full ${
-                        videoFormat === "9:16" ? "aspect-[9/16] max-h-[400px] mx-auto" :
-                        videoFormat === "1:1" ? "aspect-square" :
-                        "aspect-video"
-                      } object-contain`}
+                      className="max-w-full max-h-[400px]"
                       controls
                       muted
                       playsInline
