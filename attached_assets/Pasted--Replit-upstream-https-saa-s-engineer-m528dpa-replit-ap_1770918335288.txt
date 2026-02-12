@@ -1,0 +1,43 @@
+Привет! У нас приложение развернуто на Replit (upstream: https://saa-s-engineer--m528dpa.replit.app). Мы планируем поставить собственный reverse-proxy (VPS) перед Replit, чтобы принимать wildcard-субдомены и кастомные домены клиентов, а затем проксировать на Replit.
+
+Подскажите, пожалуйста, чтобы избежать недоразумений:
+
+1. Поддерживается ли сценарий, когда запросы приходят на Replit только с одного IP (наш VPS), а исходный домен клиента не является Replit Custom Domain?
+
+   * Не блокирует ли Replit запросы, если внешний домен “не привязан” в Replit?
+
+2. Есть ли ограничения на изменение заголовка Host на стороне reverse-proxy?
+
+   * Мы хотим отправлять на upstream Host: saa-s-engineer--m528dpa.replit.app
+   * При этом оригинальный домен клиента передавать в X-Forwarded-Host / X-Original-Host.
+     Это корректно для Replit?
+
+3. Как Replit обрабатывает X-Forwarded-Proto / X-Forwarded-For / X-Forwarded-Host?
+
+   * Есть ли рекомендации по “trust proxy” (особенно для secure cookies, редиректов и определения https)?
+
+4. Есть ли ограничения/особенности для WebSocket/SSE/long-polling запросов через reverse-proxy на Deployments?
+
+   * Поддерживаются ли WS через https upstream стабильно?
+
+5. Есть ли ограничения на количество/частоту запросов с одного IP (наш VPS)?
+
+   * Есть ли rate-limit / DDoS-защита, которая может начать резать трафик, если доменов клиентов станет много?
+
+6. Ограничения по размеру request body / header size / timeout’ам на стороне Replit Deployments:
+
+   * Максимальный размер загрузки (фото/видео)
+   * Idle timeout / request timeout
+
+7. Насколько стабильный upstream домен (saa-s-engineer--m528dpa.replit.app)?
+
+   * Может ли он измениться при redeploy?
+   * Есть ли рекомендуемый “stable endpoint” для продакшена, чтобы не ломать прокси-настройки?
+
+8. Если у нас включен Cloudflare перед нашим доменом, есть ли особенности при проксировании Cloudflare -> VPS -> Replit?
+
+   * Какие заголовки/настройки важны, чтобы избежать 520/521/redirect loop?
+
+9. Есть ли запреты/ограничения по multi-tenant логике на одном Deployment (определение тенанта по домену из X-Forwarded-Host)?
+
+Если у Replit есть официальная рекомендация/док по “reverse proxy in front of Deployment” — пришлите, пожалуйста, ссылку.

@@ -1,0 +1,110 @@
+Нужно реализовать в моём Replit-проекте (Node.js/Express, Postgres Neon через DATABASE_URL) внутренний endpoint для Caddy On-Demand TLS.
+
+Контекст:
+
+* На VPS стоит Caddy как reverse proxy.
+* Caddy использует on_demand_tls + ask-URL, чтобы разрешать выпуск SSL только для доменов, которые реально принадлежат моим тенантам.
+* В Replit уже добавлен секрет/переменная окружения: CADDY_ASK_TOKEN (длинный токен).
+
+Задача для Replit:
+
+1. Добавить подключение к Postgres (Neon) через node-postgres.
+
+   * Установить пакет `pg`.
+   * Создать/добавить модуль подключения к БД, который использует `process.env.DATABASE_URL` и создаёт Pool.
+   * Для Neon включить SSL (обычно нужно `ssl: { rejectUnauthorized: false }`), но не ломать текущее подключение.
+
+Пример (можно адаптировать под структуру проекта):
+
+```js
+import pg from "pg";
+
+export const db = new pg.Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false },
+});
+```
+
+2. Реализовать Express route:
+   `GET /api/internal/caddy/allow`
+
+Требования к route:
+
+* Проверяет query-параметр `token` и сравнивает с `process.env.CADDY_ASK_TOKEN`. Если не совпадает — 403.
+
+* Берёт `domain` из query: `domain=<строка>`, приводит к lower-case, trim.
+
+* Запрещает IP-адреса (IPv4/IPv6): если `net.isIP(domain)` true — 403.
+
+* Разрешает только домены, которые принадлежат тенантам:
+  A) Поддомены вида `slug.botfactory.kz`:
+
+  * Вытаскивает slug из домена.
+  * Валидирует slug regex: `^[a-z0-9-]{3,50}$` (иначе 403).
+  * Делает запрос в БД: `select 1 from tenants where slug=$1 limit 1`.
+  * Если найдено — 200, иначе 403.
+    B) Кастомные домены клиентов второго уровня (например `myshop.kz`):
+  * Делает запрос в БД: `select 1 from tenants where custom_domain=$1 limit 1`.
+  * Если найдено — 200, иначе 403.
+
+* В ответе:
+
+  * `200 OK` с телом `ok` если домен разрешён.
+  * `403 forbidden` если запрещён.
+  * `500 error` при исключениях.
+
+Код route (нужно вставить в сервер до catch-all роутов):
+
+```js
+import net from "node:net";
+import { db } from "./db.js"; // поправить путь под проект
+
+app.get("/api/internal/caddy/allow", async (req, res) => {
+  try {
+    const token = String(req.query.token || "");
+    const domain = String(req.query.domain || "").toLowerCase().trim();
+
+    if (!process.env.CADDY_ASK_TOKEN || token !== process.env.CADDY_ASK_TOKEN) {
+      return res.status(403).send("forbidden");
+    }
+
+    if (!domain || net.isIP(domain)) {
+      return res.status(403).send("forbidden");
+    }
+
+    // (опционально) явно разрешить базовые домены
+    if (domain === "botfactory.kz" || domain === "waha.botfactory.kz") {
+      return res.status(200).send("ok");
+    }
+
+    // A) slug.botfactory.kz
+    if (domain.endsWith(".botfactory.kz")) {
+      const slug = domain.replace(".botfactory.kz", "");
+      if (!/^[a-z0-9-]{3,50}$/.test(slug)) {
+        return res.status(403).send("forbidden");
+      }
+
+      const r = await db.query("select 1 from tenants where slug = $1 limit 1", [slug]);
+      return r.rowCount ? res.status(200).send("ok") : res.status(403).send("forbidden");
+    }
+
+    // B) кастомный домен клиента
+    const r2 = await db.query("select 1 from tenants where custom_domain = $1 limit 1", [domain]);
+    return r2.rowCount ? res.status(200).send("ok") : res.status(403).send("forbidden");
+  } catch (e) {
+    return res.status(500).send("error");
+  }
+});
+```
+
+3. Важно:
+
+* Убедиться, что `tenants`, `slug`, `custom_domain` соответствуют реальной схеме БД.
+  Если у меня в проекте другие названия таблицы/полей — нужно заменить SQL на правильные.
+
+4. Тест после деплоя:
+   Команда должна вернуть 200:
+   `curl -i "https://<мой-replit-домен>/api/internal/caddy/allow?token=<CADDY_ASK_TOKEN>&domain=botfactory.kz"`
+
+И должна вернуть 403:
+`curl -i "https://<мой-replit-домен>/api/internal/caddy/allow?token=<CADDY_ASK_TOKEN>&domain=45.90.35.9"`
