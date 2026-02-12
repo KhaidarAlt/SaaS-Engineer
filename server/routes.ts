@@ -613,7 +613,7 @@ export async function registerRoutes(
         return res.type("text/plain").status(403).send("forbidden");
       }
 
-      const rawDomain = String(req.query.domain || "").toLowerCase().trim();
+      const rawDomain = String(req.query.domain || req.query.host || req.query.server_name || "").toLowerCase().trim();
       if (!rawDomain) {
         console.log(`[caddy-ask] deny reason=no_domain`);
         return res.type("text/plain").status(403).send("forbidden");
