@@ -206,6 +206,7 @@ export const products = pgTable("products", {
   videoUrl: text("video_url"),
   videoFormat: text("video_format"), // "16:9", "9:16", "1:1"
   videoPosterUrl: text("video_poster_url"),
+  videoPrimary: boolean("video_primary").default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
