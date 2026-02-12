@@ -1406,7 +1406,7 @@ export default function ProductFormPage() {
                         videoFormat === "9:16" ? "aspect-[9/16] max-h-[400px] mx-auto" :
                         videoFormat === "1:1" ? "aspect-square" :
                         "aspect-video"
-                      } object-cover`}
+                      } object-contain`}
                       controls
                       muted
                       playsInline
