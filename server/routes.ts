@@ -700,11 +700,23 @@ export async function registerRoutes(
   });
 
   function getEffectiveHost(req: Request): string {
-    const xForwardedHost = req.get("x-forwarded-host");
-    if (xForwardedHost) {
-      return xForwardedHost.split(",")[0].trim().toLowerCase().replace(/:\d+$/, "");
+    const candidates = [
+      req.get("x-forwarded-host"),
+      req.get("x-original-host"),
+      req.get("x-real-host"),
+      req.get("x-tenant-host"),
+      req.get("x-forwarded-server"),
+    ];
+    for (const val of candidates) {
+      if (val) {
+        const host = val.split(",")[0].trim().toLowerCase().replace(/:\d+$/, "");
+        if (host && host !== "localhost" && !host.includes("replit") && !host.includes("worf.replit.dev")) {
+          return host;
+        }
+      }
     }
-    return (req.hostname || req.get("host") || "").toLowerCase().replace(/:\d+$/, "");
+    const fallbackHost = (req.hostname || req.get("host") || "").toLowerCase().replace(/:\d+$/, "");
+    return fallbackHost;
   }
 
   function extractSubdomain(host: string): string | null {
@@ -722,6 +734,8 @@ export async function registerRoutes(
   app.get("/api/domain-detect", async (req: Request, res: Response) => {
     const host = getEffectiveHost(req);
     const hostWithoutWww = host.replace(/^www\./, "");
+    
+    console.log(`[DomainDetect] effectiveHost=${host} reqHost=${req.get("host")} xfh=${req.get("x-forwarded-host")} xoh=${req.get("x-original-host")} xrh=${req.get("x-real-host")}`);
     
     const subdomain = extractSubdomain(host);
     if (subdomain) {
