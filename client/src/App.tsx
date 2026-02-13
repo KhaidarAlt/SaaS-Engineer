@@ -145,10 +145,45 @@ function CustomDomainProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
+function StoreNotFound() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-background" data-testid="store-not-found">
+      <div className="text-center space-y-4 p-8">
+        <h1 className="text-2xl font-semibold text-foreground">
+          Магазин не найден
+        </h1>
+        <p className="text-muted-foreground max-w-md">
+          По этому адресу каталог не зарегистрирован. Проверьте правильность ссылки или обратитесь к владельцу магазина.
+        </p>
+        <a
+          href={`https://${import.meta.env.VITE_PLATFORM_DOMAIN || "botfactory.kz"}`}
+          className="inline-block mt-4 text-primary hover:underline"
+          data-testid="link-back-to-platform"
+        >
+          Перейти на SmartCatalog
+        </a>
+      </div>
+    </div>
+  );
+}
+
+function isExternalDomain(): boolean {
+  const host = window.location.hostname.toLowerCase();
+  if (host === "localhost" || host.includes("replit") || host.includes("worf.replit.dev")) {
+    return false;
+  }
+  const platformDomain = (import.meta.env.VITE_PLATFORM_DOMAIN || "botfactory.kz").toLowerCase();
+  if (host === platformDomain || host === `www.${platformDomain}`) {
+    return false;
+  }
+  return true;
+}
+
 function HomePage() {
   const { customDomain, isLoading } = useCustomDomain();
   if (isLoading) return <PageLoader />;
   if (customDomain) return <CatalogRouter />;
+  if (isExternalDomain()) return <StoreNotFound />;
   return <LandingPage />;
 }
 

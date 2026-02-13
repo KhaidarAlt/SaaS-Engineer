@@ -716,6 +716,27 @@ export async function registerRoutes(
         }
       }
     }
+
+    const origin = req.get("origin");
+    if (origin) {
+      try {
+        const originHost = new URL(origin).hostname.toLowerCase();
+        if (originHost && originHost !== "localhost" && !originHost.includes("replit") && !originHost.includes("worf.replit.dev")) {
+          return originHost;
+        }
+      } catch {}
+    }
+
+    const referer = req.get("referer");
+    if (referer) {
+      try {
+        const refHost = new URL(referer).hostname.toLowerCase();
+        if (refHost && refHost !== "localhost" && !refHost.includes("replit") && !refHost.includes("worf.replit.dev")) {
+          return refHost;
+        }
+      } catch {}
+    }
+
     const fallbackHost = (req.hostname || req.get("host") || "").toLowerCase().replace(/:\d+$/, "");
     return fallbackHost;
   }
@@ -736,7 +757,7 @@ export async function registerRoutes(
     const host = getEffectiveHost(req);
     const hostWithoutWww = host.replace(/^www\./, "");
     
-    console.log(`[DomainDetect] effectiveHost=${host} reqHost=${req.get("host")} xfh=${req.get("x-forwarded-host")} xoh=${req.get("x-original-host")} xrh=${req.get("x-real-host")}`);
+    console.log(`[DomainDetect] effectiveHost=${host} reqHost=${req.get("host")} xfh=${req.get("x-forwarded-host")} origin=${req.get("origin")} xsch=${req.get("x-smartcatalog-host")}`);
     
     const subdomain = extractSubdomain(host);
     if (subdomain) {
