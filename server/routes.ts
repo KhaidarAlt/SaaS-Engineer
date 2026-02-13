@@ -687,6 +687,18 @@ export async function registerRoutes(
     res.json({ platformDomain, cnameTarget });
   });
 
+  app.get("/api/debug-headers", (req: Request, res: Response) => {
+    res.json({
+      headers: req.headers,
+      hostname: req.hostname,
+      host: req.get("host"),
+      ip: req.ip,
+      ips: req.ips,
+      protocol: req.protocol,
+      originalUrl: req.originalUrl,
+    });
+  });
+
   function getEffectiveHost(req: Request): string {
     const xForwardedHost = req.get("x-forwarded-host");
     if (xForwardedHost) {
