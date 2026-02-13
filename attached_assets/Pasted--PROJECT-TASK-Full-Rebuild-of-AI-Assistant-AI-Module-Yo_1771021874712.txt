@@ -1,0 +1,321 @@
+# PROJECT TASK: Full Rebuild of AI Assistant (AI-РОП) Module
+
+You are working on a multi-tenant SaaS project called SmartCatalog.
+Stack:
+
+* Frontend: React 18 + TypeScript (Vite)
+* Backend: Express (Node.js)
+* Database: PostgreSQL
+* Multi-tenant architecture (tenant_id required everywhere)
+* WhatsApp integration already exists
+* Payments (Kaspi Pay) module exists
+* Internal CRM exists
+* Telegram notifications exist
+* amoCRM & Bitrix integrations exist
+
+We need to fully redesign and rebuild the AI Assistant section into a unified AI-Sales Control Center (AI-РОП).
+
+This must be production-ready and scalable.
+
+---
+
+## SECTION 1 — CORE CONCEPT
+
+The AI Assistant page must become a single control panel where the user:
+
+1. Selects AI goal
+2. Sees analytics (KPI + funnel + drop-off)
+3. Sees readiness status (BLOCKED / WARNING / READY)
+4. Runs AI Audit (diagnostics)
+5. Trains AI via chat corrections
+6. Applies AI recommendations with versioning
+7. Manages strategy & behavior
+8. Has simplified + advanced modes
+
+The UI must not overwhelm. Default view is simplified.
+
+---
+
+## SECTION 2 — DATABASE (PostgreSQL, multi-tenant)
+
+All tables MUST include:
+
+* id (uuid)
+* tenant_id (uuid, indexed)
+* created_at
+* updated_at
+
+Create:
+
+1. ai_settings
+
+* tenant_id (unique)
+* goal (enum: CLOSE_DEAL, QUALIFY_HANDOVER, CONSULT_MATCH, ORDER_NO_PAYMENT)
+* tone (enum)
+* language
+* temperature
+* typing_delay
+* version_number
+* is_active
+
+2. handover_rules
+
+* tenant_id
+* rule_type (enum)
+* threshold_value (nullable)
+* custom_rule_text
+
+3. knowledge_items
+
+* tenant_id
+* type (FAQ, POLICY, OBJECTION, UPSALE, FACT, ANTI_PATTERN)
+* title
+* content
+* is_active
+
+4. training_items
+
+* tenant_id
+* user_message
+* ai_original
+* ai_corrected
+* stage
+* source (TEST_CHAT / LIVE_CHAT)
+* applied (boolean)
+
+5. dialog_sessions
+
+* tenant_id
+* user_id
+* stage_exit
+* success (boolean)
+* drop_reason
+* blocker_flag (boolean)
+* estimated_revenue
+* created_at
+
+6. dialog_messages
+
+* session_id
+* role (user/assistant/system)
+* content
+* stage_label
+
+7. ai_audit_reports
+
+* tenant_id
+* period_start
+* period_end
+* summary_json
+* recommendations_json
+
+---
+
+## SECTION 3 — GOAL READINESS CHECK (CRITICAL)
+
+When user selects goal:
+
+If goal = CLOSE_DEAL:
+
+* Verify at least 1 active payment provider (Kaspi Pay active)
+* If not → BLOCKED
+* Show UI alert with button “Go to Payments”
+
+If goal = QUALIFY_HANDOVER:
+
+* Verify at least one channel:
+  internal CRM OR amo OR Bitrix OR Telegram
+* If none → BLOCKED
+
+If goal = CONSULT_MATCH:
+
+* Check catalog completeness
+* If missing descriptions/images → WARNING
+
+If goal = ORDER_NO_PAYMENT:
+
+* Check order creation enabled
+* If not → BLOCKED
+
+Readiness must show:
+
+* READY (green)
+* WARNING (orange)
+* BLOCKED (red)
+
+Blockers must NOT count as AI failures in analytics.
+
+---
+
+## SECTION 4 — ANALYTICS ENGINE
+
+Default period = Today.
+Allow: Yesterday / 7d / 30d / Custom.
+
+Compute per tenant:
+
+KPI:
+
+* total_dialogs
+* successful_dialogs (based on goal logic)
+* failed_dialogs
+* handovers
+* avg_dialog_length
+* avg_time_to_close
+* blocker_count
+
+FUNNEL STAGES:
+Greeting
+Need Detection
+Product Offer
+Objection Handling
+Closing Attempt
+Order Created
+Payment
+Handover
+
+For each stage:
+
+* count reached
+* drop_off_rate
+* top drop_reason
+
+Success rules:
+CLOSE_DEAL → payment_status = PAID OR CRM deal WON
+QUALIFY_HANDOVER → handover = true AND lead_qualified = true
+CONSULT_MATCH → reached Product Offer + engagement
+ORDER_NO_PAYMENT → order_created = true
+
+---
+
+## SECTION 5 — AI AUDIT ENGINE
+
+Create background job (daily cron + manual trigger).
+
+AI Audit must:
+
+* Analyze last period dialogs
+* Detect:
+
+  * High drop at price
+  * Missing closing phrase
+  * No upsell usage
+  * Promo zone unused
+  * Frequent unanswered questions
+* Estimate lost revenue (sum of estimated_revenue where failed after price)
+
+Generate:
+
+* summary_json
+* recommendations_json (3–5 items max)
+
+Recommendation structure:
+{
+problem: string,
+suggestion: string,
+estimated_impact: string,
+type: SCRIPT / KNOWLEDGE / RULE / STYLE
+}
+
+---
+
+## SECTION 6 — TRAINING FLOW
+
+In Test Chat and Live Chat:
+
+When user edits AI message:
+Show modal:
+
+1. Fix only this message
+2. Train AI (future responses)
+3. Add to Knowledge Base
+4. Mark as Anti-Pattern
+
+If Train:
+
+* Insert into training_items
+* Increment version_number
+* Create snapshot
+
+Maintain version history (last 10 versions).
+Allow rollback.
+
+---
+
+## SECTION 7 — UI STRUCTURE (React)
+
+Page layout:
+
+Sticky Header:
+
+* Period selector
+* Goal selector
+* Readiness badge
+* Run Audit button
+
+Left column:
+
+* KPI cards
+* Funnel chart
+* AI Diagnosis summary
+* Recommendation cards (Apply/Edit/Ignore)
+
+Right column (tabs):
+
+* Test Chat
+* Strategy
+* Knowledge (interview-style Q&A UI)
+* Training History
+* Integrations (status only)
+* Advanced Settings (collapsed by default)
+
+---
+
+## SECTION 8 — COST OPTIMIZATION
+
+Implement hybrid AI logic:
+
+* Use rule-based answers for simple intents
+* Use retrieval before LLM
+* Only call LLM when reasoning needed
+* Store short context summary instead of full history
+
+---
+
+## SECTION 9 — PERFORMANCE REQUIREMENTS
+
+* All queries must be tenant-scoped
+* Add indexes on tenant_id + created_at
+* Use pagination for dialogs
+* Avoid loading full dialog history in analytics
+* Use aggregation queries in SQL, not JS loops
+
+---
+
+## SECTION 10 — MVP PRIORITY
+
+Phase 1 (must implement now):
+
+* Goal selector
+* Readiness check
+* KPI metrics
+* Funnel drop-off
+* Test chat correction training
+* Versioning
+* Manual AI audit
+
+Phase 2:
+
+* Auto daily audit
+* Lost revenue estimation
+* A/B behavior testing
+
+---
+
+Implement clean architecture.
+Do not overcomplicate UI.
+Default mode must be simple.
+Advanced options hidden.
+
+Ask questions only if something is unclear.
+Otherwise implement as described.
