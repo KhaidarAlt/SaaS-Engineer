@@ -1,0 +1,434 @@
+# FINAL TECHNICAL PROMPT FOR REPLIT
+
+## Rebuild AI Assistant into “AI-РОП” (Sales Control Center) with Interview Onboarding + Dashboard
+
+### Stack: React 18 + TypeScript (Vite) frontend, Express backend, Postgres (multi-tenant)
+
+You must implement the full UX + component architecture exactly as described. Do NOT improvise into a generic settings panel.
+This is a guided “AI Sales Director” experience + a 3-column control dashboard.
+
+========================================================
+0) NON-NEGOTIABLE PRINCIPLES
+============================
+
+* Multi-tenant: every query and row MUST be scoped by tenant_id.
+* AI-РОП must feel like an expert conversation, not forms.
+* No empty “Нет данных” state. Use “После первых 5 диалогов появится аналитика”.
+* Default experience is SIMPLE. Advanced settings are collapsed.
+* Right column always shows the Test Chat (WhatsApp-like) after onboarding.
+* Implement versioning + rollback (last 10 versions).
+* Implement readiness checks (Payments/CRM/Telegram/amo/Bitrix) tied to goal.
+
+========================================================
+
+1. ROUTING & ENTRY LOGIC
+   ========================================================
+   Create route:
+
+* /app/ai-rop
+
+Entry logic:
+
+* GET /api/ai/onboarding/status → { completed: boolean }
+  If completed = false:
+  render <AiRopOnboardingPage />
+  Else:
+  render <AiRopDashboardPage />
+
+========================================================
+2) FRONTEND: EXACT COMPONENT TREE
+=================================
+
+Create a new folder:
+client/src/features/aiRop/
+
+Structure:
+
+aiRop/
+pages/
+AiRopOnboardingPage.tsx
+AiRopDashboardPage.tsx
+components/
+layout/
+AiRopShell.tsx
+AiRopHeader.tsx
+AiRopThreeColumnLayout.tsx
+CollapsibleBottomPanel.tsx
+onboarding/
+WowScanIntro.tsx
+InterviewWizard.tsx
+InterviewStep.tsx
+MultiSelectChips.tsx
+SingleSelectCards.tsx
+InlineAdvisorDrawer.tsx
+WizardProgress.tsx
+WizardSummary.tsx
+dashboard/
+KpiCards.tsx
+FunnelCard.tsx
+DropoffReasonsCard.tsx
+AiDiagnosisCard.tsx
+RecommendationCards.tsx
+RecommendationCard.tsx
+ReadinessBadge.tsx
+ReadinessDetailsModal.tsx
+PeriodPicker.tsx
+GoalSelector.tsx
+chat/
+TestChatPanel.tsx
+WhatsAppMock.tsx
+ChatMessageBubble.tsx
+EditMessageModal.tsx
+TrainActionModal.tsx
+strategy/
+StrategyPanel.tsx
+HandoverRulesEditor.tsx
+StyleToneSelector.tsx
+SalesBoostersToggles.tsx
+ObjectionsEditor.tsx
+AdvancedSettingsAccordion.tsx
+training/
+TrainingHistoryDrawer.tsx
+VersionHistoryDrawer.tsx
+VersionRollbackModal.tsx
+api/
+aiRopApi.ts
+types/
+aiRopTypes.ts
+utils/
+stageUtils.ts
+moneyUtils.ts
+dateUtils.ts
+
+Use Tailwind for UI. Keep premium minimal Apple-like.
+Use subtle animations (Framer Motion allowed). No heavy design libraries required.
+
+========================================================
+3) ONBOARDING UX (INTERVIEW MODE) — EXACT FLOW
+==============================================
+
+AiRopOnboardingPage renders:
+
+<A iRopShell>
+  <WowScanIntro />
+  <InterviewWizard />
+</AiRopShell>
+
+3.1 WowScanIntro.tsx
+
+* Show 2–3s animated “I’m studying your catalog…” screen
+* Pull catalog summary from backend: GET /api/ai/catalog/summary
+  Response: { productsCount, categoriesCount, avgPrice, promoZoneActive, paymentsReady }
+* Animate checklist appearing:
+  “Сканирую товары…”
+  “Анализирую категории…”
+  “Проверяю оплату…”
+  “Проверяю промо-зону…”
+* End with a “Ready card”:
+  “Я изучил ваш каталог: … Я готов продавать. Нужно уточнить пару моментов.”
+  Button: “Начать интервью” → starts wizard
+
+3.2 InterviewWizard.tsx
+
+* 6 steps max, progress bar top: <WizardProgress />
+* One question at a time in chat-like card
+* Each step uses <InterviewStep />
+
+STEPS:
+Step 1: Goal selection (SingleSelectCards)
+
+* CLOSE_DEAL / QUALIFY_HANDOVER / CONSULT_MATCH / ORDER_NO_PAYMENT
+* If “help me choose” → open InlineAdvisorDrawer with short AI explanation
+
+Step 2: Readiness Check (auto)
+
+* Call GET /api/ai/readiness?goal=...
+* Show result: READY/WARNING/BLOCKED with human text
+* If BLOCKED show deep-link buttons:
+  “Перейти в Платежи” (/app/payments)
+  “Перейти в CRM/Интеграции” (/app/integrations)
+* Allow “Change goal” quick action
+
+Step 3: Style & Tone (SingleSelectCards)
+
+* short / friendly / premium expert / custom text
+* “Посоветуй” opens InlineAdvisorDrawer with rationale
+
+Step 4: Objection strategy (MultiSelectChips)
+
+* “дорого, подумаю, хочу дешевле, сравниваю, есть скидка?”
+* plus “Добавить своё”
+* If user stuck → advisor suggests best answers
+
+Step 5: Handover rules (MultiSelectChips + numeric threshold)
+
+* “просит человека”
+* “сумма > X”
+* “нестандартный вопрос”
+* “негатив”
+* “никогда” (exclusive)
+* input for X
+* add custom rule
+
+Step 6: Mini Simulation (TestChatPanel embedded)
+
+* show 1 prefilled client message from real catalog:
+  e.g. “Сколько стоит <top product>?”
+* AI answers; user can:
+  👍 approve
+  ✏️ edit
+  🧠 train
+* If edit -> TrainActionModal:
+  (1) fix only here
+  (2) train future
+  (3) add to knowledge
+  (4) mark anti-pattern
+
+Finish:
+
+* Show WizardSummary with all chosen decisions
+* Button: “Запустить AI-РОПа”
+* POST /api/ai/onboarding/complete
+* Navigate to /app/ai-rop
+
+========================================================
+4) DASHBOARD UX — EXACT LAYOUT
+==============================
+
+AiRopDashboardPage renders:
+
+<AiRopShell>
+  <AiRopHeader />
+  <AiRopThreeColumnLayout
+     left={<AnalyticsLeftColumn />}
+     center={<DiagnosisCenterColumn />}
+     right={<TestChatPanel />}
+  />
+  <CollapsibleBottomPanel>
+     <StrategyPanel />
+  </CollapsibleBottomPanel>
+</AiRopShell>
+
+4.1 AiRopHeader.tsx (sticky)
+Left:
+
+* Title “AI-РОП”
+* small subtitle “контролирую и улучшаю продажи”
+
+Center:
+
+* <PeriodPicker /> default “Today”
+* small KPI inline: dialogs, success, conversion%
+
+Right:
+
+* <ReadinessBadge />
+* button “Запустить аудит”
+* button “Обучение” (opens TrainingHistoryDrawer)
+* button “Версии” (opens VersionHistoryDrawer)
+
+4.2 Left column: AnalyticsLeftColumn (compose)
+
+* <KpiCards />
+* <FunnelCard />
+* <DropoffReasonsCard />
+
+If no dialogs in period:
+
+* show placeholder “После первых 5 диалогов появится аналитика…”
+* still show readiness and a “Try test chat” hint
+
+4.3 Center column: DiagnosisCenterColumn (compose)
+
+* <AiDiagnosisCard /> (AI text summary)
+* <RecommendationCards /> (max 3–5)
+  Each RecommendationCard has:
+* problem
+* suggestion
+* estimated impact
+  Buttons:
+  Apply → POST /api/ai/recommendations/apply
+  Edit → opens modal prefilled text then apply
+  Ignore → POST /api/ai/recommendations/ignore
+
+4.4 Right column: TestChatPanel (always visible)
+
+* WhatsApp-like mock chat (WhatsAppMock)
+* Send message -> POST /api/ai/testchat/send
+* AI reply appears with buttons:
+  ✏️ Edit
+  ✅ Approve
+  Edit opens EditMessageModal
+  Approve opens TrainActionModal with choices:
+  1 fix only
+  2 train future
+  3 add to knowledge
+  4 anti-pattern
+
+========================================================
+5) STRATEGY PANEL (Bottom collapsible)
+======================================
+
+StrategyPanel sections:
+
+A) Goal
+
+* GoalSelector with same enums
+* On change, re-run readiness check and show inline result
+
+B) Handover rules
+
+* HandoverRulesEditor
+
+C) Style / Tone
+
+* StyleToneSelector (preset + custom)
+
+D) Sales boosters (toggles)
+
+* SalesBoostersToggles:
+
+  * upsell
+  * cheaper alternative
+  * scarcity/time-limit
+  * auto promo-zone usage
+
+E) Objections list
+
+* ObjectionsEditor (editable list + add)
+
+F) Advanced settings (collapsed)
+
+* AdvancedSettingsAccordion:
+
+  * system prompt (text area)
+  * temperature
+  * typing delay
+  * language(s)
+
+Save button persists to POST /api/ai/settings/save
+Every save creates a new version snapshot.
+
+========================================================
+6) BACKEND: REQUIRED API ENDPOINTS
+==================================
+
+Implement these tenant-scoped endpoints:
+
+Onboarding:
+
+* GET  /api/ai/onboarding/status
+* POST /api/ai/onboarding/complete
+
+Catalog scan:
+
+* GET /api/ai/catalog/summary
+
+Readiness:
+
+* GET /api/ai/readiness?goal=...
+
+Analytics:
+
+* GET /api/ai/analytics/summary?period=...
+* GET /api/ai/analytics/funnel?period=...
+* GET /api/ai/analytics/dropoffs?period=...
+
+Audit:
+
+* POST /api/ai/audit/run?period=...
+* GET  /api/ai/audit/latest?period=...
+
+Recommendations:
+
+* POST /api/ai/recommendations/apply
+* POST /api/ai/recommendations/ignore
+
+Test chat:
+
+* POST /api/ai/testchat/send
+* POST /api/ai/testchat/edit
+* POST /api/ai/testchat/train
+
+Settings & versioning:
+
+* GET  /api/ai/settings
+* POST /api/ai/settings/save
+* GET  /api/ai/versions
+* POST /api/ai/versions/rollback
+
+Training:
+
+* GET /api/ai/training/history
+
+All endpoints require tenant_id from auth middleware.
+
+========================================================
+7) DATA MODEL (MINIMUM)
+=======================
+
+Use these tables (multi-tenant):
+
+* ai_settings
+* handover_rules
+* knowledge_items
+* training_items
+* dialog_sessions
+* dialog_messages
+* ai_audit_reports
+* ai_versions (snapshot pointer: settings JSON + rules + boosters + prompts)
+
+Implement ai_versions:
+
+* tenant_id
+* version_number
+* snapshot_json
+* created_at
+  Keep last 10 versions.
+
+========================================================
+8) AI LOGIC (MVP, HYBRID)
+=========================
+
+For MVP:
+
+* Rules + retrieval first
+* LLM only when needed
+* Do NOT send full catalog or full chat history each time
+* Maintain short rolling summary per test chat session
+
+Stage labeling (basic heuristic acceptable in MVP):
+
+* greeting / need / offer / objection / close / order / payment / handover
+
+========================================================
+9) MICRO-INTERACTIONS (REQUIRED)
+================================
+
+* Onboarding scan animation (step 0)
+* Smooth transitions between wizard steps
+* Selected options highlight
+* AI typing indicator in chat
+* Confetti on completion
+* Drawer animations for Training and Versions
+
+Keep it elegant, not flashy.
+
+========================================================
+10) ACCEPTANCE CRITERIA
+=======================
+
+* First-time user sees WOW scan + interview onboarding (not dashboard)
+* After onboarding, dashboard is 3-column with Test Chat always on right
+* No empty “no data” dead screens
+* Goal readiness blockers implemented (payments/CRM/telegram etc.)
+* Recommendations apply creates new version
+* User can rollback last versions
+* Training flow works from edited messages
+* Everything is tenant-scoped and production-structured
+
+Implement end-to-end UX first (UI + state + mock data),
+then wire real backend.
+Do NOT reduce into plain settings tabs.
+
+If anything is unclear, ask. Otherwise implement exactly.
