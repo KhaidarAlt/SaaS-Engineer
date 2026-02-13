@@ -701,6 +701,7 @@ export async function registerRoutes(
 
   function getEffectiveHost(req: Request): string {
     const candidates = [
+      req.get("x-smartcatalog-host"),
       req.get("x-forwarded-host"),
       req.get("x-original-host"),
       req.get("x-real-host"),
