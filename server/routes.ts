@@ -661,7 +661,7 @@ export async function registerRoutes(
     try {
       const tenant = await storage.getTenant(req.params.tenantId);
       if (tenant && tenant.customDomain) {
-        const host = (req.hostname || req.get("host") || "").toLowerCase().replace(/:\d+$/, "").replace(/^www\./, "");
+        const host = getEffectiveHost(req).replace(/^www\./, "");
         const tenantDomain = tenant.customDomain.toLowerCase().replace(/^www\./, "");
         if (host === tenantDomain) {
           return res.json({ verified: true, tenantId: tenant.id, slug: tenant.slug });
@@ -677,6 +677,14 @@ export async function registerRoutes(
     res.json({ platformDomain, cnameTarget });
   });
 
+  function getEffectiveHost(req: Request): string {
+    const xForwardedHost = req.get("x-forwarded-host");
+    if (xForwardedHost) {
+      return xForwardedHost.split(",")[0].trim().toLowerCase().replace(/:\d+$/, "");
+    }
+    return (req.hostname || req.get("host") || "").toLowerCase().replace(/:\d+$/, "");
+  }
+
   function extractSubdomain(host: string): string | null {
     const platformDomain = (process.env.PLATFORM_DOMAIN || "").toLowerCase();
     if (!platformDomain) return null;
@@ -690,7 +698,7 @@ export async function registerRoutes(
   }
 
   app.get("/api/domain-detect", async (req: Request, res: Response) => {
-    const host = (req.hostname || req.get("host") || "").toLowerCase().replace(/:\d+$/, "");
+    const host = getEffectiveHost(req);
     const hostWithoutWww = host.replace(/^www\./, "");
     
     const subdomain = extractSubdomain(host);
@@ -729,7 +737,7 @@ export async function registerRoutes(
 
   // Subdomain + custom domain middleware: route to tenant catalog
   app.use(async (req: Request, res: Response, next: NextFunction) => {
-    const host = (req.hostname || req.get("host") || "").toLowerCase().replace(/:\d+$/, "");
+    const host = getEffectiveHost(req);
     
     if (
       !host ||
