@@ -790,6 +790,11 @@ export const aiSettings = pgTable("ai_settings", {
   workingHoursJson: jsonb("working_hours_json").$type<{from: string; to: string; days: number[]}>(),
   fallbackHandoffText: text("fallback_handoff_text").default("К сожалению, я не могу ответить на этот вопрос. Сейчас передам ваш вопрос менеджеру."),
   systemPromptCustom: text("system_prompt_custom"),
+  goal: text("goal").notNull().default("CLOSE_DEAL"),
+  temperature: decimal("temperature").default("0.7"),
+  typingDelay: integer("typing_delay").default(1500),
+  versionNumber: integer("version_number").notNull().default(1),
+  isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -941,6 +946,12 @@ export const aiConversations = pgTable("ai_conversations", {
   status: text("status").notNull().default("open"), // open, handoff, closed
   currentStage: text("current_stage"), // for sales script tracking
   metaJson: jsonb("meta_json").$type<Record<string, unknown>>(),
+  stageExit: text("stage_exit"),
+  success: boolean("success"),
+  dropReason: text("drop_reason"),
+  blockerFlag: boolean("blocker_flag").default(false),
+  estimatedRevenue: decimal("estimated_revenue"),
+  goalAtStart: text("goal_at_start"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -964,6 +975,7 @@ export const aiMessages = pgTable("ai_messages", {
   content: text("content").notNull(),
   tagMatched: text("tag_matched"),
   metaJson: jsonb("meta_json").$type<Record<string, unknown>>(),
+  stageLabel: text("stage_label"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
@@ -1086,6 +1098,125 @@ export const aiResponseCorrectionsRelations = relations(aiResponseCorrections, (
 export const insertAiResponseCorrectionSchema = createInsertSchema(aiResponseCorrections).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertAiResponseCorrection = z.infer<typeof insertAiResponseCorrectionSchema>;
 export type AiResponseCorrection = typeof aiResponseCorrections.$inferSelect;
+
+// ============ HANDOVER RULES ============
+export const handoverRules = pgTable("handover_rules", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  ruleType: text("rule_type").notNull(),
+  thresholdValue: text("threshold_value"),
+  customRuleText: text("custom_rule_text"),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const handoverRulesRelations = relations(handoverRules, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [handoverRules.tenantId],
+    references: [tenants.id],
+  }),
+}));
+
+export const insertHandoverRuleSchema = createInsertSchema(handoverRules).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertHandoverRule = z.infer<typeof insertHandoverRuleSchema>;
+export type HandoverRule = typeof handoverRules.$inferSelect;
+
+// ============ KNOWLEDGE ITEMS ============
+export const knowledgeItems = pgTable("knowledge_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  type: text("type").notNull(),
+  title: text("title").notNull(),
+  content: text("content").notNull(),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const knowledgeItemsRelations = relations(knowledgeItems, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [knowledgeItems.tenantId],
+    references: [tenants.id],
+  }),
+}));
+
+export const insertKnowledgeItemSchema = createInsertSchema(knowledgeItems).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertKnowledgeItem = z.infer<typeof insertKnowledgeItemSchema>;
+export type KnowledgeItem = typeof knowledgeItems.$inferSelect;
+
+// ============ TRAINING ITEMS ============
+export const trainingItems = pgTable("training_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  conversationId: varchar("conversation_id").references(() => aiConversations.id),
+  userMessage: text("user_message").notNull(),
+  aiOriginal: text("ai_original").notNull(),
+  aiCorrected: text("ai_corrected").notNull(),
+  stage: text("stage"),
+  source: text("source").default("TEST_CHAT"),
+  applied: boolean("applied").default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const trainingItemsRelations = relations(trainingItems, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [trainingItems.tenantId],
+    references: [tenants.id],
+  }),
+  conversation: one(aiConversations, {
+    fields: [trainingItems.conversationId],
+    references: [aiConversations.id],
+  }),
+}));
+
+export const insertTrainingItemSchema = createInsertSchema(trainingItems).omit({ id: true, createdAt: true });
+export type InsertTrainingItem = z.infer<typeof insertTrainingItemSchema>;
+export type TrainingItem = typeof trainingItems.$inferSelect;
+
+// ============ AI AUDIT REPORTS ============
+export const aiAuditReports = pgTable("ai_audit_reports", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  periodStart: timestamp("period_start").notNull(),
+  periodEnd: timestamp("period_end").notNull(),
+  summaryJson: jsonb("summary_json").$type<Record<string, unknown>>(),
+  recommendationsJson: jsonb("recommendations_json").$type<Array<{ problem: string; suggestion: string; estimatedImpact: string; type: string }>>(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const aiAuditReportsRelations = relations(aiAuditReports, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [aiAuditReports.tenantId],
+    references: [tenants.id],
+  }),
+}));
+
+export const insertAiAuditReportSchema = createInsertSchema(aiAuditReports).omit({ id: true, createdAt: true });
+export type InsertAiAuditReport = z.infer<typeof insertAiAuditReportSchema>;
+export type AiAuditReport = typeof aiAuditReports.$inferSelect;
+
+// ============ AI SETTINGS HISTORY ============
+export const aiSettingsHistory = pgTable("ai_settings_history", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  versionNumber: integer("version_number").notNull(),
+  settingsSnapshot: jsonb("settings_snapshot").$type<Record<string, unknown>>(),
+  changedBy: varchar("changed_by"),
+  changeReason: text("change_reason"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const aiSettingsHistoryRelations = relations(aiSettingsHistory, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [aiSettingsHistory.tenantId],
+    references: [tenants.id],
+  }),
+}));
+
+export const insertAiSettingsHistorySchema = createInsertSchema(aiSettingsHistory).omit({ id: true, createdAt: true });
+export type InsertAiSettingsHistory = z.infer<typeof insertAiSettingsHistorySchema>;
+export type AiSettingsHistory = typeof aiSettingsHistory.$inferSelect;
 
 // ============ DEMO LEADS ============
 export const leads = pgTable("leads", {

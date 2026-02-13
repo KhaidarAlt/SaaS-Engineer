@@ -19,6 +19,7 @@ import net from "node:net";
 import { pool } from "./db";
 import domainRoutes from "./domains/routes.js";
 import { startDomainWorker } from "./domains/worker.js";
+import { registerAiRopRoutes } from "./ai-rop-routes.js";
 
 const SessionStore = MemoryStore(session);
 
@@ -6620,6 +6621,8 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
       next();
     }
   });
+
+  registerAiRopRoutes(app, storage, pool, requireAuth, requireAiAccess);
 
   return httpServer;
 }

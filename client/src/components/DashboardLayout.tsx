@@ -31,6 +31,7 @@ import {
   Sparkles,
   Puzzle,
   Layers,
+  Target,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -106,6 +107,7 @@ const tenantNavGroups: NavGroup[] = [
     tooltip: "ИИ и работа с WhatsApp",
     items: [
       { href: "/dashboard/ai", label: "AI-ассистент", icon: Bot, lockForPlans: ["Старт", "Каталог"] },
+      { href: "/dashboard/ai/rop", label: "AI-РОП", icon: Target, lockForPlans: ["Старт", "Каталог"] },
       { href: "/dashboard/smart-contact", label: "Умный контакт", icon: MessageCircle, lockForPlans: ["Старт", "Каталог"] },
       { href: "/dashboard/whatsapp-cloud", label: "WhatsApp Meta", icon: MessageCircle, lockForPlans: ["Старт", "Каталог"] },
     ],

@@ -60,6 +60,17 @@ Preferred communication style: Simple, everyday language.
   - Server modules: server/domains/ (normalizeDomain.ts, dns.ts, sslChecker.ts, worker.ts, routes.ts)
   - UI: Settings page domain management card with add form, DNS instructions, status badges, verify/retry/SSL/delete actions, 15s auto-refresh
 - **Business Consultant**: AI-powered business consultant with 5 modes (Analyst, Marketer, ROP, Finance, Support) for data-driven insights and platform guidance.
+- **AI-РОП (AI Sales Control Center)**: Goal-oriented AI assistant management system at /dashboard/ai/rop. Features:
+  - Goal selector (CLOSE_DEAL, QUALIFY_HANDOVER, CONSULT_MATCH, ORDER_NO_PAYMENT) with readiness checks
+  - KPI dashboard (dialogs, conversion, handovers) and conversion funnel
+  - Handover rules CRUD (keyword/sentiment/repeat/timeout/explicit triggers)
+  - Knowledge base CRUD (product/delivery/payment/return/general categories)
+  - Training items (user message + AI original + corrected response by stage)
+  - Settings versioning with automatic history tracking
+  - Test chat widget for live AI testing
+  - Schema: ai_settings (extended with goal, versionNumber, etc.), handover_rules, knowledge_items, training_items, ai_audit_reports, ai_settings_history
+  - API: 16 endpoints under /api/ai-rop/* in server/ai-rop-routes.ts
+  - Frontend: Tabbed interface (Overview, Rules, Knowledge, Training, History) in AiRopPage.tsx
 
 ## Platform Admin Setup (one-time)
 - **Wildcard DNS**: Add CNAME record in Cloudflare for `botfactory.kz`: Name=`*`, Target=`saa-s-engineer--m528dpa.replit.app`, Proxy=ON. This enables all tenant subdomains (`*.botfactory.kz`) to resolve and get SSL automatically. This is a one-time setup by the platform owner — tenant users do not need to configure anything.
