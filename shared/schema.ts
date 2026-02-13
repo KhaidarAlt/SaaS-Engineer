@@ -2051,6 +2051,44 @@ export const insertWidgetMessageSchema = createInsertSchema(widgetMessages).omit
 export type InsertWidgetMessage = z.infer<typeof insertWidgetMessageSchema>;
 export type WidgetMessage = typeof widgetMessages.$inferSelect;
 
+// ============ DOMAINS ============
+export const domains = pgTable("domains", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  domain: text("domain").notNull().unique(),
+  type: text("type").notNull().default("custom"),
+  status: text("status").notNull().default("pending_txt"),
+  verificationToken: text("verification_token").notNull(),
+  requiredTxtName: text("required_txt_name").notNull(),
+  requiredTxtValue: text("required_txt_value").notNull(),
+  dnsTxtOk: boolean("dns_txt_ok").notNull().default(false),
+  dnsAOk: boolean("dns_a_ok").notNull().default(false),
+  sslStatus: text("ssl_status").notNull().default("unknown"),
+  sslLastCheckAt: timestamp("ssl_last_check_at"),
+  sslErrorReason: text("ssl_error_reason"),
+  lastCheckAt: timestamp("last_check_at"),
+  nextCheckAt: timestamp("next_check_at"),
+  attempts: integer("attempts").notNull().default(0),
+  errorReason: text("error_reason"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const domainsRelations = relations(domains, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [domains.tenantId],
+    references: [tenants.id],
+  }),
+}));
+
+export const insertDomainSchema = createInsertSchema(domains).omit({
+  id: true, createdAt: true, updatedAt: true, dnsTxtOk: true, dnsAOk: true,
+  sslStatus: true, sslLastCheckAt: true, sslErrorReason: true,
+  lastCheckAt: true, nextCheckAt: true, attempts: true, errorReason: true,
+});
+export type InsertDomain = z.infer<typeof insertDomainSchema>;
+export type Domain = typeof domains.$inferSelect;
+
 // ============ FORM VALIDATION SCHEMAS ============
 export const loginSchema = z.object({
   email: z.string().email("Введите корректный email"),

@@ -7,7 +7,8 @@ import { motion } from "framer-motion";
 import { 
   Save, Store, MessageCircle, Bell, ExternalLink, Upload, Image, 
   Share2, QrCode, Download, Clock, MapPin, Link2, Copy, Check, 
-  Loader2, Phone, Trash2, CheckCircle, AlertCircle, RefreshCw, Lock, Send, Globe
+  Loader2, Phone, Trash2, CheckCircle, AlertCircle, RefreshCw, Lock, Send, Globe,
+  Plus, Shield, XCircle
 } from "lucide-react";
 import { SiWhatsapp, SiTelegram } from "react-icons/si";
 import { z } from "zod";
@@ -273,6 +274,47 @@ interface WahaInstance {
   createdAt: string;
 }
 
+interface CustomDomain {
+  id: number;
+  domain: string;
+  type: string;
+  status: string;
+  required_txt_name: string;
+  required_txt_value: string;
+  dns_txt_ok: boolean;
+  dns_a_ok: boolean;
+  ssl_status: string;
+  ssl_error_reason: string | null;
+  error_reason: string | null;
+  attempts: number;
+  last_check_at: string | null;
+  next_check_at: string | null;
+  created_at: string;
+}
+
+const domainStatusLabels: Record<string, string> = {
+  pending_txt: "Ожидание TXT-записи",
+  pending_dns: "Ожидание A-записи",
+  verifying: "Проверка...",
+  active: "Активен",
+  error: "Ошибка",
+};
+
+const domainStatusColors: Record<string, string> = {
+  pending_txt: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-100",
+  pending_dns: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100",
+  verifying: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100",
+  active: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100",
+  error: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-100",
+};
+
+const sslStatusLabels: Record<string, string> = {
+  unknown: "Неизвестно",
+  pending: "Ожидание",
+  active: "Активен",
+  error: "Ошибка",
+};
+
 const wahaStatusLabels: Record<string, string> = {
   created: "Создан",
   starting: "Запуск...",
@@ -304,6 +346,8 @@ export default function SettingsPage() {
   const [currentInstance, setCurrentInstance] = useState<WahaInstance | null>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
   const ogImageInputRef = useRef<HTMLInputElement>(null);
+  const [newDomainInput, setNewDomainInput] = useState("");
+  const [expandedDomainId, setExpandedDomainId] = useState<number | null>(null);
 
   const { data: tenant, isLoading } = useQuery<Tenant>({
     queryKey: ["/api/tenant"],
@@ -410,6 +454,83 @@ export default function SettingsPage() {
     },
     onError: (error: Error) => {
       toast({ title: "Ошибка отправки", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const { data: customDomains, isLoading: domainsLoading } = useQuery<CustomDomain[]>({
+    queryKey: ["/api/domains"],
+    refetchInterval: 15000,
+  });
+
+  const addDomainMutation = useMutation({
+    mutationFn: async (domain: string) => {
+      const res = await apiRequest("POST", "/api/domains", { domain });
+      return res.json();
+    },
+    onSuccess: (data: CustomDomain) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/domains"] });
+      setNewDomainInput("");
+      setExpandedDomainId(data.id);
+      toast({ title: "Домен добавлен", description: "Настройте DNS-записи по инструкции ниже" });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Ошибка добавления домена", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const verifyDomainMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await apiRequest("POST", `/api/domains/${id}/verify`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/domains"] });
+      toast({ title: "Проверка запущена" });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Ошибка проверки", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const retryDomainMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await apiRequest("POST", `/api/domains/${id}/retry`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/domains"] });
+      toast({ title: "Повторная проверка запущена" });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Ошибка", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const checkSslMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await apiRequest("POST", `/api/domains/${id}/check-ssl`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/domains"] });
+      toast({ title: "Проверка SSL запущена" });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Ошибка проверки SSL", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const deleteDomainMutation = useMutation({
+    mutationFn: async (id: number) => {
+      return apiRequest("DELETE", `/api/domains/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/domains"] });
+      setExpandedDomainId(null);
+      toast({ title: "Домен удалён" });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Ошибка удаления", description: error.message, variant: "destructive" });
     },
   });
 
@@ -1070,20 +1191,216 @@ export default function SettingsPage() {
                 <CardTitle className="text-lg flex items-center gap-2">
                   <Globe className="h-5 w-5 text-muted-foreground" />
                   Собственный домен
-                  <Badge variant="outline" className="ml-auto text-xs">Скоро</Badge>
                 </CardTitle>
                 <CardDescription>
                   Подключите свой домен для каталога (например, myshop.kz)
                 </CardDescription>
               </CardHeader>
-              <CardContent>
-                <div className="p-6 text-center border rounded-lg bg-muted/50">
-                  <Globe className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
-                  <p className="font-medium mb-1">Функция в разработке</p>
-                  <p className="text-sm text-muted-foreground">
-                    Возможность подключить собственный домен (например, myshop.kz) будет доступна в ближайшее время. Сейчас ваш каталог доступен по субдомену выше.
-                  </p>
+              <CardContent className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <Input
+                    placeholder="example.kz"
+                    value={newDomainInput}
+                    onChange={(e) => setNewDomainInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && newDomainInput.trim()) {
+                        e.preventDefault();
+                        addDomainMutation.mutate(newDomainInput.trim());
+                      }
+                    }}
+                    data-testid="input-add-domain"
+                  />
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      if (newDomainInput.trim()) {
+                        addDomainMutation.mutate(newDomainInput.trim());
+                      }
+                    }}
+                    disabled={!newDomainInput.trim() || addDomainMutation.isPending}
+                    data-testid="button-add-domain"
+                  >
+                    {addDomainMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    ) : (
+                      <Plus className="h-4 w-4 mr-2" />
+                    )}
+                    Добавить
+                  </Button>
                 </div>
+
+                {domainsLoading && (
+                  <div className="flex items-center justify-center py-4">
+                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                  </div>
+                )}
+
+                {customDomains && customDomains.length > 0 && (
+                  <div className="space-y-3">
+                    {customDomains.map((d) => (
+                      <div key={d.id} className="border rounded-lg" data-testid={`card-domain-${d.id}`}>
+                        <div className="p-3 space-y-2">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-medium text-sm" data-testid={`text-domain-name-${d.id}`}>{d.domain}</span>
+                            <Badge variant="outline" className="text-xs" data-testid={`badge-domain-type-${d.id}`}>
+                              {d.type === "subdomain" ? "Субдомен" : "Домен"}
+                            </Badge>
+                            <Badge
+                              variant="secondary"
+                              className={`text-xs ${domainStatusColors[d.status] || ""}`}
+                              data-testid={`badge-domain-status-${d.id}`}
+                            >
+                              {d.status === "error" && d.error_reason
+                                ? d.error_reason
+                                : domainStatusLabels[d.status] || d.status}
+                            </Badge>
+                          </div>
+
+                          <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+                            <span className="flex items-center gap-1">
+                              {d.dns_txt_ok ? (
+                                <CheckCircle className="h-3 w-3 text-green-600" />
+                              ) : (
+                                <XCircle className="h-3 w-3 text-muted-foreground" />
+                              )}
+                              TXT
+                            </span>
+                            <span className="flex items-center gap-1">
+                              {d.dns_a_ok ? (
+                                <CheckCircle className="h-3 w-3 text-green-600" />
+                              ) : (
+                                <XCircle className="h-3 w-3 text-muted-foreground" />
+                              )}
+                              A-запись
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <Shield className="h-3 w-3" />
+                              SSL: {sslStatusLabels[d.ssl_status] || d.ssl_status}
+                              {d.ssl_status === "error" && d.ssl_error_reason && (
+                                <span className="text-red-500"> ({d.ssl_error_reason})</span>
+                              )}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-1 flex-wrap">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => verifyDomainMutation.mutate(d.id)}
+                              disabled={verifyDomainMutation.isPending}
+                              data-testid={`button-verify-domain-${d.id}`}
+                            >
+                              {verifyDomainMutation.isPending ? (
+                                <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                              ) : (
+                                <RefreshCw className="h-3 w-3 mr-1" />
+                              )}
+                              Проверить
+                            </Button>
+                            {d.status === "error" && (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => retryDomainMutation.mutate(d.id)}
+                                disabled={retryDomainMutation.isPending}
+                                data-testid={`button-retry-domain-${d.id}`}
+                              >
+                                {retryDomainMutation.isPending ? (
+                                  <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                                ) : (
+                                  <RefreshCw className="h-3 w-3 mr-1" />
+                                )}
+                                Повторить
+                              </Button>
+                            )}
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => checkSslMutation.mutate(d.id)}
+                              disabled={checkSslMutation.isPending}
+                              data-testid={`button-check-ssl-${d.id}`}
+                            >
+                              {checkSslMutation.isPending ? (
+                                <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                              ) : (
+                                <Shield className="h-3 w-3 mr-1" />
+                              )}
+                              SSL
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setExpandedDomainId(expandedDomainId === d.id ? null : d.id)}
+                              data-testid={`button-toggle-instructions-${d.id}`}
+                            >
+                              <AlertCircle className="h-3 w-3 mr-1" />
+                              Инструкция
+                            </Button>
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => deleteDomainMutation.mutate(d.id)}
+                              disabled={deleteDomainMutation.isPending}
+                              data-testid={`button-delete-domain-${d.id}`}
+                            >
+                              <Trash2 className="h-4 w-4 text-red-500" />
+                            </Button>
+                          </div>
+                        </div>
+
+                        {expandedDomainId === d.id && (
+                          <div className="border-t p-3 bg-muted/30 space-y-3">
+                            <p className="text-sm font-medium">Настройка DNS для {d.domain}:</p>
+
+                            <div className="space-y-2">
+                              <p className="text-xs font-medium text-muted-foreground">Шаг 1: Добавьте TXT-запись для подтверждения владения</p>
+                              <div className="bg-background p-3 rounded border text-xs space-y-2">
+                                <DnsCopyRow label="Тип" value="TXT" />
+                                <DnsCopyRow label="Хост" value={d.required_txt_name} />
+                                <DnsCopyRow label="Значение" value={d.required_txt_value} />
+                              </div>
+                            </div>
+
+                            <div className="space-y-2">
+                              <p className="text-xs font-medium text-muted-foreground">Шаг 2: Добавьте A-запись для направления трафика</p>
+                              <div className="bg-background p-3 rounded border text-xs space-y-2">
+                                <DnsCopyRow label="Тип" value="A" />
+                                <DnsCopyRow label="Хост" value={d.domain} />
+                                <DnsCopyRow label="Значение" value="45.90.35.9" />
+                              </div>
+                            </div>
+
+                            <div className="space-y-1">
+                              <p className="text-xs font-medium text-muted-foreground">
+                                Шаг 3: Нажмите «Проверить» после добавления DNS-записей
+                              </p>
+                            </div>
+
+                            {d.next_check_at && d.status !== "active" && (
+                              <div className="flex items-center gap-2 text-xs text-muted-foreground p-2 bg-muted rounded">
+                                <Clock className="h-3 w-3 shrink-0" />
+                                <span>
+                                  Автоматическая проверка: {new Date(d.next_check_at).toLocaleString("ru-RU")}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {customDomains && customDomains.length === 0 && !domainsLoading && (
+                  <p className="text-sm text-muted-foreground" data-testid="text-no-domains">
+                    Нет подключённых доменов. Добавьте домен выше.
+                  </p>
+                )}
               </CardContent>
             </Card>
           </motion.div>

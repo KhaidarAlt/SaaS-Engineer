@@ -1,0 +1,258 @@
+You are Replit AI working inside an existing project:
+
+* Frontend: React 18 + TypeScript + Vite in `client/src/`
+* Backend: Express (TypeScript) in `server/`
+* Production: Vite builds to `dist/public/`; Express serves static + API on the same port
+* External edge: Caddy on VPS terminates TLS with On-Demand TLS and calls an ASK endpoint:
+  `GET /api/internal/caddy/allow?domain=<fqdn>` with header `X-Ask-Token: <secret>`
+* Postgres: Neon via `DATABASE_URL` (already set). Use `pg` or `@neondatabase/serverless` (choose one), SSL required.
+* Edge IP: `45.90.35.9`
+* ASK secret env: `CADDY_ASK_TOKEN` (already set on Replit)
+
+GOAL
+Build full SaaS “Custom Domains” functionality that is максимально автоматизировано:
+
+* Tenants (multi-tenant)
+* Add/verify custom domains (second-level arbitrary domains) and subdomains
+* Ownership verification via DNS TXT record
+* DNS A record verification (A must point to 45.90.35.9)
+* Auto-retry DNS checks (background job) until verified, with exponential backoff and a max window (e.g., 24h)
+* SSL status (requested/pending/issuing/active/error) visible in UI
+* Caddy ASK endpoint returns 200 only for VERIFIED+ACTIVE domains and only when token is correct
+* Complete UI onboarding with clear user instructions for both “subdomain on botfactory.kz” and “custom domain”
+* Zero manual steps by admin: user can complete everything self-service
+
+NON-NEGOTIABLE SECURITY
+
+1. ASK endpoint MUST be locked by token:
+
+   * read token via `req.get('X-Ask-Token')`
+   * compare to `process.env.CADDY_ASK_TOKEN` (string equality)
+   * if mismatch: 403 plain text "forbidden"
+2. ASK endpoint MUST NOT allow wildcard; only explicit domains that are ACTIVE in DB.
+3. Rate limit ASK endpoint (e.g., 100/min per IP) and add basic anti-abuse:
+
+   * reject empty domain
+   * normalize domain (lowercase, trim, strip trailing dot)
+   * reject IP literals (`^\d{1,3}(\.\d{1,3}){3}$`)
+4. On DB/any error => default deny (403).
+
+DATA MODEL (Postgres)
+Create migrations (or SQL on startup) to support:
+
+* tenants
+* users (minimal; can be mocked if auth exists, else stub single-tenant for now but architecture must be multi-tenant)
+* domains
+* domain_verification_attempts (optional but helpful for audit)
+* background_jobs / domain_checks (optional)
+
+Minimum tables:
+
+1. tenants
+
+* id (uuid pk)
+* name text
+* created_at
+
+2. domains
+
+* id (uuid pk)
+* tenant_id uuid fk -> tenants(id)
+* domain text unique (global unique)
+* type text enum: 'subdomain' | 'custom'   (subdomain = *.botfactory.kz, custom = any)
+* status text enum:
+  'pending_dns' | 'pending_txt' | 'verifying' | 'active' | 'error'
+* verification_token text (random)
+* required_txt_name text (usually "_botfactory-verify" or "_botfactory" etc; keep consistent)
+* required_txt_value text (token or `botfactory=<token>`)
+* dns_a_ok boolean default false
+* dns_txt_ok boolean default false
+* last_check_at timestamptz
+* next_check_at timestamptz
+* attempts int default 0
+* error_reason text nullable
+* created_at, updated_at
+
+IMPORTANT:
+
+* domain must be stored normalized (lowercase, no trailing dot)
+* add index on (status, next_check_at)
+* enforce one active domain per tenant? (optional) do not block if not needed
+
+OWNERSHIP VERIFICATION (TXT)
+When user adds a domain:
+
+* generate `verification_token` (secure random, 32+ chars url-safe)
+* instruct user to create TXT record:
+  Name/Host: `_botfactory-verify.<their-domain>` (or `_botfactory.<domain>` — pick one and keep it stable)
+  Value: the token (or `botfactory-verify=<token>`)
+* system periodically checks DNS TXT until match is found.
+* after TXT verified, system checks DNS A record to 45.90.35.9.
+* only when BOTH TXT and A are verified => status 'active' => ASK endpoint returns 200.
+
+DNS CHECKING IMPLEMENTATION
+Use Node DNS (dns/promises) but note it uses recursive resolver; acceptable.
+
+* Implement functions:
+
+  * resolveA(domain) -> array of IPv4
+  * resolveTxt(name) -> array of strings (flatten TXT chunks)
+* TXT host to query must be exactly the configured verification record.
+* Handle DNS propagation: retry automatically.
+* Auto-retry worker:
+
+  * Runs every 60s (or 30s) and picks domains where status in ('pending_txt','pending_dns','verifying') and next_check_at <= now()
+  * For each domain:
+
+    * check TXT first; if ok set dns_txt_ok = true
+    * check A to 45.90.35.9; if ok set dns_a_ok = true
+    * if both ok => status='active', clear error_reason
+    * else set status appropriately and schedule next_check_at with backoff (e.g., min 30s, max 30m)
+    * attempts++
+    * store last_check_at, next_check_at
+  * If attempts exceed threshold (e.g., 100) or time window exceeded => status='error' with reason and stop retry unless user hits "Retry"
+* Add API endpoint to force re-check: POST /api/domains/:id/retry sets next_check_at=now, status='verifying', attempts unchanged or reset.
+
+SSL STATUS
+We cannot directly query Caddy, but we can infer:
+
+* Once domain is 'active', user should be able to open https://domain and it should work.
+* Implement optional “SSL check” button:
+
+  * backend does an HTTPS HEAD request to `https://<domain>/__ping` (or `/`), with short timeout (3s), allowing self-signed? (no) but accept errors
+  * if succeeds (2xx/3xx) => ssl_status='active'
+  * if fails with TLS error => ssl_status='pending'
+    Store ssl_status separately in domains table:
+* ssl_status enum: 'unknown' | 'pending' | 'active' | 'error'
+* ssl_last_check_at, ssl_error_reason
+  Also run SSL check automatically after status becomes 'active' (delayed 10-30 seconds) and then every few minutes until active.
+
+API DESIGN (Express)
+Implement JSON APIs:
+
+Auth:
+
+* If project already has auth, use it. If not, implement a minimal dev auth:
+
+  * assume single tenant "default" for now BUT keep DB schema multi-tenant.
+  * derive tenant_id from req.user or from a header in dev.
+    Do NOT block build on auth; stub is ok.
+
+Endpoints:
+
+1. GET /api/domains
+
+* list domains for current tenant
+
+2. POST /api/domains
+   Body: { domain: string }
+
+* normalize
+* detect type:
+
+  * if endsWith(".botfactory.kz") => type='subdomain' else type='custom'
+* create row with status='pending_txt'
+* generate token and required TXT instructions
+* respond with onboarding instructions JSON
+
+3. POST /api/domains/:id/verify
+
+* triggers immediate verification attempt (set status='verifying', next_check_at=now)
+
+4. POST /api/domains/:id/retry
+
+* same as verify but also clears error_reason and sets attempts=0 optionally
+
+5. DELETE /api/domains/:id
+
+* remove domain (must also stop ASK from allowing it immediately)
+
+6. GET /api/domains/:id/instructions
+
+* return instructions (TXT + A) for UI display
+
+7. POST /api/domains/:id/check-ssl
+
+* runs HTTPS check and updates ssl_status
+
+Caddy ASK:
+8) GET /api/internal/caddy/allow?domain=...
+
+* Token auth required
+* Query DB: allow ONLY if domain exists AND status='active'
+* return 200 text/plain "ok" else 403 "forbidden"
+
+UI (React)
+Create a Settings section “Domains” with:
+
+* Add domain form (input + Add)
+* Domain list table:
+  columns: domain, type, status, dns_txt_ok, dns_a_ok, ssl_status, last_check, actions
+* Domain onboarding panel when a domain is created/selected:
+
+  * Step 1: Add TXT record (show exact host + exact value + TTL suggestion)
+  * Step 2: Add A record to 45.90.35.9 (for apex and/or subdomain depending on domain)
+  * Step 3: Click “Verify” (manual trigger) BUT also show “Auto-checking…” with next retry time
+  * Provide copy buttons for TXT host/value and IP
+  * Explain common DNS provider nuances (Cloudflare proxy must be DNS-only for initial validation; A record must be to edge IP)
+* For subdomain type:
+
+  * instruction: create CNAME/A for `<sub>.botfactory.kz` already points to edge (or if you support user choosing subdomain, show they don’t need DNS if it’s your own zone; but in your current model they are creating their own subdomain records. Clarify accordingly.)
+* For custom second-level domain:
+
+  * instruction: A record for root/apex to 45.90.35.9 and TXT record `_botfactory-verify.<domain>` to token.
+* Show status messages:
+
+  * pending_txt: “Waiting for TXT record”
+  * pending_dns: “Waiting for A record”
+  * verifying: “Checking…”
+  * active: “Domain active, SSL issuing/active”
+  * error: show error_reason and Retry button
+* Provide a “Test HTTPS” button that calls /check-ssl
+
+IMPLEMENTATION NOTES
+
+* Use TypeScript end-to-end.
+* Add a server-side `normalizeDomain` utility and use it everywhere.
+* Add logging for verification attempts (console.log is fine).
+* Ensure background job does not block request loop:
+
+  * use setInterval async loop with guard against overlap (mutex boolean).
+* Ensure DB connection pool is singleton.
+* Use transactions where needed.
+* Add proper input validation and helpful errors.
+
+FILES/STRUCTURE (suggested)
+server/
+db.ts (pool)
+migrations/001_init.sql (or run-on-start)
+domains/
+normalizeDomain.ts
+dns.ts
+verifier.ts (worker)
+routes.ts
+allowRoute.ts
+client/src/
+pages/Settings/DomainsPage.tsx
+components/Domains/DomainInstructions.tsx
+components/Domains/DomainsTable.tsx
+
+DELIVERABLES
+
+* Working end-to-end flow:
+
+  * user adds domain in UI
+  * sees TXT + A instructions
+  * system auto-checks until verified
+  * once verified => ASK endpoint allows => Caddy issues SSL
+  * UI shows “SSL active” after check
+* No manual intervention required.
+* Include minimal seed: create default tenant on first run if none exists.
+
+IMPORTANT: Also update the UI to include a clear “Domains” settings page with instructions for:
+
+* Subdomains (botfactory.kz)
+* Second-level custom domains
+  and show exact DNS record examples.
+
+Now implement this fully in the existing codebase. If something is missing (e.g., auth), stub it in a way that preserves multi-tenant architecture but works in dev/production. Do not leave TODOs; implement complete working functionality.

@@ -17,6 +17,8 @@ import { sendPasswordResetEmail } from "./services/gmail";
 import { randomBytes } from "crypto";
 import net from "node:net";
 import { pool } from "./db";
+import domainRoutes from "./domains/routes.js";
+import { startDomainWorker } from "./domains/worker.js";
 
 const SessionStore = MemoryStore(session);
 
@@ -596,6 +598,8 @@ export async function registerRoutes(
   app.use(passport.session());
   
   registerObjectStorageRoutes(app);
+  app.use(domainRoutes);
+  startDomainWorker();
 
   app.get("/__ping", (_req: Request, res: Response) => {
     res.type("text/plain").status(200).send("pong");
@@ -642,7 +646,13 @@ export async function registerRoutes(
 
       const r = await pool.query("SELECT 1 FROM tenants WHERE custom_domain = $1 LIMIT 1", [domain]);
       if (r.rowCount) {
-        console.log(`[caddy-ask] allow domain=${domain} tokenSource=${tokenSource} reason=custom_domain`);
+        console.log(`[caddy-ask] allow domain=${domain} tokenSource=${tokenSource} reason=custom_domain_legacy`);
+        return res.type("text/plain").status(200).send("ok");
+      }
+
+      const dr = await pool.query("SELECT 1 FROM domains WHERE domain = $1 AND status = 'active' LIMIT 1", [domain]);
+      if (dr.rowCount) {
+        console.log(`[caddy-ask] allow domain=${domain} tokenSource=${tokenSource} reason=domains_table`);
         return res.type("text/plain").status(200).send("ok");
       }
 
@@ -724,10 +734,21 @@ export async function registerRoutes(
     }
 
     try {
-      const tenant = await storage.getTenantByCustomDomain(hostWithoutWww)
+      let tenant = await storage.getTenantByCustomDomain(hostWithoutWww)
         || await storage.getTenantByCustomDomain(host);
       if (tenant) {
         return res.json({ customDomain: true, slug: tenant.slug, tenantName: tenant.name });
+      }
+
+      const domainRow = await pool.query(
+        "SELECT tenant_id FROM domains WHERE domain = $1 AND status = 'active' LIMIT 1",
+        [hostWithoutWww]
+      );
+      if (domainRow.rows.length) {
+        tenant = await storage.getTenant(domainRow.rows[0].tenant_id);
+        if (tenant) {
+          return res.json({ customDomain: true, slug: tenant.slug, tenantName: tenant.name });
+        }
       }
     } catch (err) {
       console.error("[DomainDetect] Error:", err);
@@ -778,8 +799,19 @@ export async function registerRoutes(
       }
 
       const hostWithoutWww = host.replace(/^www\./, "");
-      const tenant = await storage.getTenantByCustomDomain(hostWithoutWww) 
+      let tenant = await storage.getTenantByCustomDomain(hostWithoutWww) 
         || await storage.getTenantByCustomDomain(host);
+      
+      if (!tenant) {
+        const domainRow = await pool.query(
+          "SELECT tenant_id FROM domains WHERE domain = $1 AND status = 'active' LIMIT 1",
+          [hostWithoutWww]
+        );
+        if (domainRow.rows.length) {
+          tenant = await storage.getTenant(domainRow.rows[0].tenant_id);
+        }
+      }
+
       if (tenant) {
         const originalQuery = req.originalUrl.includes("?") ? req.originalUrl.substring(req.originalUrl.indexOf("?")) : "";
         const subPath = req.path === "/" ? "" : req.path;
