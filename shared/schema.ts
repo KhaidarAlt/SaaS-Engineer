@@ -795,6 +795,10 @@ export const aiSettings = pgTable("ai_settings", {
   typingDelay: integer("typing_delay").default(1500),
   versionNumber: integer("version_number").notNull().default(1),
   isActive: boolean("is_active").notNull().default(true),
+  onboardingCompleted: boolean("onboarding_completed").notNull().default(false),
+  onboardingStep: integer("onboarding_step").notNull().default(0),
+  objectionsJson: jsonb("objections_json").$type<string[]>().default([]),
+  salesBoostersJson: jsonb("sales_boosters_json").$type<{upsell: boolean; cheaperAlternative: boolean; scarcity: boolean; autoPromo: boolean}>(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

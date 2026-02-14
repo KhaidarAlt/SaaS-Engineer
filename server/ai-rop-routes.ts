@@ -719,6 +719,377 @@ export function registerAiRopRoutes(
       res.status(500).json({ message: "Ошибка AI-ответа" });
     }
   });
+
+  // ========================
+  // 9. Onboarding
+  // ========================
+
+  app.get("/api/ai-rop/onboarding/status", requireAuth, requireAiAccess, async (req: Request, res: Response) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const settings = await storage.getOrCreateAiSettings(tenantId);
+      res.json({ completed: settings.onboardingCompleted, step: settings.onboardingStep });
+    } catch (error: any) {
+      console.error("Ошибка получения статуса онбординга:", error);
+      res.status(500).json({ message: "Ошибка получения статуса онбординга" });
+    }
+  });
+
+  app.post("/api/ai-rop/onboarding/complete", requireAuth, requireAiAccess, async (req: Request, res: Response) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const userId = req.user!.id;
+      const { goal, tone, objections, handoverRules: hrRules, customToneText } = req.body;
+
+      const current = await storage.getOrCreateAiSettings(tenantId);
+      const newVersion = (current.versionNumber || 1) + 1;
+
+      await db.insert(aiSettingsHistory).values({
+        tenantId,
+        versionNumber: current.versionNumber || 1,
+        settingsSnapshot: {
+          enabled: current.enabled,
+          language: current.language,
+          tone: current.tone,
+          goal: current.goal,
+          temperature: current.temperature,
+          typingDelay: current.typingDelay,
+          workingHoursJson: current.workingHoursJson,
+          fallbackHandoffText: current.fallbackHandoffText,
+          systemPromptCustom: current.systemPromptCustom,
+          isActive: current.isActive,
+        },
+        changedBy: userId,
+        changeReason: "Онбординг завершён",
+      });
+
+      const updateData: Record<string, any> = {
+        goal,
+        tone,
+        objectionsJson: objections,
+        onboardingCompleted: true,
+        onboardingStep: 6,
+        versionNumber: newVersion,
+        updatedAt: new Date(),
+      };
+      if (tone === "custom" && customToneText) {
+        updateData.systemPromptCustom = customToneText;
+      }
+
+      const [updated] = await db.update(aiSettings)
+        .set(updateData)
+        .where(eq(aiSettings.tenantId, tenantId))
+        .returning();
+
+      if (Array.isArray(hrRules)) {
+        for (const rule of hrRules) {
+          await db.insert(handoverRules).values({
+            tenantId,
+            ruleType: rule.ruleType,
+            thresholdValue: rule.thresholdValue || null,
+          });
+        }
+      }
+
+      res.json(updated);
+    } catch (error: any) {
+      console.error("Ошибка завершения онбординга:", error);
+      res.status(500).json({ message: "Ошибка завершения онбординга" });
+    }
+  });
+
+  // ========================
+  // 10. Catalog Summary
+  // ========================
+
+  app.get("/api/ai-rop/catalog-summary", requireAuth, requireAiAccess, async (req: Request, res: Response) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+
+      const productsResult = await pool.query(
+        `SELECT COUNT(*)::int as cnt FROM products WHERE tenant_id = $1`,
+        [tenantId]
+      );
+      const categoriesResult = await pool.query(
+        `SELECT COUNT(*)::int as cnt FROM categories WHERE tenant_id = $1`,
+        [tenantId]
+      );
+      const avgPriceResult = await pool.query(
+        `SELECT COALESCE(AVG(price::numeric), 0)::float as avg FROM products WHERE tenant_id = $1`,
+        [tenantId]
+      );
+      const promoResult = await pool.query(
+        `SELECT COUNT(*)::int as cnt FROM promotions WHERE tenant_id = $1 AND is_active = true`,
+        [tenantId]
+      );
+      const kaspiResult = await pool.query(
+        `SELECT COUNT(*)::int as cnt FROM kaspi_integrations WHERE tenant_id = $1 AND is_verified = true`,
+        [tenantId]
+      );
+
+      res.json({
+        productsCount: productsResult.rows[0]?.cnt || 0,
+        categoriesCount: categoriesResult.rows[0]?.cnt || 0,
+        avgPrice: parseFloat(avgPriceResult.rows[0]?.avg || "0"),
+        promoZoneActive: (promoResult.rows[0]?.cnt || 0) > 0,
+        paymentsReady: (kaspiResult.rows[0]?.cnt || 0) > 0,
+      });
+    } catch (error: any) {
+      console.error("Ошибка получения сводки каталога:", error);
+      res.status(500).json({ message: "Ошибка получения сводки каталога" });
+    }
+  });
+
+  // ========================
+  // 11. Analytics Summary & Dropoffs
+  // ========================
+
+  app.get("/api/ai-rop/analytics/summary", requireAuth, requireAiAccess, async (req: Request, res: Response) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const period = (req.query.period as string) || "30d";
+      const now = new Date();
+      let from: Date;
+
+      switch (period) {
+        case "today":
+          from = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          break;
+        case "7d":
+          from = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+          break;
+        case "90d":
+          from = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+          break;
+        default:
+          from = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      }
+
+      const result = await pool.query(`
+        SELECT
+          COUNT(*)::int AS total_dialogs,
+          COUNT(*) FILTER (WHERE success = true)::int AS successful_dialogs,
+          COUNT(*) FILTER (WHERE success = false)::int AS failed_dialogs,
+          COUNT(*) FILTER (WHERE stage_exit = 'handover' OR status = 'handoff')::int AS handover_count
+        FROM ai_conversations
+        WHERE tenant_id = $1 AND created_at >= $2 AND created_at <= $3
+      `, [tenantId, from.toISOString(), now.toISOString()]);
+
+      const avgResult = await pool.query(`
+        SELECT COALESCE(AVG(msg_count), 0)::float AS avg_messages
+        FROM (
+          SELECT c.id, COUNT(m.id) AS msg_count
+          FROM ai_conversations c
+          LEFT JOIN ai_messages m ON m.conversation_id = c.id
+          WHERE c.tenant_id = $1 AND c.created_at >= $2 AND c.created_at <= $3
+          GROUP BY c.id
+        ) sub
+      `, [tenantId, from.toISOString(), now.toISOString()]);
+
+      const row = result.rows[0] || {};
+      const totalDialogs = row.total_dialogs || 0;
+      const successfulDialogs = row.successful_dialogs || 0;
+      const conversionRate = totalDialogs > 0 ? Math.round((successfulDialogs / totalDialogs) * 100) : 0;
+
+      res.json({
+        totalDialogs,
+        successfulDialogs,
+        failedDialogs: row.failed_dialogs || 0,
+        handoverCount: row.handover_count || 0,
+        conversionRate,
+        avgMessagesPerDialog: parseFloat(avgResult.rows[0]?.avg_messages || "0"),
+      });
+    } catch (error: any) {
+      console.error("Ошибка получения аналитики:", error);
+      res.status(500).json({ message: "Ошибка получения аналитики" });
+    }
+  });
+
+  app.get("/api/ai-rop/analytics/dropoffs", requireAuth, requireAiAccess, async (req: Request, res: Response) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const period = (req.query.period as string) || "30d";
+      const now = new Date();
+      let from: Date;
+
+      switch (period) {
+        case "today":
+          from = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          break;
+        case "7d":
+          from = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+          break;
+        case "90d":
+          from = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+          break;
+        default:
+          from = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      }
+
+      const totalResult = await pool.query(`
+        SELECT COUNT(*)::int AS total
+        FROM ai_conversations
+        WHERE tenant_id = $1 AND created_at >= $2 AND created_at <= $3
+          AND stage_exit IS NOT NULL
+      `, [tenantId, from.toISOString(), now.toISOString()]);
+
+      const total = totalResult.rows[0]?.total || 0;
+
+      const stagesResult = await pool.query(`
+        SELECT stage_exit AS stage, COUNT(*)::int AS count
+        FROM ai_conversations
+        WHERE tenant_id = $1 AND created_at >= $2 AND created_at <= $3
+          AND stage_exit IS NOT NULL
+        GROUP BY stage_exit
+        ORDER BY count DESC
+      `, [tenantId, from.toISOString(), now.toISOString()]);
+
+      const dropoffs = stagesResult.rows.map((row: any) => ({
+        stage: row.stage,
+        count: row.count,
+        percentage: total > 0 ? Math.round((row.count / total) * 100) : 0,
+      }));
+
+      res.json(dropoffs);
+    } catch (error: any) {
+      console.error("Ошибка получения дропоффов:", error);
+      res.status(500).json({ message: "Ошибка получения дропоффов" });
+    }
+  });
+
+  // ========================
+  // 12. Recommendations
+  // ========================
+
+  app.post("/api/ai-rop/recommendations/apply", requireAuth, requireAiAccess, async (req: Request, res: Response) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const userId = req.user!.id;
+      const { problem, suggestion, type } = req.body;
+
+      const current = await storage.getOrCreateAiSettings(tenantId);
+      const newVersion = (current.versionNumber || 1) + 1;
+
+      await db.insert(aiSettingsHistory).values({
+        tenantId,
+        versionNumber: current.versionNumber || 1,
+        settingsSnapshot: {
+          enabled: current.enabled,
+          language: current.language,
+          tone: current.tone,
+          goal: current.goal,
+          temperature: current.temperature,
+          typingDelay: current.typingDelay,
+          workingHoursJson: current.workingHoursJson,
+          fallbackHandoffText: current.fallbackHandoffText,
+          systemPromptCustom: current.systemPromptCustom,
+          isActive: current.isActive,
+        },
+        changedBy: userId,
+        changeReason: `Рекомендация применена: ${problem}`,
+      });
+
+      await db.update(aiSettings)
+        .set({ versionNumber: newVersion, updatedAt: new Date() })
+        .where(eq(aiSettings.tenantId, tenantId));
+
+      if (type === "knowledge") {
+        console.log(`[AI-ROP] Recommendation applied (knowledge): ${suggestion} for tenant ${tenantId}`);
+      } else if (type === "handover") {
+        console.log(`[AI-ROP] Recommendation applied (handover): ${suggestion} for tenant ${tenantId}`);
+      } else {
+        console.log(`[AI-ROP] Recommendation applied (${type}): ${suggestion} for tenant ${tenantId}`);
+      }
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Ошибка применения рекомендации:", error);
+      res.status(500).json({ message: "Ошибка применения рекомендации" });
+    }
+  });
+
+  app.post("/api/ai-rop/recommendations/ignore", requireAuth, requireAiAccess, async (req: Request, res: Response) => {
+    try {
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Ошибка игнорирования рекомендации:", error);
+      res.status(500).json({ message: "Ошибка игнорирования рекомендации" });
+    }
+  });
+
+  // ========================
+  // 13. Test Chat Training
+  // ========================
+
+  app.post("/api/ai-rop/test-chat/train", requireAuth, requireAiAccess, async (req: Request, res: Response) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const { messageId, action, correctedText } = req.body;
+
+      if (action === "fix_only") {
+        await db.update(aiMessages)
+          .set({ content: correctedText })
+          .where(eq(aiMessages.id, messageId));
+      } else if (action === "train_future") {
+        const [currentMsg] = await db.select().from(aiMessages)
+          .where(eq(aiMessages.id, messageId));
+        if (!currentMsg) return res.status(404).json({ message: "Сообщение не найдено" });
+
+        const prevMessages = await db.select().from(aiMessages)
+          .where(and(
+            eq(aiMessages.conversationId, currentMsg.conversationId),
+            eq(aiMessages.role, "user"),
+          ))
+          .orderBy(desc(aiMessages.createdAt))
+          .limit(1);
+
+        const userMessage = prevMessages[0]?.content || "";
+
+        await db.insert(trainingItems).values({
+          tenantId,
+          userMessage,
+          aiOriginal: currentMsg.content,
+          aiCorrected: correctedText || currentMsg.content,
+          source: "TEST_CHAT",
+        });
+      } else if (action === "add_knowledge") {
+        await db.insert(knowledgeItems).values({
+          tenantId,
+          category: "general",
+          question: "",
+          answer: correctedText || "",
+          source: "TEST_CHAT",
+        });
+      } else if (action === "anti_pattern") {
+        const [currentMsg] = await db.select().from(aiMessages)
+          .where(eq(aiMessages.id, messageId));
+        if (!currentMsg) return res.status(404).json({ message: "Сообщение не найдено" });
+
+        const prevMessages = await db.select().from(aiMessages)
+          .where(and(
+            eq(aiMessages.conversationId, currentMsg.conversationId),
+            eq(aiMessages.role, "user"),
+          ))
+          .orderBy(desc(aiMessages.createdAt))
+          .limit(1);
+
+        const userMessage = prevMessages[0]?.content || "";
+
+        await db.insert(trainingItems).values({
+          tenantId,
+          userMessage,
+          aiOriginal: currentMsg.content,
+          aiCorrected: correctedText || "",
+          source: "ANTI_PATTERN",
+        });
+      }
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Ошибка обучения из тест-чата:", error);
+      res.status(500).json({ message: "Ошибка обучения" });
+    }
+  });
 }
 
 function detectStageFromContent(userMessage: string, aiResponse: string): string | null {

@@ -69,8 +69,14 @@ Preferred communication style: Simple, everyday language.
   - Settings versioning with automatic history tracking
   - Test chat widget for live AI testing
   - Schema: ai_settings (extended with goal, versionNumber, etc.), handover_rules, knowledge_items, training_items, ai_audit_reports, ai_settings_history
-  - API: 16 endpoints under /api/ai-rop/* in server/ai-rop-routes.ts
-  - Frontend: Tabbed interface (Overview, Rules, Knowledge, Training, History) in AiRopPage.tsx
+  - API: 24 endpoints under /api/ai-rop/* in server/ai-rop-routes.ts
+  - Frontend: Feature module at client/src/features/aiRop/ with:
+    - Entry page: AiRopEntryPage (conditional onboarding/dashboard)
+    - Onboarding: WowScanIntro (catalog scan animation) + InterviewWizard (6-step guided setup: goal, readiness, tone, objections, handover rules, summary)
+    - Dashboard: 3-column layout (left: KpiCards/FunnelCard/DropoffReasonsCard, center: AiDiagnosisCard/RecommendationCards, right: TestChatPanel)
+    - Strategy Panel: Collapsible bottom panel with goal, handover rules, tone, sales boosters, objections, advanced settings
+    - Drawers: TrainingHistoryDrawer, VersionHistoryDrawer (rollback last 10 versions)
+    - Test Chat: WhatsApp-like mock with edit/approve/train actions
 
 ## Platform Admin Setup (one-time)
 - **Wildcard DNS**: Add CNAME record in Cloudflare for `botfactory.kz`: Name=`*`, Target=`saa-s-engineer--m528dpa.replit.app`, Proxy=ON. This enables all tenant subdomains (`*.botfactory.kz`) to resolve and get SSL automatically. This is a one-time setup by the platform owner — tenant users do not need to configure anything.

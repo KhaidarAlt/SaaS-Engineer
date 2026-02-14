@@ -46,7 +46,7 @@ import AiSandboxPage from "@/pages/dashboard/ai/AiSandboxPage";
 import AiAnalyticsPage from "@/pages/dashboard/ai/AiAnalyticsPage";
 import AiIntegrationsPage from "@/pages/dashboard/ai/AiIntegrationsPage";
 import AiSettingsPage from "@/pages/dashboard/ai/AiSettingsPage";
-import AiRopPage from "@/pages/dashboard/ai/AiRopPage";
+import AiRopEntryPage from "@/features/aiRop/pages/AiRopEntryPage";
 import CatalogRouter from "@/pages/catalog/CatalogRouter";
 import ProductDetailPage from "@/pages/catalog/ProductDetailPage";
 import CartPage from "@/pages/catalog/CartPage";
@@ -326,7 +326,7 @@ function Router() {
         <ProtectedRoute component={AiSettingsPage} />
       </Route>
       <Route path="/dashboard/ai/rop">
-        <ProtectedRoute component={AiRopPage} />
+        <ProtectedRoute component={AiRopEntryPage} />
       </Route>
 
       <Route path="/admin">
