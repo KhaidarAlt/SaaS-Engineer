@@ -1,0 +1,161 @@
+# PROMPT 1/SEQUENCE — Build AI-РОП Tabs Architecture + Move Current Page to “Strategy” (No Feature Changes Yet)
+
+Context:
+We have an existing AI-РОП page implemented (dashboard top + test chat + strategy settings blocks like goal/style/objections/handovers/advanced prompt).
+We want to split AI-РОП into separate top tabs to avoid “vinegret”.
+We will implement each tab later. For now: architecture + routing + stubs.
+
+IMPORTANT:
+
+* Do NOT redesign business logic.
+* Do NOT break existing AI-РОП functionality.
+* Only restructure UI into tabs and move existing content into the Strategy tab.
+
+========================================================
+GOAL
+====
+
+1. Create a stable tabbed architecture for AI-РОП:
+   Tabs order (top navigation):
+
+1) Обзор
+2) Обучение
+3) Тестирование
+4) Подключение
+5) Аналитика
+6) Стратегия
+
+2. Current existing AI-РОП page content must become the “Стратегия” tab content (as-is, minimal changes).
+3. Other tabs must exist as pages/components with placeholder empty-states and minimal skeleton UI.
+4. Keep multi-tenant requirements (tenant_id everywhere, reuse existing auth middleware).
+5. Use React Router (or existing routing system) and create nested routes under /app/ai-rop.
+
+========================================================
+ROUTING
+=======
+
+Create base route:
+
+* /app/ai-rop → redirect to /app/ai-rop/overview
+
+Nested routes:
+
+* /app/ai-rop/overview
+* /app/ai-rop/training
+* /app/ai-rop/testing
+* /app/ai-rop/connections
+* /app/ai-rop/analytics
+* /app/ai-rop/strategy
+
+========================================================
+FRONTEND FILE STRUCTURE
+=======================
+
+Create/adjust folder:
+client/src/features/aiRop/
+
+aiRop/
+layout/
+AiRopLayout.tsx            // wrapper with top tabs + outlet
+AiRopTabs.tsx              // top nav tabs component
+pages/
+OverviewPage.tsx
+TrainingPage.tsx
+TestingPage.tsx
+ConnectionsPage.tsx
+AnalyticsPage.tsx
+StrategyPage.tsx
+components/
+EmptyStateCard.tsx
+SectionHeader.tsx
+
+Implementation rules:
+
+* AiRopLayout renders header title “AI-РОП” + tabs + <Outlet />
+* Tabs highlight active route, preserve existing top right buttons if present (audit/training/versions) ONLY inside Strategy for now (we will refine later).
+* Keep design consistent with current UI (Tailwind, minimal, premium).
+
+========================================================
+MOVE EXISTING CONTENT TO STRATEGY TAB
+=====================================
+
+Take the entire current AI-РОП screen and move it into StrategyPage.tsx.
+This includes:
+
+* top period selector
+* audit button
+* test chat panel on right
+* strategy settings accordion blocks: goal, positioning, promotion, handover rules, style, boosters, objections, advanced settings, save button
+  Do NOT remove or rename existing components; just relocate/import them under StrategyPage.
+
+If current AI-РОП implementation is in some existing route component:
+
+* Extract it into a reusable component <StrategyWorkspace /> and mount it inside StrategyPage.
+
+========================================================
+OTHER TABS — PLACEHOLDER STUBS (FOR NOW)
+========================================
+
+For each other tab page, create a clean stub with:
+
+* Page title
+* Short explanation
+* 2–3 bullet list of what will be here
+* A single “EmptyStateCard” with CTA pointing to Strategy or Testing (where current features exist)
+
+Placeholders text:
+
+OverviewPage:
+Title: “Обзор”
+EmptyState: “Здесь будет общий результат работы AI-РОПа: KPI, диагностика, рекомендации и статус готовности.”
+CTA: “Перейти в Стратегию” → /app/ai-rop/strategy
+
+TrainingPage:
+Title: “Обучение”
+EmptyState: “Здесь появятся: триггеры, база знаний, история правок ответов и обучение на диалогах.”
+CTA: “Перейти в Тестирование” → /app/ai-rop/testing
+
+TestingPage:
+Title: “Тестирование”
+EmptyState: “Здесь будет песочница: тестовый чат, симуляция клиентов, стресс-тесты.”
+CTA: “Перейти в Стратегию” OR “Открыть текущий тест-чат” → for now route to Strategy (because test chat is currently there). Later we will move it here.
+
+ConnectionsPage:
+Title: “Подключение”
+EmptyState: “Здесь будут подключения каналов: WhatsApp (WAHA), WhatsApp Cloud API (Meta), Instagram Direct, Telegram.”
+CTA: “Открыть интеграции” → if existing integrations route exists, link there; otherwise link to Strategy.
+
+AnalyticsPage:
+Title: “Аналитика”
+EmptyState: “Здесь будет воронка, отвал клиентов, причины отказов и деньги (потеряно/принесено).”
+CTA: “Запустить тестирование” → /app/ai-rop/testing
+
+========================================================
+HEADER / TABS UI SPEC
+=====================
+
+AiRopTabs must show exactly these labels in this order:
+[Обзор] [Обучение] [Тестирование] [Подключение] [Аналитика] [Стратегия]
+
+Use NavLink with active styling similar to the “Сегодня/7 дней/30 дней/90 дней” pills currently used.
+Keep it clean and compact.
+
+========================================================
+NO BACKEND CHANGES REQUIRED IN THIS STEP
+========================================
+
+Do not change API endpoints.
+Do not change DB.
+Just restructure UI into tabs and ensure existing Strategy content still works.
+
+========================================================
+ACCEPTANCE CHECK
+================
+
+* Visiting /app/ai-rop shows tabbed navigation and redirects to /overview.
+* All 6 tabs load without errors.
+* Strategy tab shows the exact current AI-РОП content and it still functions.
+* No regressions in test chat, saving settings, etc.
+* Other tabs show good placeholder empty-states (not blank white).
+
+Implement now.
