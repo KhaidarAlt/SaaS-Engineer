@@ -153,12 +153,57 @@ export interface VersionHistoryEntry {
   createdAt: string;
 }
 
+export interface BusinessProfileData {
+  isOfficialRepresentative: boolean;
+  representedBrands: string[];
+  hasOwnBrand: boolean;
+  ownBrands: string[];
+  uspPoints: string[];
+  uspFreeText: string;
+  installmentEnabled: boolean;
+  installmentBanks: string[];
+}
+
+export interface PromotionStrategyData {
+  promoteNew: boolean;
+  promotePremium: boolean;
+  promoteEntry: boolean;
+  promoteSlow: boolean;
+  promotedCategoryIds: string[];
+}
+
+export interface ManualTagData {
+  productId: string;
+  tagType: "PRIORITY" | "FLAGSHIP";
+  weight: number;
+}
+
+export interface CatalogSegments {
+  newCount: number;
+  premiumCount: number;
+  entryCount: number;
+  slowCount: number;
+  topCategories: Array<{ id: string; name: string; count: number }>;
+  avgPrice: number;
+}
+
+export interface ProductSearchResult {
+  id: string;
+  name: string;
+  sku: string;
+  price: string;
+  main_image_url: string | null;
+}
+
 export interface OnboardingData {
   goal: GoalType;
   tone: TonePreset;
   objections: string[];
   handoverRules: Array<{ ruleType: string; thresholdValue?: string }>;
   customToneText?: string;
+  businessProfile?: BusinessProfileData;
+  promotionStrategy?: PromotionStrategyData;
+  manualTags?: ManualTagData[];
 }
 
 export const GOAL_LABELS: Record<GoalType, { title: string; description: string; icon: string }> = {

@@ -4,6 +4,8 @@ import type {
   AnalyticsSummary, FunnelStage, DropoffReason,
   AuditReport, TestChatResponse, VersionHistoryEntry,
   HandoverRule, KnowledgeItem, TrainingItem, OnboardingData,
+  BusinessProfileData, PromotionStrategyData, CatalogSegments,
+  ProductSearchResult,
 } from "../types/aiRopTypes";
 
 export const AI_ROP_KEYS = {
@@ -19,6 +21,11 @@ export const AI_ROP_KEYS = {
   trainingItems: ["/api/ai-rop/training-items"] as const,
   settingsHistory: ["/api/ai-rop/settings-history"] as const,
   onboardingStatus: ["/api/ai-rop/onboarding/status"] as const,
+  businessProfile: ["/api/ai/business-profile"] as const,
+  catalogSegments: ["/api/ai/catalog/segments"] as const,
+  productTags: ["/api/ai/product-tags"] as const,
+  promotionRules: ["/api/ai/promotion-rules"] as const,
+  productSearch: (q?: string) => ["/api/ai/products/search", q] as const,
 };
 
 export async function fetchSettings(): Promise<AiRopSettings> {
@@ -124,4 +131,47 @@ export async function applyRecommendation(recommendation: { problem: string; sug
 
 export async function ignoreRecommendation(recommendation: { problem: string; type: string }): Promise<void> {
   await apiRequest("POST", "/api/ai-rop/recommendations/ignore", recommendation);
+}
+
+export async function fetchBusinessProfile(): Promise<BusinessProfileData | null> {
+  const res = await fetch("/api/ai/business-profile", { credentials: "include" });
+  if (!res.ok) throw new Error("Failed to fetch business profile");
+  return res.json();
+}
+
+export async function saveBusinessProfile(data: BusinessProfileData): Promise<BusinessProfileData> {
+  const res = await apiRequest("POST", "/api/ai/business-profile", data);
+  const result = await res.json();
+  queryClient.invalidateQueries({ queryKey: AI_ROP_KEYS.businessProfile });
+  return result;
+}
+
+export async function fetchCatalogSegments(): Promise<CatalogSegments> {
+  const res = await fetch("/api/ai/catalog/segments", { credentials: "include" });
+  if (!res.ok) throw new Error("Failed to fetch segments");
+  return res.json();
+}
+
+export async function fetchPromotionRules(): Promise<PromotionStrategyData | null> {
+  const res = await fetch("/api/ai/promotion-rules", { credentials: "include" });
+  if (!res.ok) throw new Error("Failed to fetch promotion rules");
+  return res.json();
+}
+
+export async function savePromotionRules(data: PromotionStrategyData): Promise<PromotionStrategyData> {
+  const res = await apiRequest("POST", "/api/ai/promotion-rules", data);
+  const result = await res.json();
+  queryClient.invalidateQueries({ queryKey: AI_ROP_KEYS.promotionRules });
+  return result;
+}
+
+export async function searchProducts(q: string): Promise<ProductSearchResult[]> {
+  const res = await fetch(`/api/ai/products/search?q=${encodeURIComponent(q)}`, { credentials: "include" });
+  if (!res.ok) throw new Error("Failed to search products");
+  return res.json();
+}
+
+export async function setProductTags(productIds: string[], tagType: string): Promise<void> {
+  await apiRequest("POST", "/api/ai/product-tags/set", { productIds, tagType });
+  queryClient.invalidateQueries({ queryKey: AI_ROP_KEYS.productTags });
 }

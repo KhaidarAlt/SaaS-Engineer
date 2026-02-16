@@ -814,6 +814,81 @@ export const insertAiSettingsSchema = createInsertSchema(aiSettings).omit({ id: 
 export type InsertAiSettings = z.infer<typeof insertAiSettingsSchema>;
 export type AiSettings = typeof aiSettings.$inferSelect;
 
+// ============ AI BUSINESS PROFILE ============
+export const aiBusinessProfile = pgTable("ai_business_profile", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id).unique(),
+  isOfficialRepresentative: boolean("is_official_representative").notNull().default(false),
+  representedBrands: text("represented_brands").array().default(sql`'{}'::text[]`),
+  hasOwnBrand: boolean("has_own_brand").notNull().default(false),
+  ownBrands: text("own_brands").array().default(sql`'{}'::text[]`),
+  uspPoints: text("usp_points").array().default(sql`'{}'::text[]`),
+  uspFreeText: text("usp_free_text"),
+  installmentEnabled: boolean("installment_enabled").notNull().default(false),
+  installmentBanks: text("installment_banks").array().default(sql`'{}'::text[]`),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const aiBusinessProfileRelations = relations(aiBusinessProfile, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [aiBusinessProfile.tenantId],
+    references: [tenants.id],
+  }),
+}));
+
+export const insertAiBusinessProfileSchema = createInsertSchema(aiBusinessProfile).omit({ id: true, updatedAt: true });
+export type InsertAiBusinessProfile = z.infer<typeof insertAiBusinessProfileSchema>;
+export type AiBusinessProfile = typeof aiBusinessProfile.$inferSelect;
+
+// ============ PRODUCT AI TAGS ============
+export const productAiTags = pgTable("product_ai_tags", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  productId: varchar("product_id").notNull().references(() => products.id),
+  tagType: text("tag_type").notNull(), // PRIORITY, FLAGSHIP, NEW, PREMIUM, ENTRY, SLOW
+  source: text("source").notNull().default("MANUAL"), // AUTO, RULE, MANUAL
+  weight: integer("weight").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const productAiTagsRelations = relations(productAiTags, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [productAiTags.tenantId],
+    references: [tenants.id],
+  }),
+  product: one(products, {
+    fields: [productAiTags.productId],
+    references: [products.id],
+  }),
+}));
+
+export const insertProductAiTagSchema = createInsertSchema(productAiTags).omit({ id: true, createdAt: true });
+export type InsertProductAiTag = z.infer<typeof insertProductAiTagSchema>;
+export type ProductAiTag = typeof productAiTags.$inferSelect;
+
+// ============ AI PROMOTION RULES ============
+export const aiPromotionRules = pgTable("ai_promotion_rules", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id).unique(),
+  promoteNew: boolean("promote_new").notNull().default(false),
+  promotePremium: boolean("promote_premium").notNull().default(false),
+  promoteEntry: boolean("promote_entry").notNull().default(false),
+  promoteSlow: boolean("promote_slow").notNull().default(false),
+  promotedCategoryIds: text("promoted_category_ids").array().default(sql`'{}'::text[]`),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const aiPromotionRulesRelations = relations(aiPromotionRules, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [aiPromotionRules.tenantId],
+    references: [tenants.id],
+  }),
+}));
+
+export const insertAiPromotionRulesSchema = createInsertSchema(aiPromotionRules).omit({ id: true, updatedAt: true });
+export type InsertAiPromotionRules = z.infer<typeof insertAiPromotionRulesSchema>;
+export type AiPromotionRules = typeof aiPromotionRules.$inferSelect;
+
 // ============ AI SALES SCRIPT ============
 export const aiSalesScripts = pgTable("ai_sales_scripts", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

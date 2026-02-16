@@ -4,6 +4,7 @@ import { eq, and, desc, sql, gte, lte } from "drizzle-orm";
 import {
   aiSettings, aiConversations, aiMessages, handoverRules, knowledgeItems,
   trainingItems, aiAuditReports, aiSettingsHistory, products,
+  aiBusinessProfile, productAiTags, aiPromotionRules, categories,
 } from "@shared/schema";
 import { generateAiResponse } from "./services/openai";
 
@@ -739,7 +740,10 @@ export function registerAiRopRoutes(
     try {
       const tenantId = req.user!.tenantId!;
       const userId = req.user!.id;
-      const { goal, tone, objections, handoverRules: hrRules, customToneText } = req.body;
+      const {
+        goal, tone, objections, handoverRules: hrRules, customToneText,
+        businessProfile, promotionStrategy, manualTags
+      } = req.body;
 
       const current = await storage.getOrCreateAiSettings(tenantId);
       const newVersion = (current.versionNumber || 1) + 1;
@@ -768,7 +772,7 @@ export function registerAiRopRoutes(
         tone,
         objectionsJson: objections,
         onboardingCompleted: true,
-        onboardingStep: 6,
+        onboardingStep: 10,
         versionNumber: newVersion,
         updatedAt: new Date(),
       };
@@ -788,6 +792,58 @@ export function registerAiRopRoutes(
             ruleType: rule.ruleType,
             thresholdValue: rule.thresholdValue || null,
           });
+        }
+      }
+
+      if (businessProfile) {
+        const existingBp = await db.select().from(aiBusinessProfile).where(eq(aiBusinessProfile.tenantId, tenantId));
+        const bpData = {
+          isOfficialRepresentative: businessProfile.isOfficialRepresentative ?? false,
+          representedBrands: businessProfile.representedBrands ?? [],
+          hasOwnBrand: businessProfile.hasOwnBrand ?? false,
+          ownBrands: businessProfile.ownBrands ?? [],
+          uspPoints: businessProfile.uspPoints ?? [],
+          uspFreeText: businessProfile.uspFreeText ?? null,
+          installmentEnabled: businessProfile.installmentEnabled ?? false,
+          installmentBanks: businessProfile.installmentBanks ?? [],
+        };
+        if (existingBp.length > 0) {
+          await db.update(aiBusinessProfile).set({ ...bpData, updatedAt: new Date() }).where(eq(aiBusinessProfile.tenantId, tenantId));
+        } else {
+          await db.insert(aiBusinessProfile).values({ tenantId, ...bpData });
+        }
+      }
+
+      if (promotionStrategy) {
+        const existingPr = await db.select().from(aiPromotionRules).where(eq(aiPromotionRules.tenantId, tenantId));
+        const prData = {
+          promoteNew: promotionStrategy.promoteNew ?? false,
+          promotePremium: promotionStrategy.promotePremium ?? false,
+          promoteEntry: promotionStrategy.promoteEntry ?? false,
+          promoteSlow: promotionStrategy.promoteSlow ?? false,
+          promotedCategoryIds: promotionStrategy.promotedCategoryIds ?? [],
+        };
+        if (existingPr.length > 0) {
+          await db.update(aiPromotionRules).set({ ...prData, updatedAt: new Date() }).where(eq(aiPromotionRules.tenantId, tenantId));
+        } else {
+          await db.insert(aiPromotionRules).values({ tenantId, ...prData });
+        }
+      }
+
+      if (Array.isArray(manualTags) && manualTags.length > 0) {
+        await db.delete(productAiTags).where(
+          and(eq(productAiTags.tenantId, tenantId), eq(productAiTags.source, "MANUAL"))
+        );
+        for (const tag of manualTags) {
+          if (tag.productId && tag.tagType) {
+            await db.insert(productAiTags).values({
+              tenantId,
+              productId: tag.productId,
+              tagType: tag.tagType,
+              source: "MANUAL",
+              weight: tag.weight ?? 0,
+            });
+          }
         }
       }
 
@@ -1091,6 +1147,283 @@ export function registerAiRopRoutes(
     } catch (error: any) {
       console.error("Ошибка обучения из тест-чата:", error);
       res.status(500).json({ message: "Ошибка обучения" });
+    }
+  });
+
+  // ========================
+  // 12. Business Profile
+  // ========================
+
+  app.get("/api/ai/business-profile", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const [profile] = await db.select().from(aiBusinessProfile).where(eq(aiBusinessProfile.tenantId, tenantId));
+      res.json(profile || null);
+    } catch (error: any) {
+      console.error("Ошибка получения бизнес-профиля:", error);
+      res.status(500).json({ message: "Ошибка получения бизнес-профиля" });
+    }
+  });
+
+  app.post("/api/ai/business-profile", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const {
+        isOfficialRepresentative, representedBrands, hasOwnBrand, ownBrands,
+        uspPoints, uspFreeText, installmentEnabled, installmentBanks
+      } = req.body;
+
+      const existing = await db.select().from(aiBusinessProfile).where(eq(aiBusinessProfile.tenantId, tenantId));
+
+      if (existing.length > 0) {
+        const [updated] = await db.update(aiBusinessProfile)
+          .set({
+            isOfficialRepresentative: isOfficialRepresentative ?? false,
+            representedBrands: representedBrands ?? [],
+            hasOwnBrand: hasOwnBrand ?? false,
+            ownBrands: ownBrands ?? [],
+            uspPoints: uspPoints ?? [],
+            uspFreeText: uspFreeText ?? null,
+            installmentEnabled: installmentEnabled ?? false,
+            installmentBanks: installmentBanks ?? [],
+            updatedAt: new Date(),
+          })
+          .where(eq(aiBusinessProfile.tenantId, tenantId))
+          .returning();
+        res.json(updated);
+      } else {
+        const [created] = await db.insert(aiBusinessProfile).values({
+          tenantId,
+          isOfficialRepresentative: isOfficialRepresentative ?? false,
+          representedBrands: representedBrands ?? [],
+          hasOwnBrand: hasOwnBrand ?? false,
+          ownBrands: ownBrands ?? [],
+          uspPoints: uspPoints ?? [],
+          uspFreeText: uspFreeText ?? null,
+          installmentEnabled: installmentEnabled ?? false,
+          installmentBanks: installmentBanks ?? [],
+        }).returning();
+        res.json(created);
+      }
+    } catch (error: any) {
+      console.error("Ошибка сохранения бизнес-профиля:", error);
+      res.status(500).json({ message: "Ошибка сохранения бизнес-профиля" });
+    }
+  });
+
+  // ========================
+  // 13. Catalog Segments
+  // ========================
+
+  app.get("/api/ai/catalog/segments", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+
+      const avgResult = await pool.query(
+        `SELECT COALESCE(AVG(price::numeric), 0) as avg_price FROM products WHERE tenant_id = $1 AND is_active = true`,
+        [tenantId]
+      );
+      const avgPrice = parseFloat(avgResult.rows[0]?.avg_price || "0");
+
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+      const newResult = await pool.query(
+        `SELECT COUNT(*)::int as cnt FROM products WHERE tenant_id = $1 AND is_active = true AND created_at >= $2`,
+        [tenantId, thirtyDaysAgo]
+      );
+
+      const premiumThreshold = avgPrice * 1.3;
+      const entryThreshold = avgPrice * 0.7;
+
+      const premiumResult = await pool.query(
+        `SELECT COUNT(*)::int as cnt FROM products WHERE tenant_id = $1 AND is_active = true AND price::numeric > $2`,
+        [tenantId, premiumThreshold]
+      );
+
+      const entryResult = await pool.query(
+        `SELECT COUNT(*)::int as cnt FROM products WHERE tenant_id = $1 AND is_active = true AND price::numeric < $2`,
+        [tenantId, entryThreshold]
+      );
+
+      const sixtyDaysAgo = new Date();
+      sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
+      let slowCount = 0;
+      try {
+        const slowResult = await pool.query(
+          `SELECT COUNT(DISTINCT p.id)::int as cnt FROM products p
+           LEFT JOIN order_items oi ON oi.product_id = p.id
+           LEFT JOIN orders o ON o.id = oi.order_id AND o.created_at >= $2
+           WHERE p.tenant_id = $1 AND p.is_active = true AND o.id IS NULL`,
+          [tenantId, sixtyDaysAgo]
+        );
+        slowCount = slowResult.rows[0]?.cnt || 0;
+      } catch {
+        slowCount = 0;
+      }
+
+      const catResult = await pool.query(
+        `SELECT c.id, c.name, COUNT(p.id)::int as count
+         FROM categories c
+         LEFT JOIN products p ON p.category_id = c.id AND p.is_active = true
+         WHERE c.tenant_id = $1
+         GROUP BY c.id, c.name
+         ORDER BY count DESC
+         LIMIT 10`,
+        [tenantId]
+      );
+
+      res.json({
+        newCount: newResult.rows[0]?.cnt || 0,
+        premiumCount: premiumResult.rows[0]?.cnt || 0,
+        entryCount: entryResult.rows[0]?.cnt || 0,
+        slowCount,
+        topCategories: catResult.rows,
+        avgPrice: Math.round(avgPrice),
+      });
+    } catch (error: any) {
+      console.error("Ошибка получения сегментов каталога:", error);
+      res.status(500).json({ message: "Ошибка получения сегментов" });
+    }
+  });
+
+  // ========================
+  // 14. Product AI Tags
+  // ========================
+
+  app.get("/api/ai/product-tags", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const tags = await db.select().from(productAiTags).where(eq(productAiTags.tenantId, tenantId));
+      res.json(tags);
+    } catch (error: any) {
+      console.error("Ошибка получения тегов:", error);
+      res.status(500).json({ message: "Ошибка получения тегов" });
+    }
+  });
+
+  app.post("/api/ai/product-tags/set", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const { productIds, tagType } = req.body;
+
+      if (!Array.isArray(productIds) || !tagType) {
+        return res.status(400).json({ message: "productIds[] и tagType обязательны" });
+      }
+      if (productIds.length > 10) {
+        return res.status(400).json({ message: "Максимум 10 товаров" });
+      }
+
+      await db.delete(productAiTags).where(
+        and(
+          eq(productAiTags.tenantId, tenantId),
+          eq(productAiTags.tagType, tagType),
+          eq(productAiTags.source, "MANUAL"),
+        )
+      );
+
+      if (productIds.length > 0) {
+        const values = productIds.map((pid: string, idx: number) => ({
+          tenantId,
+          productId: pid,
+          tagType,
+          source: "MANUAL" as const,
+          weight: productIds.length - idx,
+        }));
+        await db.insert(productAiTags).values(values);
+      }
+
+      const tags = await db.select().from(productAiTags).where(eq(productAiTags.tenantId, tenantId));
+      res.json(tags);
+    } catch (error: any) {
+      console.error("Ошибка установки тегов:", error);
+      res.status(500).json({ message: "Ошибка установки тегов" });
+    }
+  });
+
+  // ========================
+  // 15. Promotion Rules
+  // ========================
+
+  app.get("/api/ai/promotion-rules", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const [rules] = await db.select().from(aiPromotionRules).where(eq(aiPromotionRules.tenantId, tenantId));
+      res.json(rules || null);
+    } catch (error: any) {
+      console.error("Ошибка получения правил продвижения:", error);
+      res.status(500).json({ message: "Ошибка получения правил" });
+    }
+  });
+
+  app.post("/api/ai/promotion-rules", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const { promoteNew, promotePremium, promoteEntry, promoteSlow, promotedCategoryIds } = req.body;
+
+      const existing = await db.select().from(aiPromotionRules).where(eq(aiPromotionRules.tenantId, tenantId));
+
+      if (existing.length > 0) {
+        const [updated] = await db.update(aiPromotionRules)
+          .set({
+            promoteNew: promoteNew ?? false,
+            promotePremium: promotePremium ?? false,
+            promoteEntry: promoteEntry ?? false,
+            promoteSlow: promoteSlow ?? false,
+            promotedCategoryIds: promotedCategoryIds ?? [],
+            updatedAt: new Date(),
+          })
+          .where(eq(aiPromotionRules.tenantId, tenantId))
+          .returning();
+        res.json(updated);
+      } else {
+        const [created] = await db.insert(aiPromotionRules).values({
+          tenantId,
+          promoteNew: promoteNew ?? false,
+          promotePremium: promotePremium ?? false,
+          promoteEntry: promoteEntry ?? false,
+          promoteSlow: promoteSlow ?? false,
+          promotedCategoryIds: promotedCategoryIds ?? [],
+        }).returning();
+        res.json(created);
+      }
+    } catch (error: any) {
+      console.error("Ошибка сохранения правил продвижения:", error);
+      res.status(500).json({ message: "Ошибка сохранения правил" });
+    }
+  });
+
+  // ========================
+  // 16. Product Search (for manual tagging picker)
+  // ========================
+
+  app.get("/api/ai/products/search", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const query = (req.query.q as string || "").trim();
+
+      let result;
+      if (query) {
+        result = await pool.query(
+          `SELECT id, name, sku, price, main_image_url FROM products
+           WHERE tenant_id = $1 AND is_active = true
+           AND (name ILIKE $2 OR sku ILIKE $2)
+           ORDER BY name LIMIT 20`,
+          [tenantId, `%${query}%`]
+        );
+      } else {
+        result = await pool.query(
+          `SELECT id, name, sku, price, main_image_url FROM products
+           WHERE tenant_id = $1 AND is_active = true
+           ORDER BY name LIMIT 20`,
+          [tenantId]
+        );
+      }
+
+      res.json(result.rows);
+    } catch (error: any) {
+      console.error("Ошибка поиска товаров:", error);
+      res.status(500).json({ message: "Ошибка поиска" });
     }
   });
 }

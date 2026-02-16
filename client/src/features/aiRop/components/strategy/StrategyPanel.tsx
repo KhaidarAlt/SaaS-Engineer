@@ -8,12 +8,37 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Slider } from "@/components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Target, Users, Search, ShoppingCart, Plus, Trash2, Save, ChevronDown, ChevronUp, Settings2 } from "lucide-react";
+import {
+  Target, Users, Search, ShoppingCart, Plus, Trash2, Save,
+  ChevronDown, ChevronUp, Settings2, Award, Star, CreditCard, Check, X, Loader2
+} from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { saveSettings, AI_ROP_KEYS } from "../../api/aiRopApi";
+import {
+  saveSettings, AI_ROP_KEYS,
+  fetchBusinessProfile, saveBusinessProfile,
+  fetchPromotionRules, savePromotionRules,
+  fetchCatalogSegments,
+} from "../../api/aiRopApi";
 import { useToast } from "@/hooks/use-toast";
-import type { AiRopSettings, GoalType, TonePreset, SalesBoosters, HandoverRule } from "../../types/aiRopTypes";
+import type {
+  AiRopSettings, GoalType, TonePreset, SalesBoosters, HandoverRule,
+  BusinessProfileData, PromotionStrategyData, CatalogSegments,
+} from "../../types/aiRopTypes";
 import { GOAL_LABELS, TONE_LABELS, HANDOVER_RULE_TYPES } from "../../types/aiRopTypes";
+
+const USP_CHIPS = [
+  "Быстрая доставка / самовывоз",
+  "Официальная гарантия / сервис",
+  "Лучшие цены / price-match",
+  "Премиальная консультация / подбор",
+  "Рассрочка / кредит",
+  "Большой выбор / наличие",
+];
+
+const KZ_BANKS = [
+  "Kaspi", "Halyk Bank", "ForteBank", "Jusan Bank", "Freedom Bank",
+  "Home Credit Bank", "Bank CenterCredit (BCC)", "Altyn Bank", "Eurasian Bank", "Nurbank",
+];
 
 interface Props {
   settings: AiRopSettings | null;
@@ -50,6 +75,62 @@ export function StrategyPanel({ settings, onSettingsSaved }: Props) {
 
   const [newRuleType, setNewRuleType] = useState("");
   const [newRuleThreshold, setNewRuleThreshold] = useState("");
+
+  const [bpIsRep, setBpIsRep] = useState(false);
+  const [bpRepBrands, setBpRepBrands] = useState("");
+  const [bpHasOwn, setBpHasOwn] = useState(false);
+  const [bpOwnBrands, setBpOwnBrands] = useState("");
+  const [bpUspChips, setBpUspChips] = useState<string[]>([]);
+  const [bpUspFree, setBpUspFree] = useState("");
+  const [bpInstallment, setBpInstallment] = useState(false);
+  const [bpBanks, setBpBanks] = useState<string[]>([]);
+  const [bpCustomBank, setBpCustomBank] = useState("");
+  const [bpSaving, setBpSaving] = useState(false);
+  const [bpOpen, setBpOpen] = useState(false);
+
+  const [prNew, setPrNew] = useState(false);
+  const [prPremium, setPrPremium] = useState(false);
+  const [prEntry, setPrEntry] = useState(false);
+  const [prSlow, setPrSlow] = useState(false);
+  const [prCatIds, setPrCatIds] = useState<string[]>([]);
+  const [prSaving, setPrSaving] = useState(false);
+  const [prOpen, setPrOpen] = useState(false);
+
+  const { data: businessProfile } = useQuery<BusinessProfileData | null>({
+    queryKey: AI_ROP_KEYS.businessProfile,
+    queryFn: fetchBusinessProfile,
+  });
+
+  const { data: promotionRules } = useQuery<PromotionStrategyData | null>({
+    queryKey: AI_ROP_KEYS.promotionRules,
+    queryFn: fetchPromotionRules,
+  });
+
+  const { data: segments } = useQuery<CatalogSegments>({
+    queryKey: AI_ROP_KEYS.catalogSegments,
+    queryFn: fetchCatalogSegments,
+  });
+
+  useEffect(() => {
+    if (!businessProfile) return;
+    setBpIsRep(businessProfile.isOfficialRepresentative ?? false);
+    setBpRepBrands((businessProfile.representedBrands ?? []).join(", "));
+    setBpHasOwn(businessProfile.hasOwnBrand ?? false);
+    setBpOwnBrands((businessProfile.ownBrands ?? []).join(", "));
+    setBpUspChips(businessProfile.uspPoints ?? []);
+    setBpUspFree(businessProfile.uspFreeText ?? "");
+    setBpInstallment(businessProfile.installmentEnabled ?? false);
+    setBpBanks(businessProfile.installmentBanks ?? []);
+  }, [businessProfile]);
+
+  useEffect(() => {
+    if (!promotionRules) return;
+    setPrNew(promotionRules.promoteNew ?? false);
+    setPrPremium(promotionRules.promotePremium ?? false);
+    setPrEntry(promotionRules.promoteEntry ?? false);
+    setPrSlow(promotionRules.promoteSlow ?? false);
+    setPrCatIds(promotionRules.promotedCategoryIds ?? []);
+  }, [promotionRules]);
 
   useEffect(() => {
     if (!settings) return;
@@ -143,6 +224,57 @@ export function StrategyPanel({ settings, onSettingsSaved }: Props) {
     }
   };
 
+  const handleSaveBp = async () => {
+    setBpSaving(true);
+    try {
+      await saveBusinessProfile({
+        isOfficialRepresentative: bpIsRep,
+        representedBrands: bpIsRep ? bpRepBrands.split(",").map(s => s.trim()).filter(Boolean) : [],
+        hasOwnBrand: bpHasOwn,
+        ownBrands: bpHasOwn ? bpOwnBrands.split(",").map(s => s.trim()).filter(Boolean) : [],
+        uspPoints: bpUspChips,
+        uspFreeText: bpUspFree,
+        installmentEnabled: bpInstallment,
+        installmentBanks: bpInstallment ? bpBanks : [],
+      });
+      toast({ title: "Профиль магазина сохранён" });
+    } catch {
+      toast({ title: "Ошибка", description: "Не удалось сохранить профиль", variant: "destructive" });
+    } finally {
+      setBpSaving(false);
+    }
+  };
+
+  const handleSavePr = async () => {
+    setPrSaving(true);
+    try {
+      await savePromotionRules({
+        promoteNew: prNew,
+        promotePremium: prPremium,
+        promoteEntry: prEntry,
+        promoteSlow: prSlow,
+        promotedCategoryIds: prCatIds,
+      });
+      toast({ title: "Правила продвижения сохранены" });
+    } catch {
+      toast({ title: "Ошибка", description: "Не удалось сохранить правила", variant: "destructive" });
+    } finally {
+      setPrSaving(false);
+    }
+  };
+
+  const toggleBpBank = (bank: string) => {
+    setBpBanks(prev => prev.includes(bank) ? prev.filter(b => b !== bank) : [...prev, bank]);
+  };
+
+  const addBpCustomBank = () => {
+    const trimmed = bpCustomBank.trim();
+    if (trimmed && !bpBanks.includes(trimmed)) {
+      setBpBanks(prev => [...prev, trimmed]);
+      setBpCustomBank("");
+    }
+  };
+
   const selectedRuleTypeDef = HANDOVER_RULE_TYPES.find((r) => r.value === newRuleType);
 
   return (
@@ -176,6 +308,212 @@ export function StrategyPanel({ settings, onSettingsSaved }: Props) {
             })}
           </div>
         </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader
+          className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2 cursor-pointer"
+          onClick={() => setBpOpen(prev => !prev)}
+          data-testid="toggle-positioning"
+        >
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Award className="h-4 w-4" />
+            Позиционирование магазина
+          </CardTitle>
+          {bpOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+        </CardHeader>
+        {bpOpen && (
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-sm">Официальный представитель бренда</span>
+              <Switch
+                data-testid="switch-official-rep"
+                checked={bpIsRep}
+                onCheckedChange={setBpIsRep}
+              />
+            </div>
+            {bpIsRep && (
+              <Input
+                data-testid="input-bp-rep-brands"
+                placeholder="Бренды через запятую…"
+                value={bpRepBrands}
+                onChange={(e) => setBpRepBrands(e.target.value)}
+              />
+            )}
+
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-sm">Собственный бренд</span>
+              <Switch
+                data-testid="switch-own-brand"
+                checked={bpHasOwn}
+                onCheckedChange={setBpHasOwn}
+              />
+            </div>
+            {bpHasOwn && (
+              <Input
+                data-testid="input-bp-own-brands"
+                placeholder="Название вашего бренда…"
+                value={bpOwnBrands}
+                onChange={(e) => setBpOwnBrands(e.target.value)}
+              />
+            )}
+
+            <div>
+              <label className="text-sm font-medium mb-2 block">УТП (уникальные преимущества)</label>
+              <div className="flex flex-wrap gap-2 mb-2">
+                {USP_CHIPS.map((chip) => {
+                  const isSelected = bpUspChips.includes(chip);
+                  return (
+                    <Badge
+                      key={chip}
+                      variant={isSelected ? "default" : "outline"}
+                      className="cursor-pointer"
+                      onClick={() => setBpUspChips(prev =>
+                        prev.includes(chip) ? prev.filter(c => c !== chip) : [...prev, chip]
+                      )}
+                      data-testid={`bp-chip-usp-${chip}`}
+                    >
+                      {isSelected && <Check className="h-3 w-3 mr-1" />}
+                      {chip}
+                    </Badge>
+                  );
+                })}
+              </div>
+              <Textarea
+                data-testid="input-bp-usp-free"
+                placeholder="Свои преимущества…"
+                value={bpUspFree}
+                onChange={(e) => setBpUspFree(e.target.value)}
+                rows={2}
+              />
+            </div>
+
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-sm">Рассрочка для клиентов</span>
+              <Switch
+                data-testid="switch-installment"
+                checked={bpInstallment}
+                onCheckedChange={setBpInstallment}
+              />
+            </div>
+            {bpInstallment && (
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-1">
+                  {KZ_BANKS.map((bank) => (
+                    <label key={bank} className="flex items-center gap-2 cursor-pointer text-sm">
+                      <input
+                        type="checkbox"
+                        checked={bpBanks.includes(bank)}
+                        onChange={() => toggleBpBank(bank)}
+                        className="h-3.5 w-3.5 rounded border-muted-foreground"
+                        data-testid={`bp-checkbox-bank-${bank}`}
+                      />
+                      <span className="text-xs">{bank}</span>
+                    </label>
+                  ))}
+                </div>
+                <div className="flex items-center gap-2">
+                  <Input
+                    placeholder="Другой банк…"
+                    value={bpCustomBank}
+                    onChange={(e) => setBpCustomBank(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addBpCustomBank(); } }}
+                    data-testid="input-bp-custom-bank"
+                  />
+                  <Button size="icon" variant="outline" onClick={addBpCustomBank} data-testid="button-bp-add-bank">
+                    <Plus />
+                  </Button>
+                </div>
+                {bpBanks.filter(b => !KZ_BANKS.includes(b)).length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {bpBanks.filter(b => !KZ_BANKS.includes(b)).map(b => (
+                      <Badge key={b} variant="secondary" className="cursor-pointer text-xs" onClick={() => toggleBpBank(b)}>
+                        {b} <X className="h-3 w-3 ml-1" />
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="flex justify-end">
+              <Button data-testid="button-save-bp" onClick={handleSaveBp} disabled={bpSaving}>
+                <Save className="mr-1 h-4 w-4" />
+                {bpSaving ? "Сохранение..." : "Сохранить профиль"}
+              </Button>
+            </div>
+          </CardContent>
+        )}
+      </Card>
+
+      <Card>
+        <CardHeader
+          className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2 cursor-pointer"
+          onClick={() => setPrOpen(prev => !prev)}
+          data-testid="toggle-promotion"
+        >
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Star className="h-4 w-4" />
+            Стратегия продвижения
+          </CardTitle>
+          {prOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+        </CardHeader>
+        {prOpen && (
+          <CardContent className="space-y-4">
+            {segments && (
+              <div className="grid grid-cols-2 gap-2 text-sm mb-2">
+                <span>Новинки: <strong>{segments.newCount}</strong></span>
+                <span>Премиум: <strong>{segments.premiumCount}</strong></span>
+                <span>Бюджетные: <strong>{segments.entryCount}</strong></span>
+                <span>Залежавшиеся: <strong>{segments.slowCount}</strong></span>
+              </div>
+            )}
+            <div className="space-y-3">
+              {[
+                { checked: prNew, set: setPrNew, label: "Продвигать новинки" },
+                { checked: prPremium, set: setPrPremium, label: "Продвигать премиум" },
+                { checked: prEntry, set: setPrEntry, label: "Продвигать бюджетные" },
+                { checked: prSlow, set: setPrSlow, label: "Продвигать залежавшиеся" },
+              ].map((item) => (
+                <div key={item.label} className="flex items-center justify-between gap-2">
+                  <span className="text-sm">{item.label}</span>
+                  <Switch
+                    checked={item.checked}
+                    onCheckedChange={item.set}
+                    data-testid={`switch-promote-${item.label}`}
+                  />
+                </div>
+              ))}
+            </div>
+            {segments && segments.topCategories.length > 0 && (
+              <div>
+                <label className="text-sm font-medium mb-2 block">Продвигаемые категории</label>
+                <div className="space-y-1">
+                  {segments.topCategories.map((cat) => (
+                    <label key={cat.id} className="flex items-center gap-2 cursor-pointer text-sm">
+                      <input
+                        type="checkbox"
+                        checked={prCatIds.includes(cat.id)}
+                        onChange={() => setPrCatIds(prev =>
+                          prev.includes(cat.id) ? prev.filter(c => c !== cat.id) : [...prev, cat.id]
+                        )}
+                        className="h-3.5 w-3.5 rounded border-muted-foreground"
+                        data-testid={`pr-checkbox-cat-${cat.id}`}
+                      />
+                      <span>{cat.name} ({cat.count})</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className="flex justify-end">
+              <Button data-testid="button-save-pr" onClick={handleSavePr} disabled={prSaving}>
+                <Save className="mr-1 h-4 w-4" />
+                {prSaving ? "Сохранение..." : "Сохранить правила"}
+              </Button>
+            </div>
+          </CardContent>
+        )}
       </Card>
 
       <Card>
