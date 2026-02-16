@@ -1,0 +1,436 @@
+# PROMPT: Implement AI-РОП → “Тестирование” Tab (WOW UI) + AI Readiness Score Model + Client Simulation + Stress Test
+
+Stack: React 18 + TypeScript (Vite), Express API, Postgres (multi-tenant). Tailwind UI. Premium minimal style. Use Framer Motion for micro-animations.
+
+IMPORTANT:
+
+* This is a single self-contained feature: “Testing” tab.
+* Do NOT refactor other tabs. Do NOT break existing Strategy page.
+* Multi-tenant ALWAYS: tenant_id in every DB query and API.
+* Provide fallback behavior when there is no real dialog data yet (use test chat logs).
+
+========================================================
+
+1. ROUTE / NAV
+   ========================================================
+   We already have tabs under /app/ai-rop/*
+   Implement the page:
+
+* /app/ai-rop/testing
+
+This page must become the main testing lab:
+
+* Score (“готовность AI”) with WOW circular animation
+* Mode selector (Free chat / Client simulation / Stress test)
+* WhatsApp simulator chat (main area)
+* After each AI answer show micro-evaluation + actions (Improve / Approve / Train)
+* Simulation presets and stress test runner
+
+========================================================
+2) UX LAYOUT (EXACT)
+====================
+
+TestingPage layout (desktop):
+
+Top Row:
+
+* Left: “Готовность AI-РОПа” big score card (circular progress)
+* Right: “Статус” card (Readiness check summary + blockers + CTA links)
+
+Second Row:
+
+* Mode selector segmented control:
+  [Свободный чат] [Симуляция клиента] [Стресс-тест]
+
+Main Row:
+
+* Left (60%): WhatsApp Simulator (phone frame)
+* Right (40%): Scenario panel changes by mode:
+
+  * Free chat: hints + saved test scripts
+  * Simulation: client persona selector + start button
+  * Stress test: run 10 scenarios + results table
+
+Mobile:
+
+* Score card first, then mode selector, then WhatsApp simulator, then scenario panel.
+
+Animations (Framer Motion):
+
+* Score count-up animation
+* Circular progress smooth tween
+* Message bubbles fade/slide in
+* Typing indicator pulsing dots
+* Small confetti when score crosses 80+ after completing stress test (optional)
+
+========================================================
+3) FRONTEND COMPONENTS (CREATE)
+===============================
+
+Create folder:
+client/src/features/aiRop/testing/
+
+Files:
+
+pages/
+TestingPage.tsx
+
+components/
+ScoreCard.tsx
+ReadinessStatusCard.tsx
+ModeSelector.tsx
+WhatsAppSimulator.tsx
+PhoneFrame.tsx
+ChatBubble.tsx
+TypingIndicator.tsx
+MessageActions.tsx
+MicroEvaluationBar.tsx
+SimulationPanel.tsx
+StressTestPanel.tsx
+ResultsTable.tsx
+ScenarioChips.tsx
+
+api/
+testingApi.ts
+
+types/
+testingTypes.ts
+
+========================================================
+4) DATA MODEL (POSTGRES)
+========================
+
+Create tables (tenant-scoped):
+
+4.1 ai_testing_sessions
+
+* id (uuid, pk)
+* tenant_id (uuid, indexed)
+* mode enum: FREE_CHAT | SIMULATION | STRESS_TEST
+* persona_key text nullable
+* created_at timestamptz
+* updated_at timestamptz
+
+4.2 ai_testing_messages
+
+* id (uuid, pk)
+* tenant_id (uuid, indexed)
+* session_id (uuid, fk ai_testing_sessions)
+* role enum: user | assistant | system
+* content text
+* meta jsonb nullable (store: stage_guess, score, issues, suggestions, scenario_key, is_simulated)
+* created_at timestamptz
+
+4.3 ai_score_snapshots
+
+* id (uuid, pk)
+* tenant_id (uuid, indexed)
+* score_total int
+* score_breakdown jsonb (see model below)
+* computed_from jsonb (counts, completeness flags, lastStressTestAt)
+* created_at timestamptz
+
+4.4 ai_stress_test_runs
+
+* id (uuid, pk)
+* tenant_id (uuid, indexed)
+* started_at timestamptz
+* finished_at timestamptz nullable
+* scenarios jsonb (array of scenario results)
+* overall_score int
+* summary text
+
+Keep it simple and safe.
+
+========================================================
+5) BACKEND API ENDPOINTS (EXPRESS)
+==================================
+
+All endpoints must read tenant_id from auth middleware and enforce it.
+
+5.1 Score & readiness
+
+* GET /api/ai/testing/score?period=...  (period optional; default “7d”)
+  Returns:
+  {
+  scoreTotal: number,
+  breakdown: {
+  completeness: {score,max,items:{...}},
+  behavior: {score,max,items:{...}},
+  operations: {score,max,items:{...}},
+  testing: {score,max,items:{...}},
+  },
+  lastComputedAt,
+  notes: string[]
+  }
+
+* POST /api/ai/testing/score/recompute
+  Recompute now.
+
+* GET /api/ai/testing/readiness?goal=...
+  Return READY/WARNING/BLOCKED + reasons + deep links
+
+5.2 Testing chat
+
+* POST /api/ai/testing/session/start { mode, personaKey? } -> { sessionId }
+* POST /api/ai/testing/message/send { sessionId, userText } -> { assistantText, microEval }
+* POST /api/ai/testing/message/feedback { messageId, action, editedText? }
+  action enum:
+  APPROVE | IMPROVE | TRAIN | FIX_ONLY | ADD_TO_KB | ANTI_PATTERN
+  Store feedback into meta and (if TRAIN/ADD_TO_KB) forward to existing training/KB endpoints (reuse your current system).
+
+5.3 Simulation
+
+* POST /api/ai/testing/simulation/start { personaKey } -> starts a session + sends first simulated user message
+* POST /api/ai/testing/simulation/next { sessionId } -> returns next simulated user message if needed (optional)
+  (For MVP, simulation can just seed the first user message and then the user continues.)
+
+5.4 Stress test
+
+* POST /api/ai/testing/stress/run { scenarios?: string[] } -> { runId }
+* GET /api/ai/testing/stress/run/:runId -> { status, progress, results }
+
+========================================================
+6) “ГОТОВНОСТЬ AI-РОПа” SCORE MODEL (EXACT, IMPLEMENT THIS)
+===========================================================
+
+We need a score 0..100 that works even with low data.
+Score must be explainable and computed from:
+A) Configuration completeness
+B) Sales behavior readiness
+C) Operational readiness (payments/handovers/integrations)
+D) Testing evidence (did we test and pass scenarios)
+
+TOTAL SCORE = A + B + C + D
+
+A) Completeness (0..30)
+
+* Goal selected (5)
+* Style selected (5)
+* Objections configured count >= 4 (5)
+* Handover rules configured (5)
+* USP / positioning filled (5)
+* Promotion strategy configured (segments/categories or manual) (5)
+
+B) Behavior readiness (0..30)
+Evaluate from rules/settings presence (not LLM quality yet):
+
+* If goal = CLOSE_DEAL:
+
+  * installments enabled OR payment flow configured (10)
+  * “дорого” objection exists + response template exists (5)
+  * upsell OR alternative-cheaper enabled (5)
+* If goal = QUALIFY_HANDOVER:
+
+  * handover triggers include “просит человека” + “нестандартный вопрос” (10)
+  * lead capture fields defined (phone/name) OR CRM enabled (5)
+* For any goal:
+
+  * language(s) selected (5)
+  * system prompt not empty OR using default template (5)
+
+(Implement branching; if missing, score is 0 for that item.)
+
+C) Operations readiness (0..20)
+
+* Readiness check result:
+  READY (20)
+  WARNING (10)
+  BLOCKED (0)
+  This depends on:
+* Payments configured if CLOSE_DEAL
+* At least one outbound handover channel configured (internal CRM / Telegram / amo / Bitrix) if QUALIFY_HANDOVER
+* Channel connection exists (WhatsApp) (required for any production usage) (if missing -> BLOCKED)
+
+D) Testing evidence (0..20)
+
+* Has at least 5 test messages exchanged in Testing tab in last 7d (5)
+* Completed at least 1 simulation persona run (5)
+* Completed stress test run (10) with pass rate:
+  passRate >= 0.8 -> full 10
+  0.5..0.79 -> 6
+  <0.5 -> 2
+
+PASS CRITERIA PER SCENARIO:
+
+* assistant produced a helpful reply AND
+* did not violate handover rules AND
+* if objection scenario, it addressed it AND
+* if CLOSE_DEAL, it offered payment path by end (or asked for confirmation step)
+
+Return breakdown and notes.
+Store snapshots to ai_score_snapshots.
+
+========================================================
+7) MICRO EVALUATION AFTER EACH AI MESSAGE (0..10)
+=================================================
+
+After every assistant reply in Testing chat, return microEval:
+{
+score: 0..10,
+positives: string[],
+issues: string[],
+suggestions: string[]
+}
+
+MVP heuristic evaluation (NO heavy NLP needed):
+
+* +2 if reply mentions catalog item or asks clarifying question relevant to product
+* +2 if matches selected style (short/friendly/premium) by length + greeting markers
+* +2 if addresses selected objection keywords when user message contains them
+* +2 if respects goal (e.g., offers payment for CLOSE_DEAL; offers handover when trigger)
+* +2 if includes next-step CTA question
+
+Deduct:
+
+* -3 if hallucination markers (claims not in KB/catalog) (basic: if mentions “гарантия 3 года” when not in KB)
+* -2 if too long in “short” mode
+* -2 if ignores user question
+
+========================================================
+8) CLIENT SIMULATION ALGORITHM (IMPLEMENT)
+==========================================
+
+Simulation mode is a “persona-driven” scripted user emulator.
+
+8.1 Personas (define constants)
+personaKey -> persona config:
+
+* HAGGLER (“торгуется”)
+* DOUBTER (“сомневаюсь”)
+* COMPARER (“сравниваю с конкурентами”)
+* CHEAPER (“хочу дешевле”)
+* ANGRY (“агрессивный”)
+* PREMIUM (“премиальный покупатель”)
+
+Each persona has:
+
+* opener messages (array)
+* typical objections (array)
+* behavior rules (when to escalate, when to ask discount, etc.)
+
+8.2 Simulation flow
+When user starts simulation:
+
+1. Create ai_testing_session mode=SIMULATION personaKey
+2. Choose an opener:
+
+   * Try to pick a real product from catalog summary/top list
+   * Example opener:
+     “Здравствуйте. Сколько стоит <product_name>? Есть в наличии?”
+3. Insert this opener as a user message (is_simulated=true)
+4. Immediately call existing AI reply generator (same as Testing send) and return assistant message + microEval
+5. Then continue as “guided”: user can either type manually OR click “Следующая реплика клиента”
+
+   * Next simulated user message is chosen by:
+     a) detect stage (offer/price/close) from last assistant reply (simple keywords)
+     b) pick persona-specific next line:
+
+     * HAGGLER: “А скидка есть?”, “Сделаете дешевле?”, “У конкурентов ниже”
+     * DOUBTER: “Не уверен…”, “А гарантия?”, “Стоит ли переплачивать?”
+     * COMPARER: “Почему у вас дороже чем X?”
+     * CHEAPER: “Есть вариант подешевле?”
+     * ANGRY: “Почему так дорого?”, “Вы вообще отвечаете нормально?”
+     * PREMIUM: “Нужна лучшая модель. Что порекомендуете?”
+6. Stop after 6–10 turns OR when AI reaches goal end state:
+
+   * CLOSE_DEAL: payment link offered + user confirmed
+   * QUALIFY: collected lead + handover triggered
+     Return a session summary at the end:
+
+* closed? yes/no
+* reason if no
+* recommendation (auto)
+
+Store scenario results into ai_testing_messages.meta.
+
+========================================================
+9) STRESS TEST ALGORITHM (IMPLEMENT)
+====================================
+
+Stress test runs 10 scenarios quickly and outputs pass rate + weak points.
+
+9.1 Scenario set (default 10)
+
+* PRICE_HIGH: “Дорого”
+* ASK_DISCOUNT: “Есть скидка?”
+* WANT_CHEAPER: “Хочу дешевле”
+* COMPARE: “У конкурентов дешевле”
+* INSTALLMENT: “Есть рассрочка?”
+* WARRANTY: “Какая гарантия?”
+* DELIVERY: “Как доставка/самовывоз?”
+* HUMAN: “Дайте менеджера”
+* COMPLEX: “Нестандартный вопрос…” (force handover if rule)
+* CLOSE: “Готов купить, как оплатить?”
+
+9.2 Execution
+For each scenario:
+
+* Start a fresh hidden testing session (mode=STRESS_TEST)
+* Send the scenario user message
+* Get assistant reply
+* Evaluate pass/fail using PASS CRITERIA from section 6D
+* Record:
+  {scenarioKey, userText, assistantText, pass, issues[], suggestion[]}
+
+After run:
+
+* compute passRate
+* store to ai_stress_test_runs
+* update score snapshot (Testing evidence part)
+
+Frontend:
+
+* show progress bar 0..100%
+* show results table with pass/fail badges
+* allow click a row to open a replay modal (WhatsApp view)
+
+========================================================
+10) WHATSAPP SIMULATOR UI DETAILS
+=================================
+
+* Use the existing phone frame / WhatsApp UI if present in project.
+* Add “typing…” indicator for 1–2 seconds (configurable).
+* After assistant message, show MicroEvaluationBar under bubble:
+  “8.2/10 — ⚠ не предложена рассрочка”
+  Buttons:
+  [Улучшить] [Принять] [Обучить]
+
+Actions:
+
+* Improve: open modal with suggested improved reply (auto-generated by AI using current settings) -> user can accept -> send feedback TRAIN
+* Approve: feedback APPROVE
+* Train: open modal:
+  (1) Исправить только тут
+  (2) Обучить AI на будущее
+  (3) Добавить в базу знаний
+  (4) Anti-pattern (запретить)
+
+========================================================
+11) INTEGRATION WITH EXISTING AI SETTINGS
+=========================================
+
+Testing must use the current AI settings (goal/style/objections/handovers/usp/installments/promotion/system prompt).
+Do not create separate settings for Testing.
+
+If some settings missing, show in ReadinessStatusCard:
+“Не хватает: рассрочка/USP/правила передачи…”
+With CTA:
+“Перейти в Стратегию” (/app/ai-rop/strategy)
+
+========================================================
+12) ACCEPTANCE CRITERIA
+=======================
+
+* Testing tab exists and looks premium with animations.
+* ScoreCard shows total 0..100 + breakdown tooltips.
+* ReadinessStatusCard shows READY/WARNING/BLOCKED and actionable CTAs.
+* WhatsApp simulator works; messages persist per tenant.
+* After each assistant reply, micro-evaluation appears with actions.
+* Simulation personas work: at least 6 turns with “Next client message”.
+* Stress test runs 10 scenarios, shows progress & results, updates score evidence.
+* Score recompute endpoint works and snapshots are stored.
+
+Implement end-to-end.
+Use mock data only if necessary, but wire real persistence and endpoints.
+Do not touch other tabs.
