@@ -2299,6 +2299,101 @@ export const insertDomainSchema = createInsertSchema(domains).omit({
 export type InsertDomain = z.infer<typeof insertDomainSchema>;
 export type Domain = typeof domains.$inferSelect;
 
+// ============ AI TESTING SESSIONS ============
+export const aiTestingSessions = pgTable("ai_testing_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  mode: text("mode").notNull(), // FREE_CHAT | SIMULATION | STRESS_TEST
+  personaKey: text("persona_key"),
+  status: text("status").notNull().default("active"), // active | completed | aborted
+  summaryJson: jsonb("summary_json").$type<Record<string, unknown>>(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const aiTestingSessionsRelations = relations(aiTestingSessions, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [aiTestingSessions.tenantId],
+    references: [tenants.id],
+  }),
+}));
+
+export const insertAiTestingSessionSchema = createInsertSchema(aiTestingSessions).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertAiTestingSession = z.infer<typeof insertAiTestingSessionSchema>;
+export type AiTestingSession = typeof aiTestingSessions.$inferSelect;
+
+// ============ AI TESTING MESSAGES ============
+export const aiTestingMessages = pgTable("ai_testing_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  sessionId: varchar("session_id").notNull().references(() => aiTestingSessions.id),
+  role: text("role").notNull(), // user | assistant | system
+  content: text("content").notNull(),
+  meta: jsonb("meta").$type<Record<string, unknown>>(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const aiTestingMessagesRelations = relations(aiTestingMessages, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [aiTestingMessages.tenantId],
+    references: [tenants.id],
+  }),
+  session: one(aiTestingSessions, {
+    fields: [aiTestingMessages.sessionId],
+    references: [aiTestingSessions.id],
+  }),
+}));
+
+export const insertAiTestingMessageSchema = createInsertSchema(aiTestingMessages).omit({ id: true, createdAt: true });
+export type InsertAiTestingMessage = z.infer<typeof insertAiTestingMessageSchema>;
+export type AiTestingMessage = typeof aiTestingMessages.$inferSelect;
+
+// ============ AI SCORE SNAPSHOTS ============
+export const aiScoreSnapshots = pgTable("ai_score_snapshots", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  scoreTotal: integer("score_total").notNull(),
+  scoreBreakdown: jsonb("score_breakdown").$type<Record<string, unknown>>().notNull(),
+  computedFrom: jsonb("computed_from").$type<Record<string, unknown>>(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const aiScoreSnapshotsRelations = relations(aiScoreSnapshots, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [aiScoreSnapshots.tenantId],
+    references: [tenants.id],
+  }),
+}));
+
+export const insertAiScoreSnapshotSchema = createInsertSchema(aiScoreSnapshots).omit({ id: true, createdAt: true });
+export type InsertAiScoreSnapshot = z.infer<typeof insertAiScoreSnapshotSchema>;
+export type AiScoreSnapshot = typeof aiScoreSnapshots.$inferSelect;
+
+// ============ AI STRESS TEST RUNS ============
+export const aiStressTestRuns = pgTable("ai_stress_test_runs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  startedAt: timestamp("started_at").notNull().defaultNow(),
+  finishedAt: timestamp("finished_at"),
+  scenarios: jsonb("scenarios").$type<Array<Record<string, unknown>>>(),
+  overallScore: integer("overall_score"),
+  summary: text("summary"),
+  status: text("status").notNull().default("running"), // running | completed | failed
+  progress: integer("progress").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const aiStressTestRunsRelations = relations(aiStressTestRuns, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [aiStressTestRuns.tenantId],
+    references: [tenants.id],
+  }),
+}));
+
+export const insertAiStressTestRunSchema = createInsertSchema(aiStressTestRuns).omit({ id: true, createdAt: true });
+export type InsertAiStressTestRun = z.infer<typeof insertAiStressTestRunSchema>;
+export type AiStressTestRun = typeof aiStressTestRuns.$inferSelect;
+
 // ============ FORM VALIDATION SCHEMAS ============
 export const loginSchema = z.object({
   email: z.string().email("Введите корректный email"),
