@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Sparkles, BarChart3, History, Layers, AlertTriangle, CheckCircle2, XCircle } from "lucide-react";
+import { BarChart3, History, Layers, AlertTriangle, CheckCircle2, XCircle } from "lucide-react";
 import type { ReadinessResult, AnalyticsSummary } from "../../types/aiRopTypes";
 import { formatConversionRate } from "../../utils/stageUtils";
 
@@ -32,15 +32,8 @@ export function AiRopHeader({ readiness, analytics, period, onPeriodChange, onRu
   const ReadinessIcon = readiness?.status === "READY" ? CheckCircle2 : readiness?.status === "WARNING" ? AlertTriangle : XCircle;
 
   return (
-    <div className="sticky top-0 z-50 bg-background/95 backdrop-blur border-b" data-testid="ai-rop-header">
+    <div className="rounded-md border bg-muted/30" data-testid="ai-rop-header">
       <div className="flex items-center justify-between gap-4 flex-wrap px-4 py-3">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-primary" />
-            <h1 className="text-lg font-semibold">AI-РОП</h1>
-          </div>
-          <span className="text-xs text-muted-foreground hidden sm:inline">контролирую и улучшаю продажи</span>
-        </div>
         
         <div className="flex items-center gap-2 flex-wrap">
           <div className="flex items-center gap-1 bg-muted rounded-md p-0.5" data-testid="period-picker">

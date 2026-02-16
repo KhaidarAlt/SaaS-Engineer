@@ -326,6 +326,9 @@ function Router() {
         <ProtectedRoute component={AiSettingsPage} />
       </Route>
       <Route path="/dashboard/ai/rop">
+        <Redirect to="/dashboard/ai/rop/overview" />
+      </Route>
+      <Route path="/dashboard/ai/rop/:tab">
         <ProtectedRoute component={AiRopEntryPage} />
       </Route>
 
