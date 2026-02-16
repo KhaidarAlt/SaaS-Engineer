@@ -6,7 +6,7 @@ import { AiRopLayout } from "../components/layout/AiRopLayout";
 import { Skeleton } from "@/components/ui/skeleton";
 import OverviewPage from "./OverviewPage";
 import TrainingPage from "./TrainingPage";
-import TestingPage from "./TestingPage";
+import TestingPage from "../testing/pages/TestingPage";
 import ConnectionsPage from "./ConnectionsPage";
 import AnalyticsPage from "./AnalyticsPage";
 import StrategyPage from "./StrategyPage";

@@ -77,6 +77,16 @@ Preferred communication style: Simple, everyday language.
     - Strategy Panel: Collapsible bottom panel with goal, handover rules, tone, sales boosters, objections, advanced settings
     - Drawers: TrainingHistoryDrawer, VersionHistoryDrawer (rollback last 10 versions)
     - Test Chat: WhatsApp-like mock with edit/approve/train actions
+- **AI Testing Tab** (fully implemented at /dashboard/ai/rop/testing):
+  - AI Readiness Score: 4-category scoring model (Completeness 0-30, Behavior 0-30, Operations 0-20, Testing 0-20) with animated circular progress, stored as snapshots
+  - 3 test modes: Free Chat, Client Simulation (6 personas), Stress Test (10 scenarios)
+  - WhatsApp Simulator: Phone-frame UI with chat bubbles, typing indicator, micro-evaluation (0-10) per AI response
+  - Message feedback: APPROVE/IMPROVE/TRAIN/ADD_TO_KB with training item forwarding
+  - Simulation personas: HAGGLER, DOUBTER, COMPARER, CHEAPER, ANGRY, PREMIUM with auto-generated follow-up lines
+  - Stress test: 10 predefined scenarios (price, discount, delivery, warranty, etc.) with pass/fail evaluation, background processing
+  - Schema: ai_testing_sessions, ai_testing_messages, ai_score_snapshots, ai_stress_test_runs
+  - API: 10 endpoints under /api/ai/testing/* in server/ai-testing-routes.ts
+  - Frontend: Feature module at client/src/features/aiRop/testing/ with components/pages/api/types structure
 
 ## Platform Admin Setup (one-time)
 - **Wildcard DNS**: Add CNAME record in Cloudflare for `botfactory.kz`: Name=`*`, Target=`saa-s-engineer--m528dpa.replit.app`, Proxy=ON. This enables all tenant subdomains (`*.botfactory.kz`) to resolve and get SSL automatically. This is a one-time setup by the platform owner — tenant users do not need to configure anything.

@@ -20,6 +20,7 @@ import { pool } from "./db";
 import domainRoutes from "./domains/routes.js";
 import { startDomainWorker } from "./domains/worker.js";
 import { registerAiRopRoutes } from "./ai-rop-routes.js";
+import { registerAiTestingRoutes } from "./ai-testing-routes.js";
 
 const SessionStore = MemoryStore(session);
 
@@ -6623,6 +6624,7 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
   });
 
   registerAiRopRoutes(app, storage, pool, requireAuth, requireAiAccess);
+  registerAiTestingRoutes(app, storage, pool, requireAuth, requireAiAccess);
 
   return httpServer;
 }
