@@ -254,8 +254,14 @@ export default function DiscountsPage() {
                       <span className="text-2xl font-bold text-green-500">
                         {formatValue(discount)}
                       </span>
-                      <Badge variant={discount.isActive ? "default" : "secondary"}>
-                        {discount.isActive ? "Активна" : "Неактивна"}
+                      <Badge variant={
+                        discount.endsAt && new Date(discount.endsAt) < new Date()
+                          ? "secondary"
+                          : discount.isActive ? "default" : "secondary"
+                      }>
+                        {discount.endsAt && new Date(discount.endsAt) < new Date()
+                          ? "Завершена"
+                          : discount.isActive ? "Активна" : "Неактивна"}
                       </Badge>
                     </div>
                     {(discount.startsAt || discount.endsAt) && (
