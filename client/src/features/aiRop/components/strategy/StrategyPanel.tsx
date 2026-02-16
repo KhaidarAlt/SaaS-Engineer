@@ -44,7 +44,7 @@ export function StrategyPanel({ settings, onSettingsSaved }: Props) {
   const [systemPrompt, setSystemPrompt] = useState("");
   const [temperature, setTemperature] = useState(0.7);
   const [typingDelay, setTypingDelay] = useState(1500);
-  const [language, setLanguage] = useState("ru");
+  const [languages, setLanguages] = useState<string[]>(["ru"]);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -60,7 +60,8 @@ export function StrategyPanel({ settings, onSettingsSaved }: Props) {
     setSystemPrompt(settings.systemPromptCustom ?? "");
     setTemperature(parseFloat(settings.temperature) || 0.7);
     setTypingDelay(settings.typingDelay ?? 1500);
-    setLanguage(settings.language ?? "ru");
+    const langStr = settings.language ?? "ru";
+    setLanguages(langStr.includes(",") ? langStr.split(",") : [langStr]);
   }, [settings]);
 
   const { data: handoverRules = [], isLoading: rulesLoading } = useQuery<HandoverRule[]>({
@@ -131,7 +132,7 @@ export function StrategyPanel({ settings, onSettingsSaved }: Props) {
         systemPromptCustom: systemPrompt || null,
         temperature: temperature.toString(),
         typingDelay,
-        language,
+        language: languages.join(","),
       });
       toast({ title: "Настройки сохранены" });
       onSettingsSaved();
@@ -414,30 +415,58 @@ export function StrategyPanel({ settings, onSettingsSaved }: Props) {
                 value={[temperature]}
                 onValueChange={(val) => setTemperature(val[0])}
               />
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>Точнее, строже</span>
+                <span>Креативнее, свободнее</span>
+              </div>
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium">Задержка печати (мс)</label>
+              <label className="text-sm font-medium">Задержка печати (сек)</label>
               <Input
                 data-testid="input-typing-delay"
                 type="number"
-                value={typingDelay}
-                onChange={(e) => setTypingDelay(parseInt(e.target.value) || 0)}
+                step="0.1"
+                min="0"
+                value={(typingDelay / 1000).toFixed(1)}
+                onChange={(e) => setTypingDelay(Math.round(parseFloat(e.target.value || "0") * 1000))}
               />
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium">Язык</label>
-              <Select value={language} onValueChange={setLanguage}>
-                <SelectTrigger data-testid="select-language">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ru">Русский</SelectItem>
-                  <SelectItem value="kz">Казахский</SelectItem>
-                  <SelectItem value="en">English</SelectItem>
-                </SelectContent>
-              </Select>
+              <label className="text-sm font-medium">Языки</label>
+              <div className="space-y-2">
+                {[
+                  { value: "ru", label: "Русский" },
+                  { value: "kz", label: "Казахский" },
+                  { value: "en", label: "English" },
+                ].map((lang) => {
+                  const checked = languages.includes(lang.value);
+                  return (
+                    <label
+                      key={lang.value}
+                      className="flex items-center gap-2 cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        data-testid={`checkbox-lang-${lang.value}`}
+                        checked={checked}
+                        onChange={() => {
+                          setLanguages((prev) => {
+                            if (checked) {
+                              const next = prev.filter((l) => l !== lang.value);
+                              return next.length > 0 ? next : prev;
+                            }
+                            return [...prev, lang.value];
+                          });
+                        }}
+                        className="rounded border-border"
+                      />
+                      <span className="text-sm">{lang.label}</span>
+                    </label>
+                  );
+                })}
+              </div>
             </div>
           </CardContent>
         )}
