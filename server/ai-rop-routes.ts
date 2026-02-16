@@ -823,7 +823,7 @@ export function registerAiRopRoutes(
         [tenantId]
       );
       const kaspiResult = await pool.query(
-        `SELECT COUNT(*)::int as cnt FROM kaspi_integrations WHERE tenant_id = $1 AND is_verified = true`,
+        `SELECT COUNT(*)::int as cnt FROM kaspi_integrations WHERE tenant_id = $1 AND verification_status = 'verified'`,
         [tenantId]
       );
 
