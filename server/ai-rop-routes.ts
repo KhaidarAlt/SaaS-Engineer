@@ -819,7 +819,10 @@ export function registerAiRopRoutes(
         [tenantId]
       );
       const promoResult = await pool.query(
-        `SELECT COUNT(*)::int as cnt FROM promotions WHERE tenant_id = $1 AND is_active = true`,
+        `SELECT (
+          (SELECT COUNT(*) FROM promotions WHERE tenant_id = $1 AND is_active = true) +
+          (SELECT COUNT(*) FROM discounts WHERE tenant_id = $1 AND is_active = true)
+        )::int as cnt`,
         [tenantId]
       );
       const kaspiResult = await pool.query(
