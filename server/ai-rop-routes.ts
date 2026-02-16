@@ -724,7 +724,7 @@ export function registerAiRopRoutes(
   // 9. Onboarding
   // ========================
 
-  app.get("/api/ai-rop/onboarding/status", requireAuth, requireAiAccess, async (req: Request, res: Response) => {
+  app.get("/api/ai-rop/onboarding/status", requireAuth, async (req: Request, res: Response) => {
     try {
       const tenantId = req.user!.tenantId!;
       const settings = await storage.getOrCreateAiSettings(tenantId);
@@ -735,7 +735,7 @@ export function registerAiRopRoutes(
     }
   });
 
-  app.post("/api/ai-rop/onboarding/complete", requireAuth, requireAiAccess, async (req: Request, res: Response) => {
+  app.post("/api/ai-rop/onboarding/complete", requireAuth, async (req: Request, res: Response) => {
     try {
       const tenantId = req.user!.tenantId!;
       const userId = req.user!.id;
@@ -802,7 +802,7 @@ export function registerAiRopRoutes(
   // 10. Catalog Summary
   // ========================
 
-  app.get("/api/ai-rop/catalog-summary", requireAuth, requireAiAccess, async (req: Request, res: Response) => {
+  app.get("/api/ai-rop/catalog-summary", requireAuth, async (req: Request, res: Response) => {
     try {
       const tenantId = req.user!.tenantId!;
 

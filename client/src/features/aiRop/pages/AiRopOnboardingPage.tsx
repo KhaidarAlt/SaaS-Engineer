@@ -12,7 +12,7 @@ export function AiRopOnboardingPage() {
   const [showWizard, setShowWizard] = useState(false);
   const { toast } = useToast();
 
-  const { data: summary, isLoading: summaryLoading } = useQuery({
+  const { data: summary, isLoading: summaryLoading, isError: summaryError } = useQuery({
     queryKey: AI_ROP_KEYS.catalogSummary,
     queryFn: fetchCatalogSummary,
   });
@@ -45,6 +45,7 @@ export function AiRopOnboardingPage() {
           onComplete={() => setShowWizard(true)}
           summary={summary ?? null}
           isLoading={summaryLoading}
+          isError={summaryError}
         />
       ) : (
         <InterviewWizard

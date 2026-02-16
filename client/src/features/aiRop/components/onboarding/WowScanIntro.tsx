@@ -16,9 +16,10 @@ interface Props {
   onComplete: () => void;
   summary: CatalogSummary | null;
   isLoading: boolean;
+  isError?: boolean;
 }
 
-export function WowScanIntro({ onComplete, summary, isLoading }: Props) {
+export function WowScanIntro({ onComplete, summary, isLoading, isError }: Props) {
   const [visibleCount, setVisibleCount] = useState(0);
   const [doneCount, setDoneCount] = useState(0);
   const [allDone, setAllDone] = useState(false);
@@ -84,7 +85,7 @@ export function WowScanIntro({ onComplete, summary, isLoading }: Props) {
       </div>
 
       <AnimatePresence>
-        {allDone && summary && (
+        {allDone && (summary || isError) && (
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -93,19 +94,27 @@ export function WowScanIntro({ onComplete, summary, isLoading }: Props) {
           >
             <Card data-testid="card-scan-summary">
               <CardContent className="pt-6 space-y-2">
-                <p className="font-semibold mb-3" data-testid="text-catalog-intro">Я изучил ваш каталог:</p>
-                <p className="text-sm text-muted-foreground" data-testid="text-products-count">
-                  • {summary.productsCount} товаров в {summary.categoriesCount} категориях
-                </p>
-                <p className="text-sm text-muted-foreground" data-testid="text-avg-price">
-                  • Средняя цена: {summary.avgPrice.toLocaleString()} ₸
-                </p>
-                <p className="text-sm text-muted-foreground" data-testid="text-payments-status">
-                  • Оплата: {summary.paymentsReady ? "Подключена" : "Не настроена"}
-                </p>
-                <p className="text-sm text-muted-foreground" data-testid="text-promo-status">
-                  • Промо-зона: {summary.promoZoneActive ? "Активна" : "Не активна"}
-                </p>
+                {summary ? (
+                  <>
+                    <p className="font-semibold mb-3" data-testid="text-catalog-intro">Я изучил ваш каталог:</p>
+                    <p className="text-sm text-muted-foreground" data-testid="text-products-count">
+                      {summary.productsCount} товаров в {summary.categoriesCount} категориях
+                    </p>
+                    <p className="text-sm text-muted-foreground" data-testid="text-avg-price">
+                      Средняя цена: {summary.avgPrice.toLocaleString()} ₸
+                    </p>
+                    <p className="text-sm text-muted-foreground" data-testid="text-payments-status">
+                      Оплата: {summary.paymentsReady ? "Подключена" : "Не настроена"}
+                    </p>
+                    <p className="text-sm text-muted-foreground" data-testid="text-promo-status">
+                      Промо-зона: {summary.promoZoneActive ? "Активна" : "Не активна"}
+                    </p>
+                  </>
+                ) : (
+                  <p className="font-semibold mb-3 text-muted-foreground" data-testid="text-catalog-error">
+                    Не удалось загрузить данные каталога, но вы можете продолжить настройку
+                  </p>
+                )}
                 <div className="pt-4">
                   <Button
                     className="w-full"
@@ -122,7 +131,7 @@ export function WowScanIntro({ onComplete, summary, isLoading }: Props) {
         )}
       </AnimatePresence>
 
-      {allDone && isLoading && (
+      {allDone && isLoading && !isError && (
         <div className="mt-8 flex items-center gap-2 text-sm text-muted-foreground" data-testid="loading-summary">
           <Loader2 className="h-4 w-4 animate-spin" />
           Загружаю данные…
