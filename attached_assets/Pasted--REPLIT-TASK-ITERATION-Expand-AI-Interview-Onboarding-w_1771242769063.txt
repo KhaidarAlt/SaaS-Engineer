@@ -1,0 +1,304 @@
+# REPLIT TASK (ITERATION): Expand AI-РОП Interview Onboarding with Brand/USP/Installments + Product Priorities (tags) + Auto-segmentation
+
+Context:
+SmartCatalog is a multi-tenant SaaS (tenant_id everywhere). React 18 + TS (Vite) frontend, Express backend, Postgres.
+AI-РОП onboarding already exists (6 steps). We must extend the INTERVIEW to include additional blocks and the “product priority tags” system that scales from 10 SKU to 100+ items.
+
+GOAL:
+Onboarding must feel like an interview with a strong Sales Director (РОП).
+User answers naturally; if stuck, AI suggests best-practice options.
+All answers must persist and later affect AI behavior + recommendations + analytics.
+
+========================================================
+A) UX REQUIREMENTS (INTERVIEW STYLE, NOT FORMS)
+===============================================
+
+* Keep the wizard chat-like but can remain step-based (progress bar OK).
+* Each question must offer:
+
+  1. quick selectable options (single or multi)
+  2. “Добавить свой вариант”
+  3. “Посоветуй” (opens a small helper panel with examples)
+* Reduce typing: prefer chips/cards + short free-text when needed.
+* If user chooses “Да” and required “manual input” → show an input field inline.
+
+========================================================
+B) NEW INTERVIEW STEPS TO ADD (TOTAL 8–10 STEPS MAX)
+====================================================
+
+Insert these steps after Goal + Readiness (so before Style).
+
+STEP X1 — Brand representation
+Question:
+“Вы официальный представитель бренда?”
+Options:
+
+* Да
+* Нет
+  If “Да” → show input:
+  “Укажите бренд(ы), которые вы представляете (через запятую)”
+  Save: represented_brands[].
+
+STEP X2 — Own brand products
+Question:
+“Есть ли товары под вашим собственным брендом?”
+Options:
+
+* Да
+* Нет
+  If “Да” → input:
+  “Укажите название вашего бренда (или брендов)”
+  Save: own_brands[].
+  Also set catalog brand policy for AI: emphasize “официальный/оригинал/гарантия” accordingly.
+
+STEP X3 — Unique selling points (USP)
+Question:
+“Что делает ваш магазин уникальным? Чем вы лучше конкурентов?”
+UI:
+
+* show 6 example chips (select any) + free text
+  Examples chips:
+* Быстрая доставка / самовывоз
+* Официальная гарантия / сервис
+* Лучшие цены / price-match
+* Премиальная консультация / подбор
+* Рассрочка / кредит
+* Большой выбор / наличие
+  Then:
+  “Добавьте 1–3 фразы своими словами (если хотите)”
+  Save: usp_points[] (chips) + usp_free_text.
+
+STEP X4 — Installments for customers (banks list for KZ)
+Question:
+“Есть ли рассрочка для клиентов?”
+Options:
+
+* Да
+* Нет
+  If “Да”:
+  Show multi-select list (banks KZ) + “Другое”
+  Default banks list:
+* Kaspi
+* Halyk Bank
+* ForteBank
+* Jusan Bank
+* Freedom Bank
+* Home Credit Bank
+* Bank CenterCredit (BCC)
+* Altyn Bank
+* Eurasian Bank
+* Nurbank
+
+- “Другое (ввести вручную)”
+  Save: installment_enabled + installment_banks[].
+
+NOTE:
+Do not hardcode claims about bank products; it’s only “what user offers”.
+
+========================================================
+C) PRODUCT PRIORITY MECHANIC (TAGS) THAT SCALES
+===============================================
+
+We need a hybrid approach:
+
+1. Auto-segmentation (works for 100+ SKU)
+2. Rules-based promotion (category/price-based)
+3. Manual pinning (up to 10 SKU) for “sell more” / “flagship”
+
+Add a new Interview Step:
+
+STEP X5 — Promotion Strategy (auto segments + manual pin)
+Before asking, call:
+GET /api/ai/catalog/segments
+Return:
+{
+newCount, premiumCount, entryCount, slowCount,
+topCategories: [{id,name,count}],
+avgPrice
+}
+
+AI message:
+“Я нашёл в каталоге:
+• Новинки: {newCount}
+• Премиум (выше среднего): {premiumCount}
+• Бюджетные (ниже среднего): {entryCount}
+• Давно не покупали/не заказывали: {slowCount}
+Что будем продвигать активнее?”
+
+Options (multi-select):
+
+* Новинки
+* Премиум
+* Бюджетные
+* Давно не покупали
+* Конкретные категории
+* Вручную выбрать до 10 товаров
+* Ничего не продвигать специально
+
+If “Конкретные категории”:
+Show category multi-select (from catalog). Save promoted_category_ids[].
+
+If “Вручную выбрать до 10 товаров”:
+Show searchable picker (by name/SKU) with limit 10.
+Two manual tag types:
+
+* “Продавать чаще” (PRIORITY)
+* “Флагман” (FLAGSHIP)
+  Save selected product_ids with priority_type.
+
+Explain limit text:
+“Рекомендую выбрать до 10 — так стратегия не размоется.”
+
+========================================================
+D) EXISTING STEPS (KEEP, BUT ENHANCE)
+=====================================
+
+Keep existing steps but ensure they store structured data:
+
+* Goal
+* Readiness check (BLOCKED/WARNING/READY with deep links)
+* Style (short/friendly/premium/custom)
+* Objections (multi-select + add)
+* Handover rules (multi-select + optional amount threshold)
+* Final confirmation summary
+
+Enhance the confirmation step:
+Show a “Strategy Summary” card including:
+
+* Goal
+* Style
+* USP points
+* Brand representation / own brand
+* Installment availability + selected banks
+* Promotion strategy (segments + categories + pinned products)
+* Handover rules
+  Buttons:
+  [Назад] [Запустить AI-РОПа]
+
+========================================================
+E) DATABASE / DATA MODEL CHANGES
+================================
+
+Add table (tenant-scoped):
+ai_business_profile
+
+* tenant_id (unique)
+* is_official_representative (bool)
+* represented_brands (text[])
+* has_own_brand (bool)
+* own_brands (text[])
+* usp_points (text[])
+* usp_free_text (text)
+* installment_enabled (bool)
+* installment_banks (text[])
+* updated_at
+
+Add product tagging (tenant-scoped):
+product_ai_tags
+
+* id
+* tenant_id
+* product_id
+* tag_type enum: PRIORITY, FLAGSHIP, NEW, PREMIUM, ENTRY, SLOW
+* source enum: AUTO, RULE, MANUAL
+* weight int default 0 (PRIORITY/FLAGSHIP can use weight)
+* created_at
+
+Auto segments:
+
+* NEW: product.created_at within 30 days
+* PREMIUM: price > avgPrice * 1.3
+* ENTRY: price < avgPrice * 0.7
+* SLOW: no orders in last N days (start with N=60; if no order data, skip)
+  Store auto tags either:
+  A) computed on the fly (preferred MVP) OR
+  B) persisted daily job (phase 2)
+
+Promotion rules (tenant-scoped):
+ai_promotion_rules
+
+* tenant_id
+* promote_new (bool)
+* promote_premium (bool)
+* promote_entry (bool)
+* promote_slow (bool)
+* promoted_category_ids (uuid[])
+* updated_at
+
+========================================================
+F) BACKEND ENDPOINTS TO IMPLEMENT
+=================================
+
+Onboarding profile:
+
+* GET  /api/ai/business-profile
+* POST /api/ai/business-profile (upsert)
+
+Catalog segments:
+
+* GET /api/ai/catalog/segments
+  Return counts + avgPrice + categories.
+
+Manual tag management:
+
+* POST /api/ai/product-tags/set (bulk set manual tags for selected product_ids)
+* GET  /api/ai/product-tags (for UI display in dashboard/strategy)
+
+Promotion rules:
+
+* GET  /api/ai/promotion-rules
+* POST /api/ai/promotion-rules (upsert)
+
+All tenant-scoped.
+
+========================================================
+G) AI BEHAVIOR: HOW THESE ANSWERS AFFECT SALES
+==============================================
+
+When generating responses:
+
+* If is_official_representative = true → emphasize “официальный представитель”, “оригинал”, “гарантия”, “сервис”.
+* If has_own_brand = true → emphasize “собственный бренд”, “контроль качества”, “лучшее соотношение”.
+* Use USP points as default persuasion arguments.
+* If installment_enabled = true → proactively offer installment option when:
+
+  * customer says “дорого”
+  * premium product suggested
+  * closing phase before payment
+    Mention only the banks user selected.
+
+Product selection/ranking:
+
+* Apply promotion strategy:
+
+  * prefer manual PRIORITY/FLAGSHIP products when relevant
+  * prefer segment rules selected (NEW/PREMIUM/ENTRY/SLOW)
+  * prefer promoted categories
+* Keep variety: don’t push the same SKU repeatedly in one dialog.
+
+========================================================
+H) UI: WHERE THIS APPEARS
+=========================
+
+* These new interview steps must be added into the onboarding wizard (progress steps update accordingly).
+* In the dashboard Strategy panel, add a new section:
+  “Позиционирование магазина”
+
+  * Official rep toggle + brands
+  * Own brand toggle + brands
+  * USP editor
+  * Installments toggle + banks
+  * Promotion strategy editor (segments + categories + manual picks)
+    So advanced users can edit later without rerunning onboarding.
+
+========================================================
+I) ACCEPTANCE CRITERIA
+======================
+
+* Interview includes the 4 new blocks (official rep, own brand, USP, installments with KZ bank list).
+* Interview includes promotion strategy that scales (auto segments + rules + up to 10 pinned SKUs).
+* All data saved tenant-scoped and reflected in Strategy panel.
+* AI uses these fields when answering in Test Chat (demonstrable: e.g., if “дорого” and installments enabled, AI offers installment with selected banks; if official rep, AI mentions it).
+* No user is forced to tag 100+ products manually.
+
+Implement cleanly, production-ready, and do not simplify into generic settings.
