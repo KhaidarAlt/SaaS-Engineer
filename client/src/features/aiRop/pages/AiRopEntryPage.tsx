@@ -5,7 +5,7 @@ import { AiRopOnboardingPage } from "./AiRopOnboardingPage";
 import { AiRopLayout } from "../components/layout/AiRopLayout";
 import { Skeleton } from "@/components/ui/skeleton";
 import OverviewPage from "./OverviewPage";
-import TrainingPage from "./TrainingPage";
+import TrainingPage from "../training/pages/TrainingPage";
 import TestingPage from "../testing/pages/TestingPage";
 import ConnectionsPage from "./ConnectionsPage";
 import AnalyticsPage from "./AnalyticsPage";

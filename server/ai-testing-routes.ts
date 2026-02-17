@@ -5,6 +5,7 @@ import {
   aiSettings, aiTestingSessions, aiTestingMessages, aiScoreSnapshots,
   aiStressTestRuns, handoverRules, knowledgeItems, trainingItems,
   products, aiBusinessProfile, aiPromotionRules, categories,
+  aiTriggers, aiAntiPatterns, aiTrainingEvents,
 } from "@shared/schema";
 import { generateAiResponse } from "./services/openai";
 
@@ -66,8 +67,16 @@ async function buildTenantContext(tenantId: string, pool: any, storage: any) {
     .limit(20);
 
   const kbItems = await db.select().from(knowledgeItems)
-    .where(eq(knowledgeItems.tenantId, tenantId))
-    .limit(10);
+    .where(and(eq(knowledgeItems.tenantId, tenantId), eq(knowledgeItems.isActive, true)))
+    .limit(30);
+
+  const activeTriggers = await db.select().from(aiTriggers)
+    .where(and(eq(aiTriggers.tenantId, tenantId), eq(aiTriggers.isEnabled, true)))
+    .orderBy(aiTriggers.priority)
+    .limit(20);
+
+  const activeAntiPatterns = await db.select().from(aiAntiPatterns)
+    .where(and(eq(aiAntiPatterns.tenantId, tenantId), eq(aiAntiPatterns.isActive, true)));
 
   const context: any = {
     storeName: tenant.name,
@@ -82,6 +91,8 @@ async function buildTenantContext(tenantId: string, pool: any, storage: any) {
       category: p.categoryName || undefined,
     })),
     knowledge: kbItems.map((k: any) => ({ title: k.title || k.question, content: k.content || k.answer })),
+    triggers: activeTriggers,
+    antiPatterns: activeAntiPatterns,
     tone: settings.tone || "friendly",
     goal: settings.goal || "CLOSE_DEAL",
     aiLanguages: tenant.aiLanguages || ["ru"],
@@ -89,6 +100,152 @@ async function buildTenantContext(tenantId: string, pool: any, storage: any) {
   };
 
   return context;
+}
+
+function matchTriggers(userText: string, triggers: any[], goal: string): any[] {
+  const userLower = userText.toLowerCase();
+  const matched: any[] = [];
+
+  for (const trigger of triggers) {
+    let isMatch = false;
+
+    if (trigger.matchType === "KEYWORD" || trigger.matchType === "INTENT") {
+      isMatch = userLower.includes(trigger.matchValue.toLowerCase());
+    } else if (trigger.matchType === "REGEX") {
+      try {
+        const re = new RegExp(trigger.matchValue, "i");
+        isMatch = re.test(userText);
+      } catch {}
+    }
+
+    if (!isMatch) continue;
+
+    if (trigger.conditions) {
+      const conds = trigger.conditions as any;
+      if (conds.goals && Array.isArray(conds.goals) && !conds.goals.includes(goal)) continue;
+    }
+
+    matched.push(trigger);
+    if (matched.length >= 3) break;
+  }
+
+  return matched;
+}
+
+function applyTriggerActions(reply: string, matchedTriggers: any[]): { modifiedReply: string; appliedActions: string[] } {
+  let modifiedReply = reply;
+  const appliedActions: string[] = [];
+
+  for (const trigger of matchedTriggers) {
+    const payload = (trigger.actionPayload || {}) as any;
+
+    switch (trigger.actionType) {
+      case "ADD_LINE_TO_REPLY":
+      case "USE_SCRIPT_SNIPPET": {
+        const text = payload.text || "";
+        if (text && !modifiedReply.includes(text)) {
+          const firstSentEnd = modifiedReply.indexOf(".");
+          if (firstSentEnd > 0 && firstSentEnd < modifiedReply.length - 1) {
+            modifiedReply = modifiedReply.slice(0, firstSentEnd + 1) + " " + text + modifiedReply.slice(firstSentEnd + 1);
+          } else {
+            modifiedReply += "\n\n" + text;
+          }
+          appliedActions.push(`Добавлен текст: "${text.substring(0, 40)}..."`);
+        }
+        break;
+      }
+      case "FORCE_HANDOVER": {
+        const reason = payload.reason || "Передаю менеджеру";
+        modifiedReply += `\n\n${reason}. Сейчас подключу менеджера для дальнейшей помощи.`;
+        appliedActions.push("Передача менеджеру");
+        break;
+      }
+      case "OFFER_INSTALLMENT": {
+        if (!modifiedReply.toLowerCase().includes("рассрочк")) {
+          modifiedReply += "\n\nТакже у нас доступна рассрочка — могу рассказать подробнее об условиях.";
+          appliedActions.push("Предложена рассрочка");
+        }
+        break;
+      }
+      case "OFFER_CHEAPER": {
+        if (!modifiedReply.toLowerCase().includes("дешевле") && !modifiedReply.toLowerCase().includes("бюджетн")) {
+          modifiedReply += "\n\nМогу подобрать более бюджетный вариант — хотите посмотреть?";
+          appliedActions.push("Предложен дешёвый вариант");
+        }
+        break;
+      }
+      case "UPSELL": {
+        if (!modifiedReply.toLowerCase().includes("премиум") && !modifiedReply.toLowerCase().includes("лучш")) {
+          modifiedReply += "\n\nТакже рекомендую обратить внимание на расширенную комплектацию.";
+          appliedActions.push("Апсейл");
+        }
+        break;
+      }
+      case "APPLY_PROMO": {
+        const promoText = payload.text || "Сейчас действует специальная акция!";
+        if (!modifiedReply.toLowerCase().includes("акци") && !modifiedReply.toLowerCase().includes("промо")) {
+          modifiedReply += "\n\n" + promoText;
+          appliedActions.push("Применено промо");
+        }
+        break;
+      }
+      case "ASK_CLARIFYING_QUESTION": {
+        const question = payload.text || "Могу ли я уточнить детали?";
+        modifiedReply += "\n\n" + question;
+        appliedActions.push("Задан уточняющий вопрос");
+        break;
+      }
+    }
+  }
+
+  return { modifiedReply, appliedActions };
+}
+
+function filterAntiPatterns(reply: string, antiPatterns: any[]): { cleanedReply: string; blocked: string[] } {
+  let cleanedReply = reply;
+  const blocked: string[] = [];
+
+  for (const ap of antiPatterns) {
+    if (ap.patternType === "KEYWORD") {
+      const keyword = ap.patternValue.toLowerCase();
+      if (cleanedReply.toLowerCase().includes(keyword)) {
+        const sentences = cleanedReply.split(/(?<=[.!?])\s+/);
+        const filteredSentences = sentences.filter(s => !s.toLowerCase().includes(keyword));
+        if (filteredSentences.length < sentences.length) {
+          cleanedReply = filteredSentences.join(" ");
+          if (!cleanedReply.trim()) {
+            cleanedReply = "Уточню информацию и вернусь к вам с ответом.";
+          }
+          blocked.push(ap.patternValue);
+        }
+      }
+    } else if (ap.patternType === "REGEX") {
+      try {
+        const re = new RegExp(ap.patternValue, "gi");
+        if (re.test(cleanedReply)) {
+          cleanedReply = cleanedReply.replace(re, "").trim();
+          if (!cleanedReply) {
+            cleanedReply = "Уточню информацию и вернусь к вам с ответом.";
+          }
+          blocked.push(ap.patternValue);
+        }
+      } catch {}
+    } else if (ap.patternType === "CLAIM") {
+      if (cleanedReply.toLowerCase().includes(ap.patternValue.toLowerCase())) {
+        const sentences = cleanedReply.split(/(?<=[.!?])\s+/);
+        const filteredSentences = sentences.filter(s => !s.toLowerCase().includes(ap.patternValue.toLowerCase()));
+        if (filteredSentences.length < sentences.length) {
+          cleanedReply = filteredSentences.join(" ");
+          if (!cleanedReply.trim()) {
+            cleanedReply = "Уточню информацию и вернусь к вам с ответом.";
+          }
+          blocked.push(ap.patternValue);
+        }
+      }
+    }
+  }
+
+  return { cleanedReply, blocked };
 }
 
 function computeMicroEval(
@@ -360,7 +517,19 @@ async function computeScore(tenantId: string, pool: any, storage: any) {
   testingItems.stressTest = { score: stressPoints, max: 10, label: "Стресс-тест", passed: stressPoints >= 6, detail: latestStress ? `${latestStress.overallScore}%` : "Не проведён" };
   testingScore += stressPoints;
 
-  const scoreTotal = completenessScore + behaviorScore + Math.min(opsScore, 20) + testingScore;
+  let trainingBonus = 0;
+  try {
+    const [triggerCount] = await db.select({ cnt: count() }).from(aiTriggers)
+      .where(and(eq(aiTriggers.tenantId, tenantId), eq(aiTriggers.isEnabled, true)));
+    const [kbCount] = await db.select({ cnt: count() }).from(knowledgeItems)
+      .where(and(eq(knowledgeItems.tenantId, tenantId), eq(knowledgeItems.isActive, true)));
+    if ((triggerCount?.cnt || 0) >= 3 || (kbCount?.cnt || 0) >= 3) {
+      trainingBonus = 2;
+    }
+  } catch {}
+
+  const rawTotal = completenessScore + behaviorScore + Math.min(opsScore, 20) + testingScore + trainingBonus;
+  const scoreTotal = Math.min(rawTotal, 100);
   const lastComputedAt = new Date().toISOString();
 
   const notes: string[] = [];
@@ -368,6 +537,7 @@ async function computeScore(tenantId: string, pool: any, storage: any) {
   if (behaviorScore < 15) notes.push("Настройте поведение AI под вашу цель");
   if (opsScore < 10) notes.push("Проверьте операционную готовность");
   if (testingScore < 10) notes.push("Проведите больше тестов");
+  if (trainingBonus > 0) notes.push("Бонус за обучение: +" + trainingBonus);
 
   const result = {
     scoreTotal,
@@ -536,15 +706,32 @@ export function registerAiTestingRoutes(
       const context = await buildTenantContext(tenantId, pool, storage);
       const aiResult = await generateAiResponse(userText, history, context);
 
+      let finalContent = aiResult.content;
+      const triggersMeta: any = {};
+
+      const matchedTrigs = matchTriggers(userText, context.triggers || [], context.goal);
+      if (matchedTrigs.length > 0) {
+        const { modifiedReply, appliedActions } = applyTriggerActions(finalContent, matchedTrigs);
+        finalContent = modifiedReply;
+        triggersMeta.matchedTriggers = matchedTrigs.map((t: any) => t.id);
+        triggersMeta.appliedActions = appliedActions;
+      }
+
+      const apResult = filterAntiPatterns(finalContent, context.antiPatterns || []);
+      finalContent = apResult.cleanedReply;
+      if (apResult.blocked.length > 0) {
+        triggersMeta.blockedPatterns = apResult.blocked;
+      }
+
       const productNames = (context.products || []).map((p: any) => p.name);
-      const microEval = computeMicroEval(userText, aiResult.content, context.tone, context.goal, productNames);
+      const microEval = computeMicroEval(userText, finalContent, context.tone, context.goal, productNames);
 
       const [assistantMsg] = await db.insert(aiTestingMessages).values({
         tenantId,
         sessionId,
         role: "assistant",
-        content: aiResult.content,
-        meta: { microEval, matchedTag: aiResult.matchedTag, action: aiResult.action },
+        content: finalContent,
+        meta: { microEval, matchedTag: aiResult.matchedTag, action: aiResult.action, ...triggersMeta },
       }).returning();
 
       res.json({ assistantMessage: assistantMsg, microEval });
