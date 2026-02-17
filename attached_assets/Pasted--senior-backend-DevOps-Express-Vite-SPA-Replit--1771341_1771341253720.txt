@@ -1,0 +1,240 @@
+Ты — senior backend/DevOps инженер. Работаешь в существующем проекте (Express + Vite SPA) на Replit. Цель: корректная поддержка **клиентских доменов** для каталогов Botfactory и стабильная интеграция с edge-прокси **Caddy** (на VPS), включая **on-demand TLS**, **домены второго уровня**, и **кастомные домены клиентов** (первого уровня).
+
+## Контекст (как сейчас устроено)
+
+* Edge reverse-proxy: Caddy в Docker на VPS.
+* Основной домен продукта: `botfactory.kz` и поддомены `*.botfactory.kz` проксируются на Replit app.
+* Отдельный домен WAHA: `waha.botfactory.kz` проксируется на локальный WAHA на VPS (`127.0.0.1:3000`), TLS уже корректный на стороне Caddy.
+* Для `*.botfactory.kz` используется **on_demand TLS** с `ask` endpoint на Replit.
+* В Caddy ask URL токен передаётся как query:
+  `.../api/internal/caddy/allow?token=...`
+  и Caddy добавляет `domain` как query: `?domain=<SNI>`.
+
+## Что нужно реализовать на Replit (обязательно)
+
+### A) Internal endpoint для Caddy on_demand TLS (allow endpoint)
+
+1. Реализуй endpoint:
+
+* `GET /api/internal/caddy/allow`
+* Query params:
+
+  * `domain` (обязательный) — домен, для которого Caddy хочет выпустить сертификат
+  * `token` (обязательный) — секрет (shared secret) для авторизации запроса от Caddy
+
+2. Валидация:
+
+* Если `token` не совпадает с `process.env.CADDY_ASK_TOKEN` → вернуть `403` plain text `forbidden`.
+* Если `domain` пустой/невалидный → `400` plain text `bad request`.
+* Если домен не разрешён политикой → `403` plain text `not allowed`.
+* Если разрешён → `200` plain text `ok`.
+
+3. Политика разрешения доменов (минимум сейчас):
+
+* Разрешать **любые поддомены** `*.botfactory.kz` (например `test.botfactory.kz`, `shop1.botfactory.kz`).
+* НЕ разрешать ничего вне `botfactory.kz` на этом этапе (чтобы исключить злоупотребления).
+* ВНИМАНИЕ: `waha.botfactory.kz` не должен зависеть от on_demand в Caddy, но allow endpoint может разрешать/не разрешать его — это не критично. Главное: корректная политика для `*.botfactory.kz`.
+
+4. Логи и трассировка:
+
+* Логируй каждое обращение в allow endpoint в структурированном виде: timestamp, domain, result(allowed/denied), reason.
+* Не логируй секретный token целиком (маскируй).
+
+5. Надёжность:
+
+* Endpoint должен отвечать быстро (<50-100ms).
+* Без запросов в БД для базового решения (проверка домена regexp + allowlist). Позже подключим БД.
+
+### B) Мульти-тенант резолвинг каталогов по домену (важно для кастомных доменов)
+
+Нужно, чтобы приложение корректно открывало **каталоги клиентов** на:
+
+* `https://<slug>.botfactory.kz` (поддомены продукта)
+* `https://<client-domain.tld>` (кастомный домен клиента, apex)
+* `https://www.<client-domain.tld>` (кастомный домен клиента, www)
+* `https://sub.<client-domain.tld>` (если позже разрешим subdomain клиента)
+
+Реализация:
+
+1. В Express добавь middleware, который вычисляет `effectiveHost` из заголовков:
+
+* `X-Forwarded-Host` (если пришло от Caddy) приоритетнее
+* иначе `Host`
+* привести к lowercase
+* убрать порт (`:443`)
+* если есть trailing dot — убрать
+
+2. Правило сопоставления:
+
+* Если host = `botfactory.kz` → это главный сайт/лендинг/кабинет.
+* Если host оканчивается на `.botfactory.kz` → это **каталог по slug**:
+
+  * slug = левый лейбл (например `essen-almaty` из `essen-almaty.botfactory.kz`)
+  * или если используете path-based (`/c/<slug>`) — поддержать оба варианта.
+* Если host НЕ `botfactory.kz` и НЕ заканчивается на `.botfactory.kz` → это **кастомный домен клиента**, его нужно найти в БД и сопоставить с tenant/catalog.
+
+3. Слой данных (Postgres):
+
+* Таблица `tenants` (или `shops`) + таблица `domains`:
+
+  * `domains(id, tenant_id, hostname, status, created_at, verified_at, last_checked_at, ssl_status, ownership_method, ownership_value)`
+  * `hostname` хранить нормализованно: lowercase, без порта, без scheme.
+* Индекс уникальности на `hostname`.
+* В `status` держать: `pending`, `verified`, `active`, `blocked`.
+* `ssl_status` можно хранить как текстовое поле/enum: `unknown`, `ok`, `error`.
+
+4. Логика поиска tenant:
+
+* Для `*.botfactory.kz`: tenant определяется по slug (либо прямым lookup slug→tenant).
+* Для кастомного домена: `SELECT tenant_id FROM domains WHERE hostname=$1 AND status IN ('verified','active')`.
+
+5. Отдача SPA:
+
+* Для каталога клиентского домена/slug:
+
+  * Express должен отдавать Vite SPA `index.html` (и статику) так, чтобы frontend смог загрузиться.
+  * Важно: API вызовы должны быть относительные (`/api/...`), чтобы работало на любом домене.
+* Добавь endpoint `GET /api/public/context` который возвращает:
+
+  * `host`
+  * `tenantId` / `catalogId`
+  * `slug`
+  * `branding` (если есть)
+    Frontend по нему понимает, какой каталог показывать.
+
+### C) Поддержка “домены второго уровня” vs “первого уровня”
+
+Термины:
+
+* “второй уровень” (в вашем бытовом смысле) — поддомены продукта: `slug.botfactory.kz`
+* “первый уровень кастомный” — apex домен клиента: `client.kz`, `client.com`
+  План:
+
+1. Для `slug.botfactory.kz` — не нужны проверки ownership. Это ваш домен.
+2. Для `client-domain.tld` и `www.client-domain.tld` — нужна ownership verification.
+
+### D) Ownership verification для кастомного домена (автоматизировано)
+
+Реализуй процесс:
+
+1. Пользователь добавляет домен в кабинете → создаётся запись `domains` со статусом `pending`.
+2. Система генерирует verification token:
+
+* Например: `bf_verify_<random>` (длина 32-48)
+* Сохраняет в `ownership_value`.
+
+3. UI показывает инструкцию пользователю:
+
+* Добавить DNS TXT запись:
+
+  * Name/Host: `_botfactory-verify` (или `_bfverify`)
+  * Value: `<ownership_value>`
+  * TTL: 300
+  * Для apex и/или конкретного домена — чётко указать.
+
+4. Backend реализует проверку:
+
+* `POST /api/domains/:id/verify`
+* Делает DNS lookup TXT (через `dns/promises`), проверяет наличие токена
+* Если найден → `status='verified'`, `verified_at=now()`
+* Если нет → вернуть понятную ошибку + советы.
+
+5. Авто-ретраи:
+
+* Cron/job в приложении: каждые 5-10 минут проверять `pending` домены и пытаться verify, ограничивая частоту.
+* Логировать результаты.
+
+### E) Подключение домена к edge (Caddy) — дизайн взаимодействия (сейчас и потом)
+
+Сейчас edge-Caddy разрешает только `*.botfactory.kz` через allow endpoint.
+Дальше (для кастомных доменов клиентов) нужно расширить allow endpoint:
+
+* Разрешать домен **только если** он:
+
+  * в таблице `domains`
+  * `status IN ('verified','active')`
+  * и не `blocked`
+* При этом обязательно ограничить частоту и защититься от злоупотреблений:
+
+  * rate limit по IP/домену
+  * запрет wildcard `*` доменов клиентов
+  * запрет внутренних/локальных доменов, punycode обработка, max length, etc.
+
+Важно: сейчас можно оставить allow endpoint “только *.botfactory.kz”, но код и структура должны быть готовы расшириться до кастомных доменов.
+
+### F) Поддержка apex доменов клиентов на DNS уровне (инструкция/ожидания)
+
+В UI инструкциях обязательно учти:
+
+* Для `client-domain.tld` apex часто нельзя CNAME → нужен:
+
+  * A-запись на IP VPS (45.90.35.9) **ИЛИ**
+  * ALIAS/ANAME (если DNS провайдер поддерживает)
+* Для `www.client-domain.tld` можно обычный CNAME на `botfactory.kz` или на специальный `edge.botfactory.kz` (если введёте).
+* Для поддомена клиента `shop.client-domain.tld` — CNAME на `botfactory.kz`/edge host.
+
+На backend стороне учитывай, что клиент может подключить только `www`, только apex, или оба.
+
+### G) Безопасность (обязательно)
+
+* `CADDY_ASK_TOKEN` хранить в Replit Secrets.
+* allow endpoint не должен быть доступен без token (403).
+* Везде нормализовать домены и валидировать:
+
+  * lowercase
+  * убрать порт
+  * запретить пустые/слишком длинные
+  * запретить IP как домен
+  * запретить `localhost`, `.local`, внутренние зоны
+* Логировать deny причины.
+
+### H) Требования к качеству и тестам
+
+1. Добавь unit tests (минимум):
+
+* allow endpoint:
+
+  * no token → 403
+  * wrong token → 403
+  * domain=slug.botfactory.kz → 200
+  * domain=evil.com → 403
+* host resolver middleware:
+
+  * X-Forwarded-Host приоритет
+  * нормализация порта
+
+2. Добавь e2e smoke:
+
+* `GET /__ping` → 200 text `pong`
+* `GET /api/public/context` на разных Host → корректный tenant/slug.
+
+### I) Диагностика/наблюдаемость
+
+* Логируй `effectiveHost`, route selection (main vs slug vs custom domain).
+* Логируй ошибки DNS verify.
+* Сделай endpoint `GET /api/internal/health/domains` (protected), который показывает последние проверки доменов.
+
+## Что должно получиться в итоге (критерии готовности)
+
+* `https://botfactory.kz` работает (как сейчас).
+* Любой `https://<slug>.botfactory.kz` открывается без SSL ошибок и показывает нужный каталог (SPA + API).
+* Allow endpoint отвечает 200 для `*.botfactory.kz` и защищён токеном через query `token`.
+* Архитектура готова к включению кастомных доменов клиентов:
+
+  * добавление домена в UI
+  * TXT verification
+  * хранение в Postgres
+  * allow endpoint может быть расширен для verified/active доменов
+  * инструкции для apex (A/ALIAS) и www (CNAME)
+
+## Примечания по реализации
+
+* Не используй “магические” зависимости; предпочтительно стандартные модули Node (`dns/promises`), `zod` для валидации (если уже есть), `p-limit` для ретраев (опционально).
+* Не ломай существующие маршруты каталога (`/c/:slug`), но добавь поддержку host-based резолвинга.
+* Все новые env:
+
+  * `CADDY_ASK_TOKEN`
+  * `DOMAIN_VERIFY_PREFIX` (опционально, например `_botfactory-verify`)
+  * `APP_BASE_DOMAIN=botfactory.kz`
+
+Сделай реализацию аккуратно: чистые модули, отдельные файлы для allow endpoint, host-resolver, domain-service, domain-verification job.
