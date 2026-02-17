@@ -14,7 +14,7 @@ import { loginSchema, registerSchema, checkoutSchema } from "@shared/schema";
 import type { User, Tenant, Subscription, Plan } from "@shared/schema";
 import { ObjectStorageService, registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import { sendPasswordResetEmail } from "./services/gmail";
-import { randomBytes } from "crypto";
+import { randomBytes, timingSafeEqual } from "crypto";
 import net from "node:net";
 import { pool } from "./db";
 import domainRoutes from "./domains/routes.js";
@@ -610,88 +610,207 @@ export async function registerRoutes(
     res.type("text/plain").status(200).send("pong");
   });
 
+  // ── Anti-fraud: Caddy on_demand TLS allow endpoint ──────────────────
+
   const BLOCKED_ZONES = [
     ".local", ".localhost", ".internal", ".test", ".example",
     ".invalid", ".onion", ".i2p", ".arpa",
   ];
 
-  const caddyAskRateMap = new Map<string, number>();
-  setInterval(() => caddyAskRateMap.clear(), 60_000);
+  const PLATFORM_DOMAIN = "botfactory.kz";
+  const SLUG_RE = /^([a-z0-9][a-z0-9-]{1,62}[a-z0-9])\.botfactory\.kz$/;
+  const PLATFORM_WHITELIST = new Set(["botfactory.kz", "www.botfactory.kz", "waha.botfactory.kz"]);
+
+  const ipRateMap = new Map<string, { count: number; resetAt: number }>();
+  const domainRateMap = new Map<string, { count: number; resetAt: number }>();
+  const negativeCache = new Map<string, number>();
+  const tenantIssuanceMap = new Map<string, { domains: Set<string>; resetAt: number }>();
+  const approvedDomainsCache = new Set<string>();
+
+  const IP_RATE_LIMIT = 60;
+  const IP_RATE_WINDOW = 10 * 60_000;
+  const DOMAIN_RATE_LIMIT = 10;
+  const DOMAIN_RATE_WINDOW = 10 * 60_000;
+  const NEGATIVE_CACHE_TTL = 10 * 60_000;
+  const TENANT_DAILY_CERT_LIMIT = 5;
+  const TENANT_ISSUANCE_WINDOW = 24 * 60 * 60_000;
+
+  setInterval(() => {
+    const now = Date.now();
+    for (const [k, v] of ipRateMap) if (v.resetAt <= now) ipRateMap.delete(k);
+    for (const [k, v] of domainRateMap) if (v.resetAt <= now) domainRateMap.delete(k);
+    for (const [k, ts] of negativeCache) if (ts <= now) negativeCache.delete(k);
+    for (const [k, v] of tenantIssuanceMap) if (v.resetAt <= now) tenantIssuanceMap.delete(k);
+  }, 60_000);
+
+  function safeTokenCompare(a: string, b: string): boolean {
+    if (!a || !b) return false;
+    const bufA = Buffer.from(a);
+    const bufB = Buffer.from(b);
+    if (bufA.length !== bufB.length) {
+      timingSafeEqual(bufA, bufA);
+      return false;
+    }
+    return timingSafeEqual(bufA, bufB);
+  }
+
+  function checkRate(map: Map<string, { count: number; resetAt: number }>, key: string, limit: number, windowMs: number): boolean {
+    const now = Date.now();
+    const entry = map.get(key);
+    if (!entry || entry.resetAt <= now) {
+      map.set(key, { count: 1, resetAt: now + windowMs });
+      return true;
+    }
+    entry.count++;
+    return entry.count <= limit;
+  }
+
+  function getClientIp(req: Request): string {
+    const xff = req.get("X-Forwarded-For");
+    if (xff) return xff.split(",")[0].trim();
+    return req.ip || req.socket.remoteAddress || "unknown";
+  }
 
   app.get("/api/internal/caddy/allow", async (req: Request, res: Response) => {
+    const t0 = Date.now();
     try {
       const headerToken = req.get("X-Ask-Token") || "";
       const queryToken = String(req.query.token || "");
       const token = headerToken || queryToken;
       const tokenSource = headerToken ? "header" : queryToken ? "query" : "none";
+      const clientIp = getClientIp(req);
 
-      if (!process.env.CADDY_ASK_TOKEN || token !== process.env.CADDY_ASK_TOKEN) {
-        console.log(`[caddy-ask] deny tokenSource=${tokenSource} reason=bad_token`);
+      const expectedToken = process.env.CADDY_ASK_TOKEN || "";
+      if (!expectedToken || !safeTokenCompare(token, expectedToken)) {
+        console.log(`[caddy-ask] deny ip=${clientIp} tokenSource=${tokenSource} reason=bad_token latency=${Date.now() - t0}ms`);
         return res.type("text/plain").status(403).send("forbidden");
       }
 
       const rawDomain = String(req.query.domain || req.query.host || req.query.server_name || "").toLowerCase().trim();
       if (!rawDomain) {
-        console.log(`[caddy-ask] deny reason=no_domain`);
+        console.log(`[caddy-ask] deny ip=${clientIp} reason=no_domain latency=${Date.now() - t0}ms`);
         return res.type("text/plain").status(400).send("bad request");
       }
 
       const domain = rawDomain.replace(/\.+$/, "").replace(/:\d+$/, "");
 
       if (!domain || domain.length > 253 || net.isIP(domain)) {
-        console.log(`[caddy-ask] deny domain=${domain} tokenSource=${tokenSource} reason=invalid`);
+        console.log(`[caddy-ask] deny domain=${domain} ip=${clientIp} reason=invalid latency=${Date.now() - t0}ms`);
         return res.type("text/plain").status(403).send("not allowed");
       }
 
       if (/[^\x20-\x7E]/.test(domain)) {
-        console.log(`[caddy-ask] deny domain=${domain} tokenSource=${tokenSource} reason=non_ascii`);
+        console.log(`[caddy-ask] deny domain=${domain} ip=${clientIp} reason=non_ascii latency=${Date.now() - t0}ms`);
         return res.type("text/plain").status(403).send("not allowed");
       }
 
       if (domain === "localhost" || BLOCKED_ZONES.some(z => domain === z.slice(1) || domain.endsWith(z))) {
-        console.log(`[caddy-ask] deny domain=${domain} tokenSource=${tokenSource} reason=blocked_zone`);
+        console.log(`[caddy-ask] deny domain=${domain} ip=${clientIp} reason=blocked_zone latency=${Date.now() - t0}ms`);
         return res.type("text/plain").status(403).send("not allowed");
       }
 
       if (domain.includes("*")) {
-        console.log(`[caddy-ask] deny domain=${domain} tokenSource=${tokenSource} reason=wildcard`);
+        console.log(`[caddy-ask] deny domain=${domain} ip=${clientIp} reason=wildcard latency=${Date.now() - t0}ms`);
         return res.type("text/plain").status(403).send("not allowed");
       }
 
-      const rateCount = (caddyAskRateMap.get(domain) || 0) + 1;
-      caddyAskRateMap.set(domain, rateCount);
-      if (rateCount > 30) {
-        console.log(`[caddy-ask] deny domain=${domain} tokenSource=${tokenSource} reason=rate_limit`);
+      // Rate limit by IP
+      if (!checkRate(ipRateMap, clientIp, IP_RATE_LIMIT, IP_RATE_WINDOW)) {
+        console.log(`[caddy-ask] deny domain=${domain} ip=${clientIp} reason=ip_rate_limit latency=${Date.now() - t0}ms`);
+        return res.type("text/plain").status(429).send("too many requests");
+      }
+
+      // Rate limit by domain
+      if (!checkRate(domainRateMap, domain, DOMAIN_RATE_LIMIT, DOMAIN_RATE_WINDOW)) {
+        console.log(`[caddy-ask] deny domain=${domain} ip=${clientIp} reason=domain_rate_limit latency=${Date.now() - t0}ms`);
+        return res.type("text/plain").status(429).send("too many requests");
+      }
+
+      // Negative cache check
+      const cachedDenyUntil = negativeCache.get(domain);
+      if (cachedDenyUntil && cachedDenyUntil > Date.now()) {
+        console.log(`[caddy-ask] deny domain=${domain} ip=${clientIp} reason=negative_cache latency=${Date.now() - t0}ms`);
         return res.type("text/plain").status(403).send("not allowed");
       }
 
-      if (domain === "botfactory.kz" || domain.endsWith(".botfactory.kz")) {
-        console.log(`[caddy-ask] allow domain=${domain} tokenSource=${tokenSource} reason=platform`);
+      // Platform whitelist (exact match only)
+      if (PLATFORM_WHITELIST.has(domain)) {
+        console.log(`[caddy-ask] allow domain=${domain} ip=${clientIp} reason=platform_whitelist latency=${Date.now() - t0}ms`);
         return res.type("text/plain").status(200).send("ok");
       }
 
+      // Subdomain slug check: slug.botfactory.kz
+      const slugMatch = domain.match(SLUG_RE);
+      if (slugMatch) {
+        const slug = slugMatch[1];
+        if (slug.startsWith("-") || slug.endsWith("-")) {
+          negativeCache.set(domain, Date.now() + NEGATIVE_CACHE_TTL);
+          console.log(`[caddy-ask] deny domain=${domain} ip=${clientIp} reason=bad_slug latency=${Date.now() - t0}ms`);
+          return res.type("text/plain").status(403).send("not allowed");
+        }
+        const r = await pool.query(
+          "SELECT id FROM tenants WHERE slug = $1 AND status = 'active' LIMIT 1",
+          [slug]
+        );
+        if (r.rowCount && r.rowCount > 0) {
+          const tenantId = r.rows[0].id;
+          // Tenant cert issuance limit (only for first-seen domains)
+          if (!approvedDomainsCache.has(domain)) {
+            const now = Date.now();
+            let entry = tenantIssuanceMap.get(tenantId);
+            if (!entry || entry.resetAt <= now) {
+              entry = { domains: new Set(), resetAt: now + TENANT_ISSUANCE_WINDOW };
+              tenantIssuanceMap.set(tenantId, entry);
+            }
+            if (!entry.domains.has(domain) && entry.domains.size >= TENANT_DAILY_CERT_LIMIT) {
+              console.log(`[caddy-ask] deny domain=${domain} ip=${clientIp} slug=${slug} tenant=${tenantId} reason=tenant_cert_limit latency=${Date.now() - t0}ms`);
+              return res.type("text/plain").status(403).send("tenant limit reached");
+            }
+            entry.domains.add(domain);
+            approvedDomainsCache.add(domain);
+          }
+          console.log(`[caddy-ask] allow domain=${domain} ip=${clientIp} slug=${slug} reason=tenant_slug latency=${Date.now() - t0}ms`);
+          return res.type("text/plain").status(200).send("ok");
+        }
+        negativeCache.set(domain, Date.now() + NEGATIVE_CACHE_TTL);
+        console.log(`[caddy-ask] deny domain=${domain} ip=${clientIp} slug=${slug} reason=slug_not_found latency=${Date.now() - t0}ms`);
+        return res.type("text/plain").status(403).send("not allowed");
+      }
+
+      // Any other *.botfactory.kz subdomain not matching slug pattern → deny
+      if (domain.endsWith("." + PLATFORM_DOMAIN)) {
+        negativeCache.set(domain, Date.now() + NEGATIVE_CACHE_TTL);
+        console.log(`[caddy-ask] deny domain=${domain} ip=${clientIp} reason=invalid_subdomain latency=${Date.now() - t0}ms`);
+        return res.type("text/plain").status(403).send("not allowed");
+      }
+
+      // Custom domains: env whitelist
       const allowedCustom = process.env.ALLOWED_CUSTOM_DOMAINS;
       if (allowedCustom) {
         const list = allowedCustom.split(",").map(d => d.trim().toLowerCase()).filter(Boolean);
         if (list.includes(domain)) {
-          console.log(`[caddy-ask] allow domain=${domain} tokenSource=${tokenSource} reason=env_whitelist`);
+          console.log(`[caddy-ask] allow domain=${domain} ip=${clientIp} reason=env_whitelist latency=${Date.now() - t0}ms`);
           return res.type("text/plain").status(200).send("ok");
         }
       }
 
-      const r = await pool.query("SELECT 1 FROM tenants WHERE custom_domain = $1 LIMIT 1", [domain]);
-      if (r.rowCount) {
-        console.log(`[caddy-ask] allow domain=${domain} tokenSource=${tokenSource} reason=custom_domain_legacy`);
+      // Custom domains: tenants table
+      const r = await pool.query("SELECT 1 FROM tenants WHERE custom_domain = $1 AND status = 'active' LIMIT 1", [domain]);
+      if (r.rowCount && r.rowCount > 0) {
+        console.log(`[caddy-ask] allow domain=${domain} ip=${clientIp} reason=custom_domain latency=${Date.now() - t0}ms`);
         return res.type("text/plain").status(200).send("ok");
       }
 
+      // Custom domains: domains table
       const dr = await pool.query("SELECT 1 FROM domains WHERE domain = $1 AND status = 'active' LIMIT 1", [domain]);
-      if (dr.rowCount) {
-        console.log(`[caddy-ask] allow domain=${domain} tokenSource=${tokenSource} reason=domains_table`);
+      if (dr.rowCount && dr.rowCount > 0) {
+        console.log(`[caddy-ask] allow domain=${domain} ip=${clientIp} reason=domains_table latency=${Date.now() - t0}ms`);
         return res.type("text/plain").status(200).send("ok");
       }
 
-      console.log(`[caddy-ask] deny domain=${domain} tokenSource=${tokenSource} reason=not_found`);
+      // Not found → cache and deny
+      negativeCache.set(domain, Date.now() + NEGATIVE_CACHE_TTL);
+      console.log(`[caddy-ask] deny domain=${domain} ip=${clientIp} reason=not_found latency=${Date.now() - t0}ms`);
       return res.type("text/plain").status(403).send("not allowed");
     } catch (e) {
       console.error("[caddy-ask] error:", e);
