@@ -1,0 +1,100 @@
+## Anti-fraud для доменов второго уровня (*.botfactory.kz) — обязательные требования
+
+Цель: злоумышленник не должен иметь возможности бесконечно “плодить” поддомены вида `xxxx.botfactory.kz`, заставляя Caddy выпускать сертификаты и создавая нагрузку/лимиты LE.
+
+### 1) Нельзя разрешать “любые *.botfactory.kz”
+
+В allow endpoint запрещено правило “разрешать все поддомены”. Вместо этого:
+
+* Разрешать домен `slug.botfactory.kz` **только если slug существует в БД** и привязан к tenant/каталогу.
+* И только если tenant активен и не заблокирован.
+
+**Правило allow:**
+
+* Принять `domain` из query.
+* Нормализовать (lowercase, без порта, без trailing dot).
+* Если domain == `botfactory.kz` → 200 (или 403, не важно, но обычно не нужен on_demand).
+* Если domain == `waha.botfactory.kz` → 403/200 (не критично, waha не on_demand).
+* Если domain matches `^([a-z0-9-]{3,64})\.botfactory\.kz$`:
+
+  * `slug = group1`
+  * проверить в БД: `SELECT 1 FROM catalogs WHERE slug=$1 AND status='active' LIMIT 1`
+  * если найден → 200 ok
+  * иначе → 403 not allowed
+* Всё остальное → 403
+
+### 2) Rate limit на allow endpoint (жёстко)
+
+Добавить rate limit на уровне Replit/Express:
+
+* Лимит на IP (по `X-Forwarded-For` если доверяем Caddy, иначе remote IP):
+
+  * например 60 запросов / 10 минут на allow endpoint
+* Лимит на домен:
+
+  * например 10 попыток / 10 минут для одного `domain`
+* Лимит на slug (если slug существует) — мягче, например 30/час.
+
+Реализация (минимум):
+
+* in-memory token bucket/LRU (подойдёт для MVP),
+* лучше: Redis/Upstash/Neon table для распределённого лимита.
+
+При превышении — `429 Too Many Requests`.
+
+### 3) Negative cache (кэш отказов)
+
+Чтобы один и тот же несуществующий домен не бил БД:
+
+* кэшировать deny-решение на `domain` на 5–15 минут
+* и отвечать сразу 403 без БД.
+
+### 4) Жёсткая валидация доменов
+
+Перед любыми действиями:
+
+* запретить IP вместо домена
+* запретить `localhost`, `.local`, `.internal`, пустые, длина > 253
+* punycode обработка (или запретить IDN на MVP)
+* slug только `[a-z0-9-]`, без ведущего/замыкающего `-`, длина 3..64
+
+### 5) Защита токена
+
+* `token` строго обязателен, сравнение через constant-time сравнение.
+* Токен не логировать (только маска).
+* При неверном токене — всегда `403` (не палить детали).
+
+### 6) Ограничение скорости выпуска сертификатов (business rule)
+
+Ввести бизнес-лимит: “сколько новых поддоменов может выпускаться на один tenant за период”.
+Пример:
+
+* максимум 5 новых доменов/поддоменов в сутки на tenant (для MVP)
+* хранить счётчик в БД (`tenant_domain_issuance_log`) или Redis.
+
+Если превышено — 403 `tenant limit reached`.
+
+### 7) Observability / алерты
+
+Логировать:
+
+* domain, ip, decision, reason (allowed/denied/rate_limited)
+* latency allow endpoint
+  Счётчики:
+* denies by reason
+* 429 rate limited count
+* top requested denied domains
+
+### 8) Требование к структуре данных (чтобы антифрод работал)
+
+В БД должны быть:
+
+* `catalogs(slug, tenant_id, status)`
+* (опционально) `tenants(status)`
+* индексы по `slug`, `status`.
+
+### 9) Критерий готовности антифрода
+
+* Запрос `allow?domain=random123.botfactory.kz&token=...` возвращает 403 за <50ms без нагрузки на БД (из-за negative cache).
+* Запрос `allow?domain=<реальный_slug>.botfactory.kz&token=...` возвращает 200.
+* Flood запросов с одного IP → 429.
