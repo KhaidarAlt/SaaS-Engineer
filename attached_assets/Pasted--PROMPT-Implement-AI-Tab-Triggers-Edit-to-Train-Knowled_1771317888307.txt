@@ -1,0 +1,400 @@
+# PROMPT: Implement AI-РОП → “Обучение” Tab (Triggers + Edit-to-Train + Knowledge Base + History)
+
+Stack: React 18 + TypeScript (Vite), Express API, Postgres (multi-tenant). Tailwind UI. Framer Motion for micro-animations.
+Goal: Build a REAL “Training Center”, not another settings page. This tab is where users continuously improve AI via triggers, edits, and knowledge.
+
+IMPORTANT:
+
+* Do NOT refactor Strategy or Testing features (only integrate with them).
+* Multi-tenant ALWAYS: tenant_id scope in every DB query and API.
+* Training must support “infinite iterations”: user edits responses, confirms what to learn, AI improves.
+* Keep UX simple for SMB, but with optional “Advanced” sections.
+
+========================================================
+
+1. ROUTE
+   ========================================================
+   Implement:
+
+* /app/ai-rop/training
+
+Top navigation already exists.
+
+========================================================
+2) UX LAYOUT (HIGH LEVEL)
+=========================
+
+TrainingPage must have 3 primary sections (tabs or left nav inside page):
+
+A) “Быстрое обучение” (Quick Train)
+B) “Триггеры” (Rules/Automations)
+C) “База знаний” (Knowledge)
+D) “История” (Training Log)
+
+You can implement as internal sub-tabs on the Training page:
+[Быстрое обучение] [Триггеры] [База знаний] [История]
+
+Design goal: feels like you’re training a sales team.
+
+========================================================
+3) CORE CONCEPTS (WHAT TRAINING MEANS)
+======================================
+
+Training sources:
+
+1. Edited answers from Testing (and later real chats)
+2. Trigger rules (If customer says X → do Y)
+3. Knowledge items (facts: payments, delivery, warranty, installments, USP, brand representation)
+4. Anti-patterns (forbidden claims / forbidden style)
+
+Training outcomes:
+
+* Update AI behavior on future replies
+* Improve micro-evaluation pass rate in Testing
+* Improve “готовность AI” score evidence (Training contributes)
+
+========================================================
+4) FRONTEND STRUCTURE (CREATE)
+==============================
+
+Create folder:
+client/src/features/aiRop/training/
+
+pages/
+TrainingPage.tsx
+
+components/
+TrainingSubTabs.tsx
+QuickTrainPanel.tsx
+TriggerBuilder.tsx
+TriggerList.tsx
+TriggerRow.tsx
+TriggerEditorModal.tsx
+KnowledgePanel.tsx
+KnowledgeItemCard.tsx
+KnowledgeEditorModal.tsx
+AntiPatternPanel.tsx
+AntiPatternRow.tsx
+TrainingHistoryPanel.tsx
+HistoryRow.tsx
+DiffViewer.tsx
+ImportFromCatalogHelper.tsx
+InlineAdvisor.tsx
+EmptyTrainingState.tsx
+
+api/
+trainingApi.ts
+
+types/
+trainingTypes.ts
+
+Animations:
+
+* Subtab transitions
+* Save success toast
+* Inline “AI is drafting…” shimmer in Quick Train
+
+========================================================
+5) DATABASE (POSTGRES, TENANT-SCOPED)
+=====================================
+
+5.1 ai_triggers
+
+* id uuid pk
+* tenant_id uuid indexed
+* is_enabled bool default true
+* priority int default 100 (lower = higher priority)
+* match_type enum: KEYWORD | REGEX | INTENT
+* match_value text               // e.g. "дорого" or regex
+* conditions jsonb nullable      // optional conditions (goal, category, price range)
+* action_type enum:
+  ADD_LINE_TO_REPLY |
+  FORCE_HANDOVER |
+  OFFER_INSTALLMENT |
+  OFFER_CHEAPER |
+  UPSELL |
+  APPLY_PROMO |
+  ASK_CLARIFYING_QUESTION |
+  USE_SCRIPT_SNIPPET
+* action_payload jsonb           // e.g. {text:"...", bank:"Kaspi"} or {question:"..."}
+* created_at timestamptz
+* updated_at timestamptz
+
+5.2 ai_knowledge_items
+
+* id uuid pk
+* tenant_id uuid indexed
+* type enum:
+  DELIVERY | PAYMENT | INSTALLMENTS | WARRANTY | RETURNS | STORE_INFO | USP | BRAND | PRODUCT_RULE | OTHER
+* title text
+* content text
+* source enum: USER | IMPORT | TRAINING | SYSTEM
+* tags text[] nullable
+* is_active bool default true
+* created_at timestamptz
+* updated_at timestamptz
+
+5.3 ai_training_events
+
+* id uuid pk
+* tenant_id uuid indexed
+* event_type enum:
+  EDIT_REPLY |
+  TRAIN_APPROVED |
+  KB_ADDED |
+  TRIGGER_CREATED |
+  TRIGGER_UPDATED |
+  ANTI_PATTERN_ADDED |
+  IGNORE_SUGGESTION
+* ref_id uuid nullable (points to message/trigger/kb item)
+* context jsonb (store: userText, oldReply, newReply, mode, personaKey, scenarioKey)
+* created_at timestamptz
+
+5.4 ai_anti_patterns
+
+* id uuid pk
+* tenant_id uuid indexed
+* pattern_type enum: KEYWORD | REGEX | CLAIM
+* pattern_value text
+* note text nullable
+* is_active bool default true
+* created_at timestamptz
+
+========================================================
+6) BACKEND API ENDPOINTS (EXPRESS)
+==================================
+
+All tenant-scoped.
+
+6.1 Quick train from edited messages
+
+* POST /api/ai/training/quick-train
+  Body:
+  {
+  userText: string,
+  assistantText: string,
+  editedText: string,
+  applyMode: "FIX_ONLY" | "TRAIN_FUTURE" | "ADD_TO_KB" | "ANTI_PATTERN",
+  meta?: { goal?, scenarioKey?, personaKey?, productId? }
+  }
+  Behavior:
+* FIX_ONLY: save training event only (no global change)
+* TRAIN_FUTURE: create a trigger (INTENT or KEYWORD) automatically + store as event
+* ADD_TO_KB: create knowledge item (type guessed) + store as event
+* ANTI_PATTERN: create anti-pattern based on wrong claim patterns + store as event
+  Return:
+  { ok: true, createdTriggerId?, createdKnowledgeId?, createdAntiPatternId? }
+
+6.2 Triggers CRUD
+
+* GET  /api/ai/triggers
+* POST /api/ai/triggers
+* PUT  /api/ai/triggers/:id
+* DELETE /api/ai/triggers/:id
+* POST /api/ai/triggers/:id/toggle (enable/disable)
+
+6.3 Knowledge CRUD
+
+* GET  /api/ai/knowledge
+* POST /api/ai/knowledge
+* PUT  /api/ai/knowledge/:id
+* DELETE /api/ai/knowledge/:id
+* POST /api/ai/knowledge/import-from-catalog
+  -> auto-generate knowledge items from existing store settings + catalog (delivery/payment/store info/USP if exists)
+
+6.4 Anti-patterns CRUD
+
+* GET  /api/ai/anti-patterns
+* POST /api/ai/anti-patterns
+* PUT  /api/ai/anti-patterns/:id
+* DELETE /api/ai/anti-patterns/:id
+* POST /api/ai/anti-patterns/:id/toggle
+
+6.5 History
+
+* GET /api/ai/training/history?limit=50&offset=0
+
+========================================================
+7) TRAINING TAB — DETAILED UX SPEC
+==================================
+
+7.1 “Быстрое обучение” (QuickTrainPanel)
+This is the heart for SMB.
+
+UI:
+
+* Left: input “Сообщение клиента”
+* Right: two stacked boxes:
+
+  * “Ответ AI (как было)”
+  * “Как должно быть (исправление)”
+    Buttons:
+* [Только здесь] (FIX_ONLY)
+* [Обучить AI] (TRAIN_FUTURE)
+* [В базу знаний] (ADD_TO_KB)
+* [Запретить так отвечать] (ANTI_PATTERN)
+
+Helpers:
+
+* “Посоветуй” button: InlineAdvisor suggests a better reply draft (LLM optional; MVP can template).
+* “Из тестирования” dropdown: pick a recent message pair from Testing sessions (fetch last 20 ai_testing_messages grouped by exchanges).
+
+When user clicks action:
+
+* call POST /api/ai/training/quick-train
+* show success toast describing what was created.
+
+Auto-suggestion (MVP):
+If userText contains:
+
+* "дорого" -> suggest installment/justify value
+* "скидка" -> clarify promo rules, propose promo-zone
+* "дешевле" -> offer cheaper alternative
+* "менеджер" -> handover trigger suggestion
+  Do not hallucinate facts; rely on knowledge items.
+
+7.2 “Триггеры” (TriggerBuilder + TriggerList)
+Two-column:
+
+* Left: TriggerBuilder (create/edit)
+* Right: TriggerList (existing triggers)
+
+TriggerBuilder fields:
+
+* Enabled toggle
+* Priority (1..999)
+* Match type: Keyword / Regex / Intent (Intent can be MVP as Keyword)
+* Match value
+* Optional conditions:
+
+  * Goal applies to (multi-select of goals)
+  * Category applies to (category multi-select)
+  * Price range (min/max)
+* Action type dropdown:
+
+  * Add line to reply (inject snippet)
+  * Force handover
+  * Offer installment
+  * Offer cheaper
+  * Upsell
+  * Apply promo
+  * Ask clarifying question
+  * Use script snippet
+* Action payload editor changes by type:
+
+  * snippet text
+  * handover reason label
+  * banks list
+  * question text
+    Buttons:
+* Save trigger
+* Test trigger (opens mini modal where user types a message and sees which triggers would fire)
+
+TriggerList rows:
+
+* name preview (match → action)
+* enabled toggle
+* edit icon
+* delete icon
+
+7.3 “База знаний” (KnowledgePanel)
+Top controls:
+
+* Search
+* Filter by type
+* [Импортировать из каталога] button
+
+Knowledge item card:
+
+* Title + type badge
+* Short content preview
+* Active toggle
+* Edit/Delete
+
+KnowledgeEditor modal:
+
+* Type
+* Title
+* Content
+* Tags
+* Save
+
+ImportFromCatalogHelper:
+
+* Reads from existing store settings and catalog summary:
+
+  * Store info (name, city, contact)
+  * Payments configured (Kaspi etc.)
+  * Delivery terms (if exist)
+  * Return/exchange policy (if exist)
+  * Installments banks from Strategy
+    Creates default knowledge items if missing.
+
+7.4 “История” (TrainingHistoryPanel)
+Show timeline list of ai_training_events:
+
+* timestamp
+* event type label
+* short summary: “Обучение: исправлен ответ на ‘дорого’ → создан триггер OfferInstallment”
+  Click row → show DiffViewer (old vs new reply) + context + “revert” (optional: for MVP just show; do not implement revert unless easy).
+
+========================================================
+8) HOW TRIGGERS & KB AFFECT AI (INFERENCE LOGIC)
+================================================
+
+You must integrate triggers and KB into the AI reply generation pipeline used in:
+
+* Testing tab message/send
+* (later production chats)
+
+MVP approach (deterministic):
+When generating assistant reply:
+
+1. Retrieve active triggers ordered by priority
+2. For each trigger:
+
+   * if match_type=KEYWORD and userText includes match_value (case-insensitive) -> match
+   * REGEX -> test regex
+   * INTENT -> treat as keyword for MVP
+   * if conditions exist, validate (goal/category/price range if identifiable)
+3. Collect matched triggers (limit 3)
+4. Apply actions:
+
+   * ADD_LINE_TO_REPLY: append/inject snippet at end or after first sentence
+   * FORCE_HANDOVER: return handover directive (or add “Сейчас подключу менеджера…”)
+   * OFFER_INSTALLMENT: mention installments banks from knowledge/settings
+   * OFFER_CHEAPER: instruct product selector to prioritize ENTRY items
+   * UPSELL: suggest higher-tier item if relevant
+   * APPLY_PROMO: reference promo-zone items
+   * ASK_CLARIFYING_QUESTION: add a question
+   * USE_SCRIPT_SNIPPET: insert snippet from action_payload
+5. Retrieve relevant knowledge items (simple keyword search by tags/type) and include as “facts” context
+6. Anti-patterns: before sending, scan reply:
+
+   * if contains forbidden keyword/regex -> remove offending sentence and add safe alternative (“Уточню и вернусь”)
+     Log a training event if anti-pattern was prevented (optional).
+
+No hallucination: If knowledge does not confirm warranty/delivery, AI must ask clarifying questions instead.
+
+========================================================
+9) TRAINING CONTRIBUTES TO SCORE (HOOK)
+=======================================
+
+Update Testing score model (if exists) to include training evidence:
+
+* If user created >= 3 triggers OR added >= 3 knowledge items -> +2 points into “Completeness” notes (do not exceed 100).
+  (If score model already exists, add this as minor bonus; keep stable.)
+
+========================================================
+10) ACCEPTANCE CRITERIA
+=======================
+
+* Training tab loads and has internal sub-tabs.
+* Quick training works end-to-end and writes ai_training_events.
+* User can create/edit/delete triggers; triggers are used in Testing chat (verify by scenario “дорого”).
+* Knowledge base CRUD works; import-from-catalog creates useful defaults.
+* Anti-patterns list exists and blocks forbidden reply fragments.
+* History shows events with context and diffs.
+
+Implement production-quality UX. Keep it clean, no clutter.
+Do not touch Strategy layout besides using its stored settings for KB import.

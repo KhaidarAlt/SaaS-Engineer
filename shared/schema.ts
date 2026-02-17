@@ -1208,6 +1208,8 @@ export const knowledgeItems = pgTable("knowledge_items", {
   type: text("type").notNull(),
   title: text("title").notNull(),
   content: text("content").notNull(),
+  source: text("source").default("USER"), // USER | IMPORT | TRAINING | SYSTEM
+  tags: text("tags").array(),
   isActive: boolean("is_active").default(true),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
@@ -2393,6 +2395,75 @@ export const aiStressTestRunsRelations = relations(aiStressTestRuns, ({ one }) =
 export const insertAiStressTestRunSchema = createInsertSchema(aiStressTestRuns).omit({ id: true, createdAt: true });
 export type InsertAiStressTestRun = z.infer<typeof insertAiStressTestRunSchema>;
 export type AiStressTestRun = typeof aiStressTestRuns.$inferSelect;
+
+// ============ AI TRIGGERS ============
+export const aiTriggers = pgTable("ai_triggers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  isEnabled: boolean("is_enabled").notNull().default(true),
+  priority: integer("priority").notNull().default(100),
+  matchType: text("match_type").notNull(), // KEYWORD | REGEX | INTENT
+  matchValue: text("match_value").notNull(),
+  conditions: jsonb("conditions").$type<Record<string, unknown> | null>(),
+  actionType: text("action_type").notNull(), // ADD_LINE_TO_REPLY | FORCE_HANDOVER | OFFER_INSTALLMENT | OFFER_CHEAPER | UPSELL | APPLY_PROMO | ASK_CLARIFYING_QUESTION | USE_SCRIPT_SNIPPET
+  actionPayload: jsonb("action_payload").$type<Record<string, unknown>>(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const aiTriggersRelations = relations(aiTriggers, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [aiTriggers.tenantId],
+    references: [tenants.id],
+  }),
+}));
+
+export const insertAiTriggerSchema = createInsertSchema(aiTriggers).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertAiTrigger = z.infer<typeof insertAiTriggerSchema>;
+export type AiTrigger = typeof aiTriggers.$inferSelect;
+
+// ============ AI ANTI-PATTERNS ============
+export const aiAntiPatterns = pgTable("ai_anti_patterns", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  patternType: text("pattern_type").notNull(), // KEYWORD | REGEX | CLAIM
+  patternValue: text("pattern_value").notNull(),
+  note: text("note"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const aiAntiPatternsRelations = relations(aiAntiPatterns, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [aiAntiPatterns.tenantId],
+    references: [tenants.id],
+  }),
+}));
+
+export const insertAiAntiPatternSchema = createInsertSchema(aiAntiPatterns).omit({ id: true, createdAt: true });
+export type InsertAiAntiPattern = z.infer<typeof insertAiAntiPatternSchema>;
+export type AiAntiPattern = typeof aiAntiPatterns.$inferSelect;
+
+// ============ AI TRAINING EVENTS ============
+export const aiTrainingEvents = pgTable("ai_training_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  eventType: text("event_type").notNull(), // EDIT_REPLY | TRAIN_APPROVED | KB_ADDED | TRIGGER_CREATED | TRIGGER_UPDATED | ANTI_PATTERN_ADDED | IGNORE_SUGGESTION
+  refId: varchar("ref_id"),
+  context: jsonb("context").$type<Record<string, unknown>>(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const aiTrainingEventsRelations = relations(aiTrainingEvents, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [aiTrainingEvents.tenantId],
+    references: [tenants.id],
+  }),
+}));
+
+export const insertAiTrainingEventSchema = createInsertSchema(aiTrainingEvents).omit({ id: true, createdAt: true });
+export type InsertAiTrainingEvent = z.infer<typeof insertAiTrainingEventSchema>;
+export type AiTrainingEvent = typeof aiTrainingEvents.$inferSelect;
 
 // ============ FORM VALIDATION SCHEMAS ============
 export const loginSchema = z.object({
