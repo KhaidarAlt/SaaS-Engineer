@@ -331,7 +331,7 @@ function Router() {
       <Route path="/dashboard/ai/rop/:tab">
         <ProtectedRoute component={AiRopEntryPage} />
       </Route>
-      <Route path="/dashboard/ai/rop/:tab/:rest*">
+      <Route path="/dashboard/ai/rop/:tab/*">
         <ProtectedRoute component={AiRopEntryPage} />
       </Route>
 
