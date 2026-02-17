@@ -610,6 +610,14 @@ export async function registerRoutes(
     res.type("text/plain").status(200).send("pong");
   });
 
+  const BLOCKED_ZONES = [
+    ".local", ".localhost", ".internal", ".test", ".example",
+    ".invalid", ".onion", ".i2p", ".arpa",
+  ];
+
+  const caddyAskRateMap = new Map<string, number>();
+  setInterval(() => caddyAskRateMap.clear(), 60_000);
+
   app.get("/api/internal/caddy/allow", async (req: Request, res: Response) => {
     try {
       const headerToken = req.get("X-Ask-Token") || "";
@@ -625,14 +633,36 @@ export async function registerRoutes(
       const rawDomain = String(req.query.domain || req.query.host || req.query.server_name || "").toLowerCase().trim();
       if (!rawDomain) {
         console.log(`[caddy-ask] deny reason=no_domain`);
-        return res.type("text/plain").status(403).send("forbidden");
+        return res.type("text/plain").status(400).send("bad request");
       }
 
-      const domain = rawDomain.replace(/\.+$/, "");
+      const domain = rawDomain.replace(/\.+$/, "").replace(/:\d+$/, "");
 
-      if (!domain || net.isIP(domain)) {
+      if (!domain || domain.length > 253 || net.isIP(domain)) {
         console.log(`[caddy-ask] deny domain=${domain} tokenSource=${tokenSource} reason=invalid`);
-        return res.type("text/plain").status(403).send("forbidden");
+        return res.type("text/plain").status(403).send("not allowed");
+      }
+
+      if (/[^\x20-\x7E]/.test(domain)) {
+        console.log(`[caddy-ask] deny domain=${domain} tokenSource=${tokenSource} reason=non_ascii`);
+        return res.type("text/plain").status(403).send("not allowed");
+      }
+
+      if (domain === "localhost" || BLOCKED_ZONES.some(z => domain === z.slice(1) || domain.endsWith(z))) {
+        console.log(`[caddy-ask] deny domain=${domain} tokenSource=${tokenSource} reason=blocked_zone`);
+        return res.type("text/plain").status(403).send("not allowed");
+      }
+
+      if (domain.includes("*")) {
+        console.log(`[caddy-ask] deny domain=${domain} tokenSource=${tokenSource} reason=wildcard`);
+        return res.type("text/plain").status(403).send("not allowed");
+      }
+
+      const rateCount = (caddyAskRateMap.get(domain) || 0) + 1;
+      caddyAskRateMap.set(domain, rateCount);
+      if (rateCount > 30) {
+        console.log(`[caddy-ask] deny domain=${domain} tokenSource=${tokenSource} reason=rate_limit`);
+        return res.type("text/plain").status(403).send("not allowed");
       }
 
       if (domain === "botfactory.kz" || domain.endsWith(".botfactory.kz")) {
@@ -662,7 +692,7 @@ export async function registerRoutes(
       }
 
       console.log(`[caddy-ask] deny domain=${domain} tokenSource=${tokenSource} reason=not_found`);
-      return res.type("text/plain").status(403).send("forbidden");
+      return res.type("text/plain").status(403).send("not allowed");
     } catch (e) {
       console.error("[caddy-ask] error:", e);
       return res.type("text/plain").status(500).send("error");
@@ -807,6 +837,73 @@ export async function registerRoutes(
       console.error("[DomainDetect] Error:", err);
     }
     return res.json({ customDomain: false });
+  });
+
+  app.get("/api/public/context", async (req: Request, res: Response) => {
+    try {
+      const host = getEffectiveHost(req);
+      const hostWithoutWww = host.replace(/^www\./, "");
+
+      const subdomain = extractSubdomain(host);
+      if (subdomain) {
+        const tenant = await storage.getTenantBySlug(subdomain);
+        if (tenant) {
+          return res.json({
+            host,
+            tenantId: tenant.id,
+            slug: tenant.slug,
+            branding: {
+              name: tenant.name,
+              logoUrl: (tenant as any).logoUrl || null,
+              currency: (tenant as any).currency || "KZT",
+            },
+            source: "subdomain",
+          });
+        }
+      }
+
+      if (
+        !host ||
+        host === "localhost" ||
+        host.includes("replit") ||
+        host === "botfactory.kz" ||
+        host.includes("worf.replit.dev")
+      ) {
+        return res.json({ host, tenantId: null, slug: null, branding: null, source: "platform" });
+      }
+
+      let tenant = await storage.getTenantByCustomDomain(hostWithoutWww)
+        || await storage.getTenantByCustomDomain(host);
+
+      if (!tenant) {
+        const domainRow = await pool.query(
+          "SELECT tenant_id FROM domains WHERE domain = $1 AND status = 'active' LIMIT 1",
+          [hostWithoutWww]
+        );
+        if (domainRow.rows.length) {
+          tenant = await storage.getTenant(domainRow.rows[0].tenant_id);
+        }
+      }
+
+      if (tenant) {
+        return res.json({
+          host,
+          tenantId: tenant.id,
+          slug: tenant.slug,
+          branding: {
+            name: tenant.name,
+            logoUrl: (tenant as any).logoUrl || null,
+            currency: (tenant as any).currency || "KZT",
+          },
+          source: "custom_domain",
+        });
+      }
+
+      return res.json({ host, tenantId: null, slug: null, branding: null, source: "unknown" });
+    } catch (err) {
+      console.error("[PublicContext] Error:", err);
+      res.status(500).json({ message: "Ошибка определения контекста" });
+    }
   });
 
   // Subdomain + custom domain middleware: route to tenant catalog

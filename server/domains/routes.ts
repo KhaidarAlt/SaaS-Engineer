@@ -225,4 +225,54 @@ router.get("/api/domains/:id/instructions", async (req: Request, res: Response) 
   }
 });
 
+router.get("/api/internal/health/domains", async (req: Request, res: Response) => {
+  const tenantId = requireAuth(req, res);
+  if (!tenantId) return;
+
+  const user = (req as any).user;
+  if (user?.role !== "superadmin") {
+    return res.status(403).json({ message: "Доступ запрещён" });
+  }
+
+  try {
+    const { rows: summary } = await pool.query(`
+      SELECT 
+        status, 
+        COUNT(*)::int as count,
+        MAX(last_check_at) as last_checked
+      FROM domains 
+      GROUP BY status
+    `);
+
+    const { rows: recent } = await pool.query(`
+      SELECT id, domain, status, dns_txt_ok, dns_a_ok, ssl_status, 
+             error_reason, attempts, last_check_at, created_at
+      FROM domains 
+      ORDER BY COALESCE(last_check_at, created_at) DESC 
+      LIMIT 20
+    `);
+
+    const { rows: sslSummary } = await pool.query(`
+      SELECT 
+        ssl_status, 
+        COUNT(*)::int as count
+      FROM domains 
+      WHERE status = 'active'
+      GROUP BY ssl_status
+    `);
+
+    res.json({
+      summary,
+      sslSummary,
+      recentChecks: recent,
+      workerInterval: "45s",
+      maxAttempts: 200,
+      maxAge: "48h",
+    });
+  } catch (err) {
+    console.error("[Health/Domains] Error:", err);
+    res.status(500).json({ message: "Ошибка" });
+  }
+});
+
 export default router;
