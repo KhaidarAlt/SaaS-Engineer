@@ -1,0 +1,337 @@
+# PROMPT: Implement AI-РОП → “Рост” (full module suite) channel-agnostic (WAHA + Meta + Telegram + Instagram + Widget)
+
+Stack: React 18 + TypeScript (Vite), Tailwind, Framer Motion. Backend: Express + Postgres. Multi-tenant.
+
+SCOPE:
+Build a fully self-sufficient “Рост” section inside AI-РОП that runs multi-channel campaigns:
+
+1. Реактивация клиентов
+2. Апселл после заказа
+3. Брошенные диалоги
+4. Напоминания прайс/наличие
+5. NPS/Отзывы
+
+CRITICAL REQUIREMENT:
+This section MUST be channel-agnostic: it must work with both WAHA and official WhatsApp Meta, and other channels if connected. “Рост” never calls WAHA or Meta directly; it calls a unified messaging provider layer.
+
+DO NOT rebuild the entire cabinet. This is inside AI-РОП:
+AI-РОП tabs: Обзор / Обучение / Тестирование / Подключение / Аналитика / Стратегия / Рост
+
+========================================================
+
+1. ROUTES
+   ========================================================
+
+* /app/ai-rop/growth              (Growth overview dashboard)
+* /app/ai-rop/growth/reactivation
+* /app/ai-rop/growth/upsell
+* /app/ai-rop/growth/abandoned
+* /app/ai-rop/growth/reminders
+* /app/ai-rop/growth/nps
+* /app/ai-rop/growth/campaign/:id (campaign detail + queue + analytics)
+
+Top subnav inside Growth: Обзор | Реактивация | Апселл | Брошенные | Напоминания | Отзывы
+
+========================================================
+2) DATA MODEL (POSTGRES)
+========================
+
+A) contacts
+
+* id uuid pk
+* tenant_id uuid index
+* name text
+* phone text nullable
+* instagram_id text nullable
+* telegram_id text nullable
+* widget_user_id text nullable
+* last_channel enum: WHATSAPP | TELEGRAM | INSTAGRAM | WIDGET nullable
+* primary_channel enum nullable
+* last_inbound_at timestamptz nullable
+* last_outbound_at timestamptz nullable
+* opt_out boolean default false
+* tags text[] default {}
+* meta jsonb
+* created_at, updated_at
+
+B) conversations (if exists, reuse)
+
+* id, tenant_id, contact_id, channel, started_at, last_message_at, status
+
+C) orders (if exists, reuse; else minimal)
+
+* id uuid pk
+* tenant_id uuid
+* contact_id uuid
+* total numeric
+* status enum: PAID | DELIVERED | COMPLETED | CANCELED
+* created_at, updated_at
+* items jsonb (sku, qty, price)
+
+D) growth_campaigns
+
+* id uuid pk
+* tenant_id uuid index
+* type enum: REACTIVATION | UPSELL | ABANDONED | REMINDER | NPS
+* status enum: DRAFT | READY | RUNNING | PAUSED | COMPLETED | FAILED
+* name text
+* channel_policy enum: AUTO | PREFER_LAST | FORCE_WHATSAPP (default AUTO)
+* audience_rules jsonb
+* message_rules jsonb
+* schedule_rules jsonb (quiet hours, timezone, daily caps)
+* safety_rules jsonb (opt_out, negative_exclude, min_last_inbound_days, etc.)
+* created_by uuid nullable
+* created_at, updated_at
+
+E) growth_queue
+
+* id uuid pk
+* tenant_id uuid index
+* campaign_id uuid index
+* contact_id uuid index
+* resolved_channel enum nullable
+* status enum: PENDING | SENT | FAILED | SKIPPED | REPLIED | STOPPED
+* planned_at timestamptz
+* sent_at timestamptz nullable
+* error text nullable
+* payload jsonb (rendered message, template id if needed, variables)
+* created_at
+
+F) growth_events
+
+* id uuid pk
+* tenant_id uuid
+* campaign_id uuid
+* contact_id uuid nullable
+* event_type text (QUEUED, SENT, DELIVERED, READ, REPLIED, OPT_OUT, FAILED)
+* meta jsonb
+* created_at
+
+========================================================
+3) UNIFIED MESSAGING PROVIDER (CORE)
+====================================
+
+Create backend service: server/services/messagingProvider.ts
+
+Interface:
+sendMessage({
+tenantId,
+channel,             // WHATSAPP / TELEGRAM / INSTAGRAM / WIDGET
+provider,            // META | WAHA | TELEGRAM | INSTAGRAM | INTERNAL (resolved by channel)
+to,                  // phone or ids
+text,
+meta                 // campaignId, contactId, tags
+}) -> { providerMessageId, status }
+
+resolveChannelForContact(tenantId, contactId, preferredPolicy) -> { channel, provider, address, reasonIfBlocked }
+
+Rules:
+
+* If contact.opt_out = true => BLOCK
+* Prefer last_channel if connected and allowed
+* Else primary_channel
+* Else fallback WhatsApp if connected and phone exists
+* If WhatsApp selected:
+
+  * If Meta connected, use Meta; else if WAHA connected, use WAHA; else BLOCK
+* Return explicit reason when BLOCK/SKIP (no channel connected, missing phone, templates missing, etc.)
+
+IMPORTANT:
+If WhatsApp Meta requires templates for proactive messages in your implementation:
+
+* allow two modes:
+
+  1. “text message” only if permitted
+  2. “template message” if needed
+     For MVP, if template infra not ready, still queue messages but mark NEEDS_ACTION with reason “Нужны шаблоны Meta”.
+
+========================================================
+4) SAFETY & COMPLIANCE (MUST IN UI)
+===================================
+
+* Growth campaigns only target contacts who already interacted unless user explicitly overrides (default ON):
+  safety_rules.require_prior_inbound = true
+* Always respect opt_out and STOP keywords
+* Daily caps + quiet hours per tenant
+* In campaign preview show: “Скорость отправки” and “Почему некоторые контакты будут пропущены”
+
+========================================================
+5) FRONTEND UX (WOW)
+====================
+
+A) Growth Overview (/growth)
+
+* KPI tiles: Candidates, Sent, Reply rate, Returned-to-dialog, Revenue (if available)
+* “Hidden money” hero card: “Мы нашли N клиентов, которых можно вернуть”
+* Recommended actions based on data (empty states too)
+* Activity feed (latest campaign events)
+* Buttons: “Запустить кампанию” opens modal choose type
+
+B) Each module page (reactivation/upsell/abandoned/reminders/nps):
+Use the same “Campaign Builder” layout with 4 steps:
+
+1. Цель и сценарий (template presets)
+2. Аудитория (friendly toggles, not BI filters)
+3. Сообщение (AI-assisted composer + variables)
+4. Предпросмотр и запуск (queue preview + safety summary)
+
+C) Campaign Builder — key UI components:
+
+* Stepper with progress
+* AudienceSummaryCard: shows estimated audience size live
+* SafetyBadgeRow: prior inbound, opt-out, quiet hours, caps
+* PreviewTable: first 20 recipients, resolved channel, status, reason if skipped
+* TestSend: send to owner/contact to verify channel pipeline
+* Motion transitions and subtle confetti on successful launch
+
+D) AI-assisted message composer:
+
+* Button “Сгенерировать варианты”
+* Styles: friendly / concise / premium expert
+* Variables suggestions: {name}, {last_product}, {category_interest}, {discount}, {installment}
+* Enforce short, non-spammy copy (character guidance)
+
+========================================================
+6) MODULE-SPECIFIC LOGIC
+========================
+
+6.1 Reactivation
+Audience presets:
+
+* last_inbound > 7/14/30/60/90 days
+* exclude negative tags
+* require_prior_inbound = true (default)
+  Message presets:
+* “Напомнить о себе”
+* “Новинки / акция”
+* “Персональная рекомендация”
+  Stop after reply.
+
+6.2 Upsell after order
+Triggers:
+
+* after PAID + X days
+* after DELIVERED + X days
+  Audience: contacts with last order in window
+  Message: suggest accessories/related products (use order.items -> related mapping if available)
+  Stop after purchase or reply.
+
+6.3 Abandoned dialogs
+Trigger:
+
+* conversation inactive for 24/48/72 hours after inbound interest
+  Audience: last_inbound exists, no order created, no outbound in last X hours
+  Message: “Хотите продолжить? Могу предложить альтернативу/скидку”
+  Stop on reply.
+
+6.4 Price/Stock reminders
+Triggers:
+
+* product back in stock
+* price drop
+* promo zone activation
+  Audience: contacts who viewed/asked about SKU/category (store interest events if you have; else MVP: manual select tags)
+  Message: notify and invite to order.
+
+6.5 NPS/Reviews
+Trigger: after COMPLETED + X days
+Flow:
+
+* Send “Оцените 1–5”
+* If 4–5 -> ask for review + link
+* If 1–3 -> apologize + handover to manager (create internal task)
+  Store rating.
+
+========================================================
+7) BACKEND ENDPOINTS
+====================
+
+GET  /api/ai-rop/growth/summary?period=...
+GET  /api/ai-rop/growth/campaigns?type=...
+POST /api/ai-rop/growth/campaigns            (create draft)
+PUT  /api/ai-rop/growth/campaigns/:id        (update)
+POST /api/ai-rop/growth/campaigns/:id/estimate
+POST /api/ai-rop/growth/campaigns/:id/preview
+POST /api/ai-rop/growth/campaigns/:id/launch
+POST /api/ai-rop/growth/campaigns/:id/pause
+POST /api/ai-rop/growth/campaigns/:id/resume
+GET  /api/ai-rop/growth/campaigns/:id        (detail)
+GET  /api/ai-rop/growth/campaigns/:id/queue
+GET  /api/ai-rop/growth/campaigns/:id/analytics
+
+Messaging:
+POST /api/ai-rop/growth/test-send            (send test message via resolved channel)
+
+All endpoints must enforce tenant auth.
+
+========================================================
+8) BACKGROUND WORKERS (QUEUE)
+=============================
+
+Implement a simple worker (cron or node job) that:
+
+* fetches pending growth_queue where planned_at <= now and status=PENDING
+* resolves channel/provider (resolveChannelForContact)
+* sends message (sendMessage)
+* updates status SENT/FAILED/SKIPPED with reason
+* writes growth_events
+
+MVP can run as in-process interval worker (every 5–10 seconds) but make it safe per tenant caps.
+
+========================================================
+9) UI WARNINGS ABOUT CHANNEL DIFFERENCES
+========================================
+
+In Preview step, for each recipient show:
+
+* Resolved channel (WhatsApp Meta / WhatsApp WAHA / Telegram / Instagram)
+* If blocked: reason (e.g., “Нет подключенного канала”, “Контакт отписался”, “Нужен шаблон Meta”)
+
+Add global banner if only WAHA is connected:
+
+* “WAHA: соблюдайте правила WhatsApp. Массовые рассылки без согласия могут привести к бану.”
+
+========================================================
+10) FRONTEND FILE STRUCTURE
+===========================
+
+client/src/features/aiRop/growth/
+pages/
+GrowthOverviewPage.tsx
+GrowthReactivationPage.tsx
+GrowthUpsellPage.tsx
+GrowthAbandonedPage.tsx
+GrowthRemindersPage.tsx
+GrowthNpsPage.tsx
+CampaignDetailPage.tsx
+components/
+GrowthKpiRow.tsx
+HiddenMoneyHero.tsx
+CampaignBuilder.tsx
+BuilderStepGoal.tsx
+BuilderStepAudience.tsx
+BuilderStepMessage.tsx
+BuilderStepPreview.tsx
+AudienceEstimator.tsx
+SafetyBadges.tsx
+PreviewRecipientsTable.tsx
+TestSendPanel.tsx
+CampaignList.tsx
+api/
+growthApi.ts
+types/
+growthTypes.ts
+
+========================================================
+11) ACCEPTANCE CRITERIA
+=======================
+
+* Growth is a complete, self-contained section inside AI-РОП with all 5 modules.
+* Campaign builder can create/preview/launch campaigns.
+* Sending is channel-agnostic and works with WhatsApp Meta or WAHA depending on what is connected.
+* WAHA risk is respected via caps/quiet hours/opt-out and explicit warnings; no spam-evasion instructions.
+* Clear “why skipped” reasons per recipient.
+* Analytics available per campaign.
+* Multi-tenant correctness ensured.
+
+Implement end-to-end now.
