@@ -8,7 +8,7 @@ import OverviewPage from "./OverviewPage";
 import TrainingPage from "../training/pages/TrainingPage";
 import TestingPage from "../testing/pages/TestingPage";
 import ConnectionsPage from "./ConnectionsPage";
-import AnalyticsPage from "./AnalyticsPage";
+import AnalyticsPage from "../analytics/pages/AnalyticsPage";
 import StrategyPage from "./StrategyPage";
 
 const TAB_COMPONENTS: Record<string, () => JSX.Element> = {

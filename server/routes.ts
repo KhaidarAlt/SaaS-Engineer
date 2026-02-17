@@ -22,6 +22,7 @@ import { startDomainWorker } from "./domains/worker.js";
 import { registerAiRopRoutes } from "./ai-rop-routes.js";
 import { registerAiTestingRoutes } from "./ai-testing-routes.js";
 import { registerAiTrainingRoutes } from "./ai-training-routes.js";
+import { registerAiAnalyticsRoutes } from "./ai-analytics-routes.js";
 
 const SessionStore = MemoryStore(session);
 
@@ -6627,6 +6628,7 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
   registerAiRopRoutes(app, storage, pool, requireAuth, requireAiAccess);
   registerAiTestingRoutes(app, storage, pool, requireAuth, requireAiAccess);
   registerAiTrainingRoutes(app, storage, pool, requireAuth, requireAiAccess);
+  registerAiAnalyticsRoutes(app, requireAuth, requireAiAccess);
 
   return httpServer;
 }

@@ -1,0 +1,577 @@
+# PROMPT: Implement AI-РОП → “Аналитика” Tab (Full Production Spec) + Funnel + Bottlenecks + Auto-Audit + KPI + Drilldowns
+
+Stack: React 18 + TypeScript (Vite), Express API, Postgres (multi-tenant). Tailwind UI. Recharts for charts. Framer Motion for micro-interactions.
+Goal: Build an analytics module that is actionable and self-diagnosing, not just counters.
+
+IMPORTANT:
+
+* Do NOT break Strategy/Testing/Training tabs.
+* Multi-tenant ALWAYS (tenant_id scope in every DB query).
+* Analytics must work even if there is no real WhatsApp production traffic yet (fallback to Testing sessions).
+* Avoid hallucination: audit recommendations must be grounded in stored dialogs + config/knowledge.
+
+========================================================
+0) DEFINITIONS (CRITICAL)
+=========================
+
+AI-РОП supports multiple “Goals” (selected in Strategy):
+
+* CLOSE_DEAL (Закрывать сделки) — AI leads to payment
+* QUALIFY_HANDOVER (Квалификация + передача) — AI collects info + hands to manager
+* CONSULT_PICK (Консультация + подбор) — AI helps choose and moves to next step (order/lead)
+* ORDER_NO_PAY (Заказ без оплаты) — AI forms order, payment later
+
+Analytics success must be computed differently per goal.
+
+A “Dialog” is a conversation thread with messages and timestamps.
+We must store outcomes and derived metrics per dialog:
+
+* stage timeline (funnel stages)
+* objections encountered
+* handover occurred (and why)
+* catalog interactions (if product suggested/selected)
+* payment link offered (if applicable)
+* payment confirmed (if you can detect)
+* drop-off point (where user stopped responding)
+
+========================================================
+
+1. UI/UX: ANALYTICS TAB (EXACT STRUCTURE)
+   ========================================================
+   Route:
+
+* /app/ai-rop/analytics
+
+Top bar:
+
+* Period selector pills: [Сегодня] [7 дней] [30 дней] [90 дней] [Свой период]
+* Right side:
+
+  * “Запустить аудит” button
+  * “Экспорт CSV” (optional MVP)
+  * “Источник данных” dropdown: [Все] [Production] [Testing] (default: All)
+
+Page layout (desktop):
+SECTION A — KPI Cards (4–6 cards)
+SECTION B — Funnel + Bottleneck (side-by-side)
+SECTION C — Objections Performance + Handover Reasons
+SECTION D — Categories/SKU Performance + Price Segments
+SECTION E — Trigger Effectiveness + Training Impact
+SECTION F — Dialogs Table (drill-down)
+SECTION G — AI Audit Summary (recommendations + tasks)
+
+Micro-interactions:
+
+* KPI numbers count-up on period change
+* Chart transitions (Recharts animation)
+* Bottleneck card pulses on hover and highlights relevant funnel stage
+* Row expand animation for dialog drill-down (Framer Motion)
+
+Mobile:
+
+* KPI -> Funnel -> Bottleneck -> Tables -> Audit
+
+========================================================
+2) DATABASE: NEW TABLES (POSTGRES, TENANT-SCOPED)
+=================================================
+
+We need reliable analytics, so store dialog outcomes and audit results.
+
+2.1 ai_dialogs
+
+* id uuid pk
+* tenant_id uuid indexed
+* source enum: PRODUCTION | TESTING
+* channel enum: WHATSAPP_WAHA | WHATSAPP_META | INSTAGRAM_DM | TELEGRAM | INTERNAL
+* external_thread_id text nullable (for production)
+* started_at timestamptz
+* last_message_at timestamptz
+* message_count int
+* goal enum (copied from Strategy at dialog start)
+* status enum: OPEN | CLOSED
+* outcome enum:
+  SUCCESS | FAILED | HANDOVER | ABANDONED | UNKNOWN
+* success_reason text nullable (e.g., "PAYMENT_CONFIRMED", "LEAD_CAPTURED", "ORDER_PLACED")
+* dropoff_stage enum nullable (see stages below)
+* dropoff_reason enum nullable:
+  NO_RESPONSE | PRICE | TRUST | DELIVERY | PAYMENT_FRICTION | STOCK | OTHER | UNKNOWN
+* handover_reason text nullable
+* lead_captured bool default false
+* lead_payload jsonb nullable (name/phone/etc)
+* revenue_amount numeric nullable (if payment known)
+* currency text default 'KZT'
+* meta jsonb nullable (freeform)
+* created_at timestamptz
+* updated_at timestamptz
+
+2.2 ai_dialog_messages (optional if you already store elsewhere)
+If you already have message storage for production/testing, reuse it.
+If not, create:
+
+* id uuid pk
+* tenant_id uuid indexed
+* dialog_id uuid fk ai_dialogs
+* role enum: user | assistant | system
+* content text
+* created_at timestamptz
+* meta jsonb nullable (e.g., microEval score, triggers fired)
+
+2.3 ai_dialog_events (derived events for funnel + objections + actions)
+
+* id uuid pk
+* tenant_id uuid indexed
+* dialog_id uuid fk ai_dialogs
+* event_type enum:
+  STAGE_ENTERED |
+  OBJECTION_DETECTED |
+  HANDOVER_TRIGGERED |
+  PRODUCT_SUGGESTED |
+  PRODUCT_SELECTED |
+  PAYMENT_OFFERED |
+  PAYMENT_CONFIRMED |
+  ORDER_CREATED |
+  LEAD_CAPTURED |
+  NEGATIVE_SENTIMENT
+* event_value text nullable (stage name / objection key / reason / product_id)
+* ts timestamptz
+* meta jsonb nullable
+
+2.4 ai_audit_runs
+
+* id uuid pk
+* tenant_id uuid indexed
+* period_start timestamptz
+* period_end timestamptz
+* source_filter text (ALL/PRODUCTION/TESTING)
+* status enum: RUNNING | DONE | FAILED
+* dialogs_analyzed int
+* summary jsonb (KPIs, main bottleneck, etc)
+* recommendations jsonb (list of actions)
+* created_at timestamptz
+* finished_at timestamptz nullable
+
+2.5 ai_audit_findings (per finding/task)
+
+* id uuid pk
+* tenant_id uuid indexed
+* audit_run_id uuid fk ai_audit_runs
+* severity enum: LOW | MEDIUM | HIGH
+* type enum:
+  BOTTLENECK |
+  CONFIG_MISSING |
+  TRIGGER_MISSING |
+  KB_MISSING |
+  HANDOVER_TOO_EARLY |
+  PAYMENT_FRICTION |
+  OBJECTION_WEAK |
+  PRODUCT_MATCH_WEAK
+* title text
+* details text
+* suggested_fix jsonb (can include deepLink + payload suggestion)
+* evidence jsonb (dialog_ids, counts, examples)
+* created_at timestamptz
+
+========================================================
+3) FUNNEL STAGES + EVENT EXTRACTION (EXACT)
+===========================================
+
+We need consistent stages:
+
+Stages enum (ai_funnel_stage):
+
+1. GREETING (старт/приветствие)
+2. NEEDS (выявление потребности)
+3. OFFER (предложение товара/варианта)
+4. OBJECTION (обработка возражений)
+5. CLOSE (закрытие на следующий шаг: оплата/заказ/контакт)
+6. SUCCESS (цель достигнута)
+7. HANDOVER (передано менеджеру)
+8. DROP (клиент пропал/отказ)
+
+Event extraction (MVP heuristic; no heavy NLP):
+Given messages sequence, compute stage timeline:
+
+* GREETING: first assistant response exists
+* NEEDS: assistant asks clarifying questions about need OR user describes need (keywords: "нужно", "ищу", "хочу", model/size/color)
+* OFFER: assistant suggests product(s) OR mentions SKU/name/price (detect catalog mention or pattern “₸/тг/тенге”)
+* OBJECTION: user message contains objection keywords (see list below)
+* CLOSE: assistant asks for order confirmation / offers payment / asks contact / proposes next step ("оформим", "оплатить", "оставьте номер", "подтвердите")
+* SUCCESS/HANDOVER/PAYMENT_CONFIRMED/ORDER_CREATED based on events below
+* DROP if no user response after last assistant message within threshold (default 24h for production, 30m for testing)
+
+Objection keyword map (store as constants; editable later):
+
+* PRICE: "дорого", "цена", "скидк", "дешевле", "дороговато"
+* COMPARE: "конкурент", "у других", "сравниваю", "в другом месте"
+* TRUST: "гарант", "оригинал", "поддел", "сертификат", "отзывы"
+* DELIVERY: "доставка", "самовывоз", "когда привез", "срок"
+* PAYMENT: "оплата", "kaspi", "рассроч", "перевод"
+* STOCK: "в наличии", "есть?", "нет?", "под заказ"
+* OTHER: fallback
+
+Detect events:
+
+* HANDOVER_TRIGGERED: if assistant says handing to manager OR system recorded handover
+* PAYMENT_OFFERED: assistant includes payment instruction/link phrase ("ссылка", "Kaspi Pay", "оплатить")
+* PAYMENT_CONFIRMED: if your system has payment webhook => record; else allow manual marking (optional later)
+* ORDER_CREATED: if internal order object created (if exists)
+* LEAD_CAPTURED: if assistant asks and user provided phone/name (regex phone)
+
+Store events in ai_dialog_events and update ai_dialogs fields.
+
+========================================================
+4) SUCCESS MODEL (EXACT, PER GOAL)
+==================================
+
+Compute outcome for each dialog:
+
+If goal = CLOSE_DEAL:
+
+* SUCCESS if PAYMENT_CONFIRMED exists OR (ORDER_CREATED + PAYMENT_OFFERED + user confirmation like “оплатил/оплатила/готов оплатить”)
+* HANDOVER if handover triggered
+* ABANDONED if DROP and no success/handover
+* FAILED if user explicit отказ ("не надо", "передумал", "неинтересно")
+
+If goal = QUALIFY_HANDOVER:
+
+* SUCCESS if HANDOVER_TRIGGERED AND lead_captured=true (name/phone) OR CRM lead created event exists
+* HANDOVER if triggered but lead not captured (count as partially successful for KPI)
+* ABANDONED if DROP before lead capture
+* FAILED if explicit refusal
+
+If goal = CONSULT_PICK:
+
+* SUCCESS if PRODUCT_SELECTED OR user indicates intent ("беру", "давайте этот", "оформляем") OR lead captured
+* ABANDONED/DROP similar
+
+If goal = ORDER_NO_PAY:
+
+* SUCCESS if ORDER_CREATED OR user confirmed order details + next step agreed
+* HANDOVER if handed to manager
+
+KPIs must show both:
+
+* SuccessRate (strict)
+* AssistedSuccessRate (success + handover, depending on goal)
+
+========================================================
+5) KPI CARDS (COMPUTE + DISPLAY)
+================================
+
+For selected period:
+
+* Dialogs total
+* Success (strict) count + rate
+* Handover count + rate
+* Abandoned count + rate
+  Optional:
+* Avg time to first response (if available)
+* Avg dialog length (messages)
+
+If revenue known:
+
+* Revenue attributed (sum revenue_amount)
+* Revenue per dialog
+
+========================================================
+6) FUNNEL + BOTTLENECK LOGIC (EXACT)
+====================================
+
+Funnel counts:
+For each dialog, derive max stage reached and stage transitions.
+Compute:
+
+* # dialogs entering each stage
+* Conversion between stages (%)
+
+Bottleneck detection:
+Define “dropoff stage” as the stage after which user stopped responding OR explicit refusal occurred.
+Compute dropoff distribution by stage.
+Primary bottleneck = stage with highest (dropoffs / dialogs_entered_stage) with minimum sample size >= 10 (or >=3 for testing).
+
+Also compute bottleneck by:
+
+* category (if product/category known)
+* price segment (below avg, avg..1.3x, >1.3x)
+* channel
+  Return top 3 bottlenecks with evidence.
+
+========================================================
+7) OBJECTIONS PERFORMANCE
+=========================
+
+For each objection type:
+
+* occurrences (# dialogs where detected)
+* success rate (strict)
+* handover rate
+* avg messages after objection
+* recommended action:
+
+  * if PRICE objection has low success and installment_enabled=false => recommend enable installments or trigger
+  * if TRUST low and KB missing warranty/brand => recommend add KB items
+
+========================================================
+8) HANDOVER ANALYTICS
+=====================
+
+Compute:
+
+* reasons distribution (from handover triggers/meta)
+* “handover too early” heuristic:
+
+  * if handover occurs before OFFER stage in >X% (default 20%) => flag
+  * if handover occurs without user asking “менеджер/человек” and without negative => suspicious
+    Create audit finding with dialog examples.
+
+========================================================
+9) CATEGORY/SKU + PRICE SEGMENTS
+================================
+
+If you store product_id in events:
+
+* By category:
+
+  * dialogs count
+  * success rate
+  * common objections
+* By SKU/top products:
+
+  * dialogs count
+  * success rate
+  * suggested vs selected ratio (if you track)
+    Price segments:
+* ENTRY (<0.7 avgPrice)
+* MID (0.7..1.3 avgPrice)
+* PREMIUM (>1.3 avgPrice)
+  Show bar chart of success rates by segment + note if PREMIUM suffers.
+
+========================================================
+10) TRIGGER EFFECTIVENESS + TRAINING IMPACT
+===========================================
+
+We must show value of Training tab.
+
+Trigger metrics:
+For each trigger (ai_triggers):
+
+* fired_count (how often matched) — computed by scanning events/meta where triggers fired
+* assisted_success_rate:
+
+  * dialogs where trigger fired and ended success/handover
+* top triggers that help
+* triggers that fire but don’t help (low success)
+
+Training impact:
+
+* # triggers added in period
+* # KB items added
+* # “train future” actions from Testing
+
+Correlate with success rate change (simple):
+
+* compare successRate current period vs previous period of same length.
+
+========================================================
+11) DIALOGS TABLE + DRILLDOWN
+=============================
+
+Dialogs table columns:
+
+* started_at
+* source/channel
+* goal
+* outcome (badge)
+* stage reached
+* objections (chips)
+* handover? (yes/no)
+* duration (mins)
+* message_count
+* revenue (if known)
+
+Row click expands:
+
+* mini timeline: stages with timestamps
+* key events list (payment offered, handover, objections)
+* button “Открыть диалог” (modal showing messages in WhatsApp-style)
+* button “Обучить на этом” => deep-link to Training Quick Train prefilled with message pair (last user+assistant)
+
+========================================================
+12) AUTO-AUDIT (THE MOST IMPORTANT PART)
+========================================
+
+User clicks “Запустить аудит”.
+
+Audit flow:
+
+* Create ai_audit_runs status=RUNNING
+* Analyze last N dialogs in period (default N=50, cap 200)
+* Compute:
+
+  * KPIs summary
+  * bottlenecks
+  * missing config checks
+  * missing KB checks
+  * missing trigger suggestions
+  * “handover too early” flags
+* Write findings to ai_audit_findings with:
+  severity, type, title, details, suggested_fix (deep link + optional payload), evidence (dialog_ids + sample messages)
+* Mark DONE
+
+Audit recommendations MUST be actionable and lead to:
+
+* Strategy (enable installments, add USP, adjust handover)
+* Training (create trigger, add KB, add anti-pattern)
+* Testing (run stress test)
+
+Suggested fixes structure:
+suggested_fix = {
+deepLink: "/app/ai-rop/strategy#installments",
+action: "ENABLE_INSTALLMENTS",
+payload: { banksSuggested: ["Kaspi","Halyk Bank"] }
+}
+
+Audit examples (create findings):
+HIGH:
+
+* “Низкая конверсия на этапе цены” with evidence
+* “Цель CLOSE_DEAL, но оплаты не настроены” (BLOCKER)
+  MEDIUM:
+* “Часто передаёте менеджеру слишком рано”
+  LOW:
+* “Редко используете промо-зону”
+
+========================================================
+13) BACKEND ENDPOINTS (EXPRESS)
+===============================
+
+13.1 Main analytics summary
+GET /api/ai/analytics/summary?period=7d&source=ALL&from=&to=
+Return:
+{
+period: {from,to},
+kpis: {...},
+funnel: { stages: [{stage,count,conversionFromPrev}] },
+bottlenecks: [{stage,rate,count,topReasons:[], segments:{byCategory:[],byPrice:[]}}],
+objections: [{type,count,successRate,handoverRate,recommendation?}],
+handover: {count,rate,reasons:[{reason,count}] , tooEarlyRate},
+categories: [{categoryId,name,dialogs,successRate,topObjections:[]}],
+products: [{productId,name,dialogs,successRate}],
+priceSegments: [{segment,dialogs,successRate}],
+triggers: {topHelpful:[], topNoisy:[], totals:{fired,dialogsWithAnyTrigger}},
+trainingImpact: {...},
+lastAudit: {runId?, finishedAt?, mainFinding?}
+}
+
+13.2 Dialogs list
+GET /api/ai/analytics/dialogs?period=...&source=...&limit=50&offset=0&outcome=&goal=&objection=
+Return list of ai_dialogs with derived chips.
+
+13.3 Dialog detail
+GET /api/ai/analytics/dialogs/:id
+Return:
+{ dialog, messages[], events[], stageTimeline[] }
+
+13.4 Audit
+POST /api/ai/analytics/audit/run { period, source, limitDialogs? } -> { runId }
+GET  /api/ai/analytics/audit/run/:runId -> { status, progress, summary, findings[] }
+
+13.5 Export (optional)
+GET /api/ai/analytics/export.csv?period=... -> CSV download of dialogs summary
+
+========================================================
+14) COMPUTATION JOBS (WHERE TO COMPUTE)
+=======================================
+
+MVP: compute derived analytics on-demand with caching:
+
+* When /summary called, compute using SQL queries + lightweight JS aggregation.
+* Cache result (in-memory per tenant) for 60 seconds OR store in ai_score_snapshots-like table if you prefer.
+
+Dialog event extraction:
+
+* If you already log events during runtime, reuse.
+* If not, implement a “derive events” function that takes messages and emits ai_dialog_events, called:
+
+  * when a dialog closes OR
+  * before analytics summary (for dialogs in period that lack events)
+    This ensures analytics works immediately.
+
+========================================================
+15) FRONTEND IMPLEMENTATION DETAILS
+===================================
+
+Create folder:
+client/src/features/aiRop/analytics/
+
+pages/
+AnalyticsPage.tsx
+
+components/
+PeriodSelector.tsx
+KpiCards.tsx
+FunnelChart.tsx
+BottleneckCard.tsx
+ObjectionsTable.tsx
+HandoverPanel.tsx
+CategoryPerformance.tsx
+PriceSegmentChart.tsx
+TriggerEffectiveness.tsx
+DialogsTable.tsx
+DialogDetailModal.tsx
+AuditPanel.tsx
+FindingCard.tsx
+RecommendationCTA.tsx
+SourceFilter.tsx
+
+api/
+analyticsApi.ts
+
+types/
+analyticsTypes.ts
+
+Charts (Recharts):
+
+* Funnel: vertical bar or custom funnel-like bars
+* Objections: bar chart success rate
+* Price segments: bar chart
+* Trend line (optional): success rate over time
+
+Use “empty states”:
+
+* If dialogs < 5: show guidance + CTA “Перейти в Тестирование” and “Запустить стресс-тест”.
+
+========================================================
+16) DEEP LINKS / CTA CONNECTIONS (MANDATORY)
+============================================
+
+From analytics findings, implement CTA buttons:
+
+* “Исправить в Стратегии” -> /app/ai-rop/strategy#...
+* “Создать триггер” -> /app/ai-rop/training?tab=triggers&prefill=...
+* “Добавить в Базу знаний” -> /app/ai-rop/training?tab=knowledge&prefill=...
+* “Запустить стресс-тест” -> /app/ai-rop/testing?mode=stress
+
+Prefill query schema (simple JSON base64 ok) or separate params.
+
+========================================================
+17) SECURITY / PRIVACY
+======================
+
+* Only tenant-scoped access.
+* If exporting, strip personal data (phone) unless user is admin (if roles exist).
+* Never show full phone numbers by default; mask (e.g., +7 7** *** ** 74).
+
+========================================================
+18) ACCEPTANCE CRITERIA
+=======================
+
+* Analytics tab shows KPI + funnel + bottleneck + tables.
+* Success model works per goal.
+* Bottleneck is computed and actionable.
+* Dialog drilldown works with WhatsApp-like modal.
+* “Запустить аудит” generates findings with evidence + CTAs that deep-link into Strategy/Training/Testing.
+* Works with empty/low-data via Testing fallback and clear guidance.
+* No regressions to other tabs.
+
+Implement end-to-end now, production-quality.

@@ -2465,6 +2465,124 @@ export const insertAiTrainingEventSchema = createInsertSchema(aiTrainingEvents).
 export type InsertAiTrainingEvent = z.infer<typeof insertAiTrainingEventSchema>;
 export type AiTrainingEvent = typeof aiTrainingEvents.$inferSelect;
 
+// ============ AI ANALYTICS: DIALOGS ============
+export const aiDialogs = pgTable("ai_dialogs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  source: text("source").notNull().default("TESTING"),
+  channel: text("channel").notNull().default("INTERNAL"),
+  externalThreadId: text("external_thread_id"),
+  startedAt: timestamp("started_at").notNull().defaultNow(),
+  lastMessageAt: timestamp("last_message_at"),
+  messageCount: integer("message_count").notNull().default(0),
+  goal: text("goal").notNull().default("CLOSE_DEAL"),
+  status: text("status").notNull().default("OPEN"),
+  outcome: text("outcome").notNull().default("UNKNOWN"),
+  successReason: text("success_reason"),
+  dropoffStage: text("dropoff_stage"),
+  dropoffReason: text("dropoff_reason"),
+  handoverReason: text("handover_reason"),
+  leadCaptured: boolean("lead_captured").notNull().default(false),
+  leadPayload: jsonb("lead_payload").$type<Record<string, unknown>>(),
+  revenueAmount: decimal("revenue_amount"),
+  currency: text("currency").notNull().default("KZT"),
+  meta: jsonb("meta").$type<Record<string, unknown>>(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const aiDialogsRelations = relations(aiDialogs, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [aiDialogs.tenantId],
+    references: [tenants.id],
+  }),
+}));
+
+export const insertAiDialogSchema = createInsertSchema(aiDialogs).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertAiDialog = z.infer<typeof insertAiDialogSchema>;
+export type AiDialog = typeof aiDialogs.$inferSelect;
+
+// ============ AI ANALYTICS: DIALOG EVENTS ============
+export const aiDialogEvents = pgTable("ai_dialog_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  dialogId: varchar("dialog_id").notNull().references(() => aiDialogs.id, { onDelete: "cascade" }),
+  eventType: text("event_type").notNull(),
+  eventValue: text("event_value"),
+  ts: timestamp("ts").notNull().defaultNow(),
+  meta: jsonb("meta").$type<Record<string, unknown>>(),
+});
+
+export const aiDialogEventsRelations = relations(aiDialogEvents, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [aiDialogEvents.tenantId],
+    references: [tenants.id],
+  }),
+  dialog: one(aiDialogs, {
+    fields: [aiDialogEvents.dialogId],
+    references: [aiDialogs.id],
+  }),
+}));
+
+export const insertAiDialogEventSchema = createInsertSchema(aiDialogEvents).omit({ id: true });
+export type InsertAiDialogEvent = z.infer<typeof insertAiDialogEventSchema>;
+export type AiDialogEvent = typeof aiDialogEvents.$inferSelect;
+
+// ============ AI ANALYTICS: AUDIT RUNS ============
+export const aiAnalyticsAuditRuns = pgTable("ai_analytics_audit_runs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  periodStart: timestamp("period_start").notNull(),
+  periodEnd: timestamp("period_end").notNull(),
+  sourceFilter: text("source_filter").notNull().default("ALL"),
+  status: text("status").notNull().default("RUNNING"),
+  dialogsAnalyzed: integer("dialogs_analyzed").notNull().default(0),
+  summary: jsonb("summary").$type<Record<string, unknown>>(),
+  recommendations: jsonb("recommendations").$type<Record<string, unknown>[]>(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  finishedAt: timestamp("finished_at"),
+});
+
+export const aiAnalyticsAuditRunsRelations = relations(aiAnalyticsAuditRuns, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [aiAnalyticsAuditRuns.tenantId],
+    references: [tenants.id],
+  }),
+}));
+
+export const insertAiAnalyticsAuditRunSchema = createInsertSchema(aiAnalyticsAuditRuns).omit({ id: true, createdAt: true });
+export type InsertAiAnalyticsAuditRun = z.infer<typeof insertAiAnalyticsAuditRunSchema>;
+export type AiAnalyticsAuditRun = typeof aiAnalyticsAuditRuns.$inferSelect;
+
+// ============ AI ANALYTICS: AUDIT FINDINGS ============
+export const aiAuditFindings = pgTable("ai_audit_findings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  auditRunId: varchar("audit_run_id").notNull().references(() => aiAnalyticsAuditRuns.id, { onDelete: "cascade" }),
+  severity: text("severity").notNull().default("MEDIUM"),
+  type: text("type").notNull(),
+  title: text("title").notNull(),
+  details: text("details").notNull(),
+  suggestedFix: jsonb("suggested_fix").$type<Record<string, unknown>>(),
+  evidence: jsonb("evidence").$type<Record<string, unknown>>(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const aiAuditFindingsRelations = relations(aiAuditFindings, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [aiAuditFindings.tenantId],
+    references: [tenants.id],
+  }),
+  auditRun: one(aiAnalyticsAuditRuns, {
+    fields: [aiAuditFindings.auditRunId],
+    references: [aiAnalyticsAuditRuns.id],
+  }),
+}));
+
+export const insertAiAuditFindingSchema = createInsertSchema(aiAuditFindings).omit({ id: true, createdAt: true });
+export type InsertAiAuditFinding = z.infer<typeof insertAiAuditFindingSchema>;
+export type AiAuditFinding = typeof aiAuditFindings.$inferSelect;
+
 // ============ FORM VALIDATION SCHEMAS ============
 export const loginSchema = z.object({
   email: z.string().email("Введите корректный email"),
