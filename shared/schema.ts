@@ -2668,6 +2668,110 @@ export const insertAiRopChannelEventSchema = createInsertSchema(aiRopChannelEven
 export type InsertAiRopChannelEvent = z.infer<typeof insertAiRopChannelEventSchema>;
 export type AiRopChannelEvent = typeof aiRopChannelEvents.$inferSelect;
 
+// ============ GROWTH: CONTACTS (multi-channel) ============
+export const growthContacts = pgTable("growth_contacts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  name: text("name"),
+  phone: text("phone"),
+  instagramId: text("instagram_id"),
+  telegramId: text("telegram_id"),
+  widgetUserId: text("widget_user_id"),
+  lastChannel: text("last_channel"),
+  primaryChannel: text("primary_channel"),
+  lastInboundAt: timestamp("last_inbound_at"),
+  lastOutboundAt: timestamp("last_outbound_at"),
+  optOut: boolean("opt_out").notNull().default(false),
+  tags: text("tags").array().default(sql`ARRAY[]::text[]`),
+  meta: jsonb("meta").$type<Record<string, unknown>>(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const growthContactsRelations = relations(growthContacts, ({ one }) => ({
+  tenant: one(tenants, { fields: [growthContacts.tenantId], references: [tenants.id] }),
+}));
+
+export const insertGrowthContactSchema = createInsertSchema(growthContacts).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertGrowthContact = z.infer<typeof insertGrowthContactSchema>;
+export type GrowthContact = typeof growthContacts.$inferSelect;
+
+// ============ GROWTH: CAMPAIGNS ============
+export const growthCampaigns = pgTable("growth_campaigns", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  type: text("type").notNull(),
+  status: text("status").notNull().default("DRAFT"),
+  name: text("name").notNull(),
+  channelPolicy: text("channel_policy").notNull().default("AUTO"),
+  audienceRules: jsonb("audience_rules").$type<Record<string, unknown>>(),
+  messageRules: jsonb("message_rules").$type<Record<string, unknown>>(),
+  scheduleRules: jsonb("schedule_rules").$type<Record<string, unknown>>(),
+  safetyRules: jsonb("safety_rules").$type<Record<string, unknown>>(),
+  createdBy: varchar("created_by").references(() => users.id),
+  totalQueued: integer("total_queued").notNull().default(0),
+  totalSent: integer("total_sent").notNull().default(0),
+  totalFailed: integer("total_failed").notNull().default(0),
+  totalReplied: integer("total_replied").notNull().default(0),
+  totalSkipped: integer("total_skipped").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const growthCampaignsRelations = relations(growthCampaigns, ({ one }) => ({
+  tenant: one(tenants, { fields: [growthCampaigns.tenantId], references: [tenants.id] }),
+  creator: one(users, { fields: [growthCampaigns.createdBy], references: [users.id] }),
+}));
+
+export const insertGrowthCampaignSchema = createInsertSchema(growthCampaigns).omit({ id: true, createdAt: true, updatedAt: true, totalQueued: true, totalSent: true, totalFailed: true, totalReplied: true, totalSkipped: true });
+export type InsertGrowthCampaign = z.infer<typeof insertGrowthCampaignSchema>;
+export type GrowthCampaign = typeof growthCampaigns.$inferSelect;
+
+// ============ GROWTH: QUEUE ============
+export const growthQueue = pgTable("growth_queue", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  campaignId: varchar("campaign_id").notNull().references(() => growthCampaigns.id),
+  contactId: varchar("contact_id").notNull().references(() => growthContacts.id),
+  resolvedChannel: text("resolved_channel"),
+  status: text("status").notNull().default("PENDING"),
+  plannedAt: timestamp("planned_at").notNull(),
+  sentAt: timestamp("sent_at"),
+  error: text("error"),
+  payload: jsonb("payload").$type<Record<string, unknown>>(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const growthQueueRelations = relations(growthQueue, ({ one }) => ({
+  tenant: one(tenants, { fields: [growthQueue.tenantId], references: [tenants.id] }),
+  campaign: one(growthCampaigns, { fields: [growthQueue.campaignId], references: [growthCampaigns.id] }),
+  contact: one(growthContacts, { fields: [growthQueue.contactId], references: [growthContacts.id] }),
+}));
+
+export const insertGrowthQueueSchema = createInsertSchema(growthQueue).omit({ id: true, createdAt: true });
+export type InsertGrowthQueueItem = z.infer<typeof insertGrowthQueueSchema>;
+export type GrowthQueueItem = typeof growthQueue.$inferSelect;
+
+// ============ GROWTH: EVENTS ============
+export const growthEvents = pgTable("growth_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  campaignId: varchar("campaign_id").notNull().references(() => growthCampaigns.id),
+  contactId: varchar("contact_id"),
+  eventType: text("event_type").notNull(),
+  meta: jsonb("meta").$type<Record<string, unknown>>(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const growthEventsRelations = relations(growthEvents, ({ one }) => ({
+  tenant: one(tenants, { fields: [growthEvents.tenantId], references: [tenants.id] }),
+  campaign: one(growthCampaigns, { fields: [growthEvents.campaignId], references: [growthCampaigns.id] }),
+}));
+
+export const insertGrowthEventSchema = createInsertSchema(growthEvents).omit({ id: true, createdAt: true });
+export type InsertGrowthEvent = z.infer<typeof insertGrowthEventSchema>;
+export type GrowthEvent = typeof growthEvents.$inferSelect;
+
 // ============ WAHA DISCLAIMER ACCEPTANCE ============
 export const wahaDisclaimerAcceptance = pgTable("waha_disclaimer_acceptance", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

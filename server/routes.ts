@@ -19,11 +19,13 @@ import net from "node:net";
 import { pool } from "./db";
 import domainRoutes from "./domains/routes.js";
 import { startDomainWorker } from "./domains/worker.js";
+import { startGrowthWorker } from "./services/growthWorker.js";
 import { registerAiRopRoutes } from "./ai-rop-routes.js";
 import { registerAiTestingRoutes } from "./ai-testing-routes.js";
 import { registerAiTrainingRoutes } from "./ai-training-routes.js";
 import { registerAiAnalyticsRoutes } from "./ai-analytics-routes.js";
 import { registerAiRopConnectRoutes } from "./ai-rop-connect-routes.js";
+import { registerGrowthRoutes } from "./ai-rop-growth-routes.js";
 
 const SessionStore = MemoryStore(session);
 
@@ -605,6 +607,7 @@ export async function registerRoutes(
   registerObjectStorageRoutes(app);
   app.use(domainRoutes);
   startDomainWorker();
+  startGrowthWorker();
 
   app.get("/__ping", (_req: Request, res: Response) => {
     res.type("text/plain").status(200).send("pong");
@@ -6847,6 +6850,7 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
   registerAiTrainingRoutes(app, storage, pool, requireAuth, requireAiAccess);
   registerAiAnalyticsRoutes(app, requireAuth, requireAiAccess);
   registerAiRopConnectRoutes(app, storage, requireAuth, requireAiAccess);
+  registerGrowthRoutes(app, storage, requireAuth, requireAiAccess);
 
   return httpServer;
 }

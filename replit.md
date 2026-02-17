@@ -44,6 +44,16 @@ Key architectural decisions include:
   - API: ~10 endpoints under /api/ai/analytics/* in server/ai-analytics-routes.ts
   - Frontend: Feature module at client/src/features/aiRop/analytics/
 
+- **Growth Tab ("Рост")** (fully implemented at /dashboard/ai/rop/growth):
+  - Multi-channel campaign engine: Reactivation, Upsell, Abandoned, Reminders, NPS
+  - Channel-agnostic messaging via unified messagingProvider.ts (WAHA, Meta WhatsApp, Telegram, Instagram)
+  - 4-step Campaign Builder: Goal/Channel → Audience (with live estimate) → Message (AI-assisted, variables) → Preview (safety badges, recipient table, WAHA warning)
+  - Background queue worker (10s interval, daily caps, quiet hours, opt-out respect)
+  - Schema: growth_contacts, growth_campaigns, growth_queue, growth_events
+  - API: ~14 endpoints under /api/ai-rop/growth/* in server/ai-rop-growth-routes.ts
+  - Frontend: Feature module at client/src/features/aiRop/growth/
+  - Note: "Умный контакт" (Smart Contact) was merged into this Growth tab; old route redirects to growth
+
 ## External Dependencies
 - **Database**: PostgreSQL
 - **Messaging Integrations**:

@@ -281,6 +281,9 @@ function Router() {
         <ProtectedRoute component={BusinessConsultantPage} />
       </Route>
 
+      <Route path="/dashboard/smart-contact">
+        <Redirect to="/dashboard/ai/rop/growth" />
+      </Route>
       <Route path="/dashboard/ai">
         <Redirect to="/dashboard/ai/rop/overview" />
       </Route>
