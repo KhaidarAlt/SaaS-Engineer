@@ -1,26 +1,31 @@
-import { Plug } from "lucide-react";
-import { SectionHeader } from "../components/SectionHeader";
-import { EmptyStateCard } from "../components/EmptyStateCard";
+import { useLocation } from "wouter";
+import { ConnectOverviewPage } from "../connect/pages/ConnectOverviewPage";
+import { WhatsAppHubPage } from "../connect/pages/WhatsAppHubPage";
+import { WhatsAppMetaBridgePage } from "../connect/pages/WhatsAppMetaBridgePage";
+import { WhatsAppWahaWizardPage } from "../connect/pages/WhatsAppWahaWizardPage";
+import { InstagramConnectPage } from "../connect/pages/InstagramConnectPage";
+import { TelegramConnectPage } from "../connect/pages/TelegramConnectPage";
+
+const BASE = "/dashboard/ai/rop/connections";
 
 export default function ConnectionsPage() {
-  return (
-    <div data-testid="page-connections">
-      <SectionHeader
-        title="Подключение"
-        subtitle="Каналы связи AI-продавца с клиентами"
-      />
-      <EmptyStateCard
-        icon={Plug}
-        title="Подключения каналов"
-        description="Здесь будут подключения каналов: WhatsApp (WAHA), WhatsApp Cloud API (Meta), Instagram Direct, Telegram."
-        bullets={[
-          "WhatsApp через WAHA (собственный сервер)",
-          "WhatsApp Cloud API через Meta Business",
-          "Instagram Direct и Telegram Bot",
-        ]}
-        ctaLabel="Перейти в Стратегию"
-        ctaHref="/dashboard/ai/rop/strategy"
-      />
-    </div>
-  );
+  const [location] = useLocation();
+
+  if (location.startsWith(`${BASE}/whatsapp/meta`)) {
+    return <WhatsAppMetaBridgePage />;
+  }
+  if (location.startsWith(`${BASE}/whatsapp/waha`)) {
+    return <WhatsAppWahaWizardPage />;
+  }
+  if (location.startsWith(`${BASE}/whatsapp`)) {
+    return <WhatsAppHubPage />;
+  }
+  if (location.startsWith(`${BASE}/instagram`)) {
+    return <InstagramConnectPage />;
+  }
+  if (location.startsWith(`${BASE}/telegram`)) {
+    return <TelegramConnectPage />;
+  }
+
+  return <ConnectOverviewPage />;
 }

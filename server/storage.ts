@@ -57,6 +57,10 @@ import {
   type WidgetIntegration, type InsertWidgetIntegration,
   type WidgetConversation, type InsertWidgetConversation,
   type WidgetMessage, type InsertWidgetMessage,
+  aiRopChannels, aiRopChannelEvents, wahaDisclaimerAcceptance,
+  type AiRopChannel, type InsertAiRopChannel,
+  type AiRopChannelEvent, type InsertAiRopChannelEvent,
+  type WahaDisclaimerAcceptance,
 } from "@shared/schema";
 import bcrypt from "bcryptjs";
 
@@ -354,6 +358,20 @@ export interface IStorage {
   getWaCloudRiskEvents(tenantId: string, resolved?: boolean): Promise<WaCloudRiskEvent[]>;
   createWaCloudRiskEvent(data: InsertWaCloudRiskEvent): Promise<WaCloudRiskEvent>;
   resolveWaCloudRiskEvent(id: string): Promise<void>;
+
+  // AI-ROP Channel Connections
+  getAiRopChannels(tenantId: string): Promise<AiRopChannel[]>;
+  getAiRopChannel(tenantId: string, channelType: string): Promise<AiRopChannel | undefined>;
+  upsertAiRopChannel(data: InsertAiRopChannel): Promise<AiRopChannel>;
+  updateAiRopChannel(tenantId: string, channelType: string, data: Partial<InsertAiRopChannel>): Promise<AiRopChannel | undefined>;
+
+  // AI-ROP Channel Events
+  getAiRopChannelEvents(tenantId: string, limit?: number): Promise<AiRopChannelEvent[]>;
+  createAiRopChannelEvent(data: InsertAiRopChannelEvent): Promise<AiRopChannelEvent>;
+
+  // WAHA Disclaimer
+  getWahaDisclaimerAcceptance(tenantId: string): Promise<WahaDisclaimerAcceptance | undefined>;
+  acceptWahaDisclaimer(tenantId: string, version: string): Promise<WahaDisclaimerAcceptance>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2374,6 +2392,72 @@ export class DatabaseStorage implements IStorage {
     await db.update(waCloudRiskEvents)
       .set({ resolved: true, resolvedAt: new Date() })
       .where(eq(waCloudRiskEvents.id, id));
+  }
+
+  async getAiRopChannels(tenantId: string): Promise<AiRopChannel[]> {
+    return db.select().from(aiRopChannels)
+      .where(eq(aiRopChannels.tenantId, tenantId))
+      .orderBy(aiRopChannels.channelType);
+  }
+
+  async getAiRopChannel(tenantId: string, channelType: string): Promise<AiRopChannel | undefined> {
+    const [ch] = await db.select().from(aiRopChannels)
+      .where(and(eq(aiRopChannels.tenantId, tenantId), eq(aiRopChannels.channelType, channelType)));
+    return ch;
+  }
+
+  async upsertAiRopChannel(data: InsertAiRopChannel): Promise<AiRopChannel> {
+    const existing = await this.getAiRopChannel(data.tenantId, data.channelType);
+    if (existing) {
+      const [updated] = await db.update(aiRopChannels)
+        .set({ ...data, updatedAt: new Date() })
+        .where(eq(aiRopChannels.id, existing.id))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(aiRopChannels).values(data).returning();
+    return created;
+  }
+
+  async updateAiRopChannel(tenantId: string, channelType: string, data: Partial<InsertAiRopChannel>): Promise<AiRopChannel | undefined> {
+    const [updated] = await db.update(aiRopChannels)
+      .set({ ...data, updatedAt: new Date() })
+      .where(and(eq(aiRopChannels.tenantId, tenantId), eq(aiRopChannels.channelType, channelType)))
+      .returning();
+    return updated;
+  }
+
+  async getAiRopChannelEvents(tenantId: string, limit = 10): Promise<AiRopChannelEvent[]> {
+    return db.select().from(aiRopChannelEvents)
+      .where(eq(aiRopChannelEvents.tenantId, tenantId))
+      .orderBy(desc(aiRopChannelEvents.createdAt))
+      .limit(limit);
+  }
+
+  async createAiRopChannelEvent(data: InsertAiRopChannelEvent): Promise<AiRopChannelEvent> {
+    const [event] = await db.insert(aiRopChannelEvents).values(data).returning();
+    return event;
+  }
+
+  async getWahaDisclaimerAcceptance(tenantId: string): Promise<WahaDisclaimerAcceptance | undefined> {
+    const [row] = await db.select().from(wahaDisclaimerAcceptance)
+      .where(eq(wahaDisclaimerAcceptance.tenantId, tenantId));
+    return row;
+  }
+
+  async acceptWahaDisclaimer(tenantId: string, version: string): Promise<WahaDisclaimerAcceptance> {
+    const existing = await this.getWahaDisclaimerAcceptance(tenantId);
+    if (existing) {
+      const [updated] = await db.update(wahaDisclaimerAcceptance)
+        .set({ accepted: true, acceptedAt: new Date(), version })
+        .where(eq(wahaDisclaimerAcceptance.tenantId, tenantId))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(wahaDisclaimerAcceptance)
+      .values({ tenantId, accepted: true, acceptedAt: new Date(), version })
+      .returning();
+    return created;
   }
 }
 

@@ -2615,3 +2615,76 @@ export const kaspiBusinessCreateInvoiceSchema = z.object({
 });
 
 export type KaspiBusinessCreateInvoiceInput = z.infer<typeof kaspiBusinessCreateInvoiceSchema>;
+
+// ============ AI-ROP CHANNEL CONNECTIONS ============
+export const aiRopChannels = pgTable("ai_rop_channels", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  channelType: text("channel_type").notNull(), // WHATSAPP_META | WHATSAPP_WAHA | INSTAGRAM | TELEGRAM
+  status: text("status").notNull().default("NOT_CONNECTED"), // NOT_CONNECTED | CONNECTING | CONNECTED | ERROR | NEEDS_ACTION
+  isAiEnabled: boolean("is_ai_enabled").notNull().default(false),
+  displayName: text("display_name"),
+  config: jsonb("config").$type<Record<string, any>>(),
+  lastError: text("last_error"),
+  lastCheckedAt: timestamp("last_checked_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const aiRopChannelsRelations = relations(aiRopChannels, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [aiRopChannels.tenantId],
+    references: [tenants.id],
+  }),
+}));
+
+export const insertAiRopChannelSchema = createInsertSchema(aiRopChannels).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertAiRopChannel = z.infer<typeof insertAiRopChannelSchema>;
+export type AiRopChannel = typeof aiRopChannels.$inferSelect;
+
+// ============ AI-ROP CHANNEL EVENTS ============
+export const aiRopChannelEvents = pgTable("ai_rop_channel_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  channelId: varchar("channel_id").references(() => aiRopChannels.id),
+  channelType: text("channel_type").notNull(),
+  eventType: text("event_type").notNull(), // CONNECTED | DISCONNECTED | ERROR | HEALTH_CHECK | DISCLAIMER_ACCEPTED | TEST_SENT
+  message: text("message"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const aiRopChannelEventsRelations = relations(aiRopChannelEvents, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [aiRopChannelEvents.tenantId],
+    references: [tenants.id],
+  }),
+  channel: one(aiRopChannels, {
+    fields: [aiRopChannelEvents.channelId],
+    references: [aiRopChannels.id],
+  }),
+}));
+
+export const insertAiRopChannelEventSchema = createInsertSchema(aiRopChannelEvents).omit({ id: true, createdAt: true });
+export type InsertAiRopChannelEvent = z.infer<typeof insertAiRopChannelEventSchema>;
+export type AiRopChannelEvent = typeof aiRopChannelEvents.$inferSelect;
+
+// ============ WAHA DISCLAIMER ACCEPTANCE ============
+export const wahaDisclaimerAcceptance = pgTable("waha_disclaimer_acceptance", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id).unique(),
+  accepted: boolean("accepted").notNull().default(false),
+  acceptedAt: timestamp("accepted_at"),
+  version: text("version").notNull().default("v1"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const wahaDisclaimerAcceptanceRelations = relations(wahaDisclaimerAcceptance, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [wahaDisclaimerAcceptance.tenantId],
+    references: [tenants.id],
+  }),
+}));
+
+export const insertWahaDisclaimerSchema = createInsertSchema(wahaDisclaimerAcceptance).omit({ id: true, createdAt: true });
+export type InsertWahaDisclaimer = z.infer<typeof insertWahaDisclaimerSchema>;
+export type WahaDisclaimerAcceptance = typeof wahaDisclaimerAcceptance.$inferSelect;

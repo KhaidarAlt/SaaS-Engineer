@@ -1,0 +1,277 @@
+# PROMPT: AI-РОП → вкладка “Подключение” (только каналы) + WAHA disclaimer gating + Meta отдельная зона
+
+Stack: React 18 + TypeScript (Vite), Tailwind, Framer Motion. Backend: Express + Postgres. Multi-tenant.
+
+CONTEXT:
+AI-РОП уже существует с вкладками: Обзор / Обучение / Тестирование / Подключение / Аналитика / Стратегия.
+Нужно реализовать ТОЛЬКО вкладку “Подключение” внутри AI-РОП как единый центр подключения каналов для AI-ответов:
+
+* WhatsApp (2 режима: Meta official и WAHA QR)
+* Instagram Direct
+* Telegram Bot
+  (без CRM, без платежей, без прочих интеграций)
+
+CRITICAL:
+
+* Не делать “ребилд” кабинета. Работать внутри AI-РОП.
+* Meta требует отдельного пространства — не пытаться запихнуть всё на одну страницу.
+* WAHA: показать обязательное предупреждение + чекбокс “прочитал и согласен” → только после этого становится доступна кнопка подключения.
+* Предупреждение должно быть про безопасность/комплаенс (без советов по обходу ограничений).
+* Multi-tenant: tenant_id везде.
+
+========================================================
+
+1. ROUTES / NAV внутри AI-РОП
+   ========================================================
+   Уже есть AI-РОП. Добавить/зафиксировать:
+
+* /app/ai-rop/connect  (вкладка Подключение)
+  Дополнительные под-страницы внутри AI-РОП:
+* /app/ai-rop/connect/whatsapp         (WhatsApp hub: выбор Meta vs WAHA)
+* /app/ai-rop/connect/whatsapp/meta    (перенаправление/встраивание существующей страницы WhatsApp Meta)
+* /app/ai-rop/connect/whatsapp/waha    (WAHA wizard + disclaimer)
+* /app/ai-rop/connect/instagram        (Instagram wizard)
+* /app/ai-rop/connect/telegram         (Telegram wizard)
+
+Если в проекте уже есть страницы WhatsApp Meta вне AI-РОП — НЕ ломать их.
+Сделать “мост”: из AI-РОП/Подключение вести туда, но с нормальным UX (в новой вкладке или внутри iframe/лейаута, что проще).
+
+========================================================
+2) UI: /app/ai-rop/connect (единный экран каналов)
+==================================================
+
+Header:
+
+* Title: “Подключение каналов”
+* Subtitle: “Подключите каналы, где клиенты пишут вам — AI начнёт отвечать автоматически”
+  Right:
+* Button: “Проверить статус” (health refresh)
+
+Body:
+Grid cards (2–3 в ряд):
+
+1. WhatsApp (главная карточка)
+2. Instagram Direct
+3. Telegram Bot
+
+Каждая карточка:
+
+* Иконка + название
+* Status pill:
+
+  * 🟢 Подключено
+  * 🟡 Требуется действие
+  * 🔴 Ошибка
+  * ⚪ Не подключено
+* Краткая строка: “AI активен: да/нет”
+* Primary CTA:
+
+  * “Подключить” / “Управлять”
+* Secondary CTA:
+
+  * “Тест” (если подключено) → запускает тест-сообщение/проверку webhooks
+* Микро-интеракции: hover lift, плавные появления, Framer Motion.
+
+Ниже — “Журнал событий” (последние 10):
+
+* Подключено / Ошибка / Проверено / Переподключено.
+
+========================================================
+3) WhatsApp hub: /app/ai-rop/connect/whatsapp
+=============================================
+
+Цель: единая точка, где пользователь выбирает способ.
+
+Экран:
+Hero:
+
+* “Запустить AI в WhatsApp”
+* 2 большие карточки выбора:
+
+A) “Официальный WhatsApp (Meta)” (Рекомендуем)
+
+* бенефиты: “Надёжно”, “лимиты”, “шаблоны”, “масштаб”
+* CTA:
+
+  * если НЕ подключено: “Подключить Meta”
+  * если подключено: “Открыть настройки Meta”
+* Подпись: “Требует Meta Business”
+
+B) “Быстрое подключение (WAHA QR)”
+
+* бенефиты: “Быстро”, “для теста”
+* Warning badge: “Есть риск блокировки при нарушениях правил WhatsApp”
+* CTA: “Подключить WAHA” → ведёт на WAHA wizard
+
+Покажи текущий статус по каждому способу (Meta / WAHA) если уже есть.
+
+========================================================
+4) WAHA wizard + DISCLAIMER GATING: /app/ai-rop/connect/whatsapp/waha
+=====================================================================
+
+Step 0 (обязательный): Предупреждение
+Заголовок: “Важно перед подключением WAHA”
+Текст (коротко, по делу):
+
+* WAHA — неофициальное подключение. WhatsApp может ограничить или заблокировать номер при нарушениях правил.
+* Запрещено: массовые рассылки без согласия, спам, покупные базы, однотипные сообщения многим контактам.
+* Рекомендуется: отвечать на входящие, получать согласие, соблюдать частоту, быстро обрабатывать жалобы/стоп-слова.
+* Для максимально безопасной работы используйте официальный Meta канал.
+
+Внизу:
+[ ] “Я прочитал(а) и согласен(на). Понимаю риски блокировки номера и что ответственность лежит на владельце номера.”
+Кнопка “Продолжить” disabled пока не стоит галочка.
+
+On accept:
+POST /api/ai-rop/connect/waha/accept-disclaimer { version: "v1" }
+
+Step 1: QR подключение
+
+* Кнопка “Получить QR”
+* Отображение QR + live status:
+
+  * “Ожидаем сканирование…”
+  * “Сессия активна”
+* Poll status каждые 2s.
+* Успех → Step 2.
+
+Step 2: Включить AI на этом канале
+
+* Toggle: “AI отвечает клиентам в WhatsApp (WAHA)” (default ON)
+* Optional: “Использовать для заказов из каталога” (если применимо)
+* Save.
+
+Step 3: Тест
+
+* “Отправить тест” (внутренний тестовый входящий webhook либо симуляция)
+* Показать зелёный “OK” + лёгкая конфетти-анимация.
+
+========================================================
+5) WhatsApp Meta: /app/ai-rop/connect/whatsapp/meta
+===================================================
+
+Не переписывать.
+Сделать:
+
+* либо редирект на существующую страницу WhatsApp Meta в кабинете
+* либо открыть её внутри layout AI-РОП как “внешний модуль” (минимум: новая вкладка/страница)
+
+Важно:
+
+* Вернуть статус подключения на карточку канала в AI-РОП:
+  CONNECTED/ERROR/NEEDS_ACTION.
+
+========================================================
+6) Instagram wizard: /app/ai-rop/connect/instagram
+==================================================
+
+MVP:
+
+* Экран “Подключить Instagram Direct”
+* CTA “Подключить” (если OAuth уже есть — использовать)
+* После подключения:
+
+  * статус Connected
+  * toggle “AI отвечает в Instagram”
+  * кнопка “Тест”
+
+Если OAuth не готов:
+
+* сделать экран-заглушку “Скоро” нельзя. Вместо этого:
+
+  * “Подключение через Meta будет доступно в следующем обновлении”
+  * Но при этом карточка должна выглядеть аккуратно и не ломать UX.
+
+========================================================
+7) Telegram wizard: /app/ai-rop/connect/telegram
+================================================
+
+MVP (реализуемо быстро):
+
+* Поле “Token” (BotFather)
+* Validate токен (backend call)
+* Set webhook
+* Toggle “AI отвечает в Telegram”
+* Тест: отправить сообщение в тестовый чат (или показать инструкцию как проверить)
+
+========================================================
+8) BACKEND (Express) endpoints
+==============================
+
+GET  /api/ai-rop/connect/list
+POST /api/ai-rop/connect/health-check-all
+
+WAHA:
+GET  /api/ai-rop/connect/waha/disclaimer-status
+POST /api/ai-rop/connect/waha/accept-disclaimer
+POST /api/ai-rop/connect/waha/start          -> { sessionId, qr }
+GET  /api/ai-rop/connect/waha/status?sessionId
+POST /api/ai-rop/connect/waha/disconnect
+
+Telegram:
+POST /api/ai-rop/connect/telegram/validate
+POST /api/ai-rop/connect/telegram/connect
+POST /api/ai-rop/connect/telegram/test
+
+Instagram:
+(если есть) start/status/test аналогично.
+
+DB tables (if no existing):
+ai_rop_channels
+
+* id uuid
+* tenant_id uuid
+* channel_type enum: WHATSAPP_META | WHATSAPP_WAHA | INSTAGRAM | TELEGRAM
+* status enum: NOT_CONNECTED | CONNECTING | CONNECTED | ERROR | NEEDS_ACTION
+* is_ai_enabled boolean
+* display_name text
+* config jsonb
+* last_error text
+* last_checked_at timestamptz
+* created_at, updated_at
+
+ai_rop_channel_events
+
+* tenant_id, channel_id, event_type, message, created_at
+
+waha_disclaimer_acceptance
+
+* tenant_id unique, accepted boolean, accepted_at, version
+
+========================================================
+9) FRONTEND FILES
+=================
+
+client/src/features/aiRop/connect/
+pages/
+ConnectOverviewPage.tsx
+WhatsAppHubPage.tsx
+WhatsAppWahaWizardPage.tsx
+WhatsAppMetaBridgePage.tsx
+InstagramConnectPage.tsx
+TelegramConnectPage.tsx
+components/
+ChannelCard.tsx
+StatusPill.tsx
+EventsList.tsx
+WizardLayout.tsx
+DisclaimerGate.tsx
+QrPanel.tsx
+LiveStatus.tsx
+api/
+connectApi.ts
+types/
+connectTypes.ts
+
+========================================================
+10) ACCEPTANCE CRITERIA
+=======================
+
+* В AI-РОП вкладке “Подключение” все каналы в одном месте.
+* WhatsApp hub с выбором Meta/WAHA.
+* WAHA невозможно подключить без “галочки согласия” (данные сохраняются в БД).
+* Статусы и ошибки отображаются понятно.
+* Есть тест-кнопка и журнал событий.
+* Никакого “ребилда” кабинета — только вкладка в AI-РОП.
+
+Implement now.

@@ -1,0 +1,368 @@
+# PROMPT: Rebuild “Интеграции” as a unified premium Control Center for all channels (WOW UX) + WAHA risk disclaimer gating + Meta dedicated space
+
+Stack: React 18 + TypeScript (Vite), Tailwind, Framer Motion. Backend: Express + Postgres. Multi-tenant.
+
+GOAL:
+Create ONE place where user connects all communication channels for AI (and sees health/status). Current integrations are scattered (WAHA, WhatsApp Meta page, Instagram, Telegram, website widget). Unify under:
+
+* /app/integrations (single entry)
+* keep dedicated “WhatsApp Meta” subspace (complex)
+* include WOW onboarding wizards for each channel
+* include hard WAHA disclaimer gating with “I read & agree” checkbox before enabling Connect.
+
+CRITICAL:
+
+* Multi-tenant: tenant_id required in all DB reads/writes.
+* Do not break existing WhatsApp Meta pages; re-route entry to them from unified page.
+* UX must be premium, calm, Apple-like, with micro-interactions and clear statuses.
+* Provide safe, policy-compliant guidance: WAHA disclaimer focuses on compliance best practices and warns about possible bans; do NOT provide instructions for evading WhatsApp enforcement or spam tactics.
+
+========================================================
+
+1. INFORMATION ARCHITECTURE (ROUTES)
+   ========================================================
+   New navigation item: “Интеграции” (single place).
+   Routes:
+
+* /app/integrations                      (overview dashboard)
+* /app/integrations/whatsapp             (WhatsApp hub: choose Meta vs WAHA)
+* /app/integrations/whatsapp/meta        (DEEP LINK to existing Meta section OR wrap it)
+* /app/integrations/whatsapp/waha        (WAHA connect wizard, disclaimer gating)
+* /app/integrations/instagram            (Instagram Direct wizard)
+* /app/integrations/telegram             (Telegram bot wizard)
+* /app/integrations/widget               (Website widget wizard)
+  Optional (if exists):
+* /app/integrations/crm                  (Bitrix/AMO webhooks)
+  But keep scope MVP: channels + health.
+
+========================================================
+2) PAGE 1: /app/integrations (Unified Overview Dashboard)
+=========================================================
+
+Top Header:
+
+* Title: “Интеграции”
+* Subtitle: “Подключите каналы, где клиенты пишут вам — AI будет отвечать автоматически”
+  Right side:
+* “Проверить все” (health refresh)
+* “Помощь” (opens modal quick guide)
+
+Row A: “Readiness strip”
+
+* Small cards: WhatsApp / Instagram / Telegram / Widget
+  Each shows:
+* status dot: green Connected, yellow Needs action, red Error, gray Not connected
+* short text: “Подключено”, “Не подключено”, “Требуется действие”
+* action button:
+
+  * Connected: “Управлять”
+  * Not connected: “Подключить”
+    Click opens respective route.
+
+Row B: “AI Coverage”
+
+* Shows: “AI активен в: X каналах”
+* Toggle per channel: “Использовать для AI” / “Только уведомления” (if supported)
+* Explain: AI replies only where enabled.
+
+Row C: “Last events” (activity)
+
+* last 10 integration events: connected/disconnected/errors/webhook received
+
+Row D: “Recommended next steps” (WOW + actionable)
+
+* Based on readiness:
+
+  * if no channels: recommend WhatsApp connect
+  * if Meta connected but templates not configured: suggest templates
+  * if WAHA connected: show risk reminder and “Best practices”
+  * if AI-РОП goal CLOSE_DEAL but no WhatsApp: suggest connect
+    Cards have CTA deep links.
+
+Micro-interactions:
+
+* Framer Motion stagger on load
+* status dot pulse when error
+* “Проверить все” runs animated scan (like your “Сканирую каталог…”)
+
+========================================================
+3) DATA MODEL (POSTGRES)
+========================
+
+Table: integrations
+
+* id uuid pk
+* tenant_id uuid index
+* type enum: WHATSAPP_META | WHATSAPP_WAHA | INSTAGRAM_DIRECT | TELEGRAM_BOT | WEB_WIDGET
+* status enum: NOT_CONNECTED | CONNECTING | CONNECTED | ERROR | NEEDS_ACTION
+* display_name text (e.g., “WhatsApp +7 777 …”)
+* is_ai_enabled boolean default true
+* last_checked_at timestamptz
+* last_error text nullable
+* config jsonb (channel-specific secrets/ids, masked where appropriate)
+* created_at, updated_at
+
+Table: integration_events
+
+* id uuid pk
+* tenant_id uuid index
+* integration_id uuid fk
+* event_type text (CONNECTED, DISCONNECTED, ERROR, WEBHOOK_TESTED, TOKEN_REFRESHED)
+* message text
+* meta jsonb
+* created_at timestamptz
+
+Table: waha_disclaimer_acceptance
+
+* id uuid pk
+* tenant_id uuid unique
+* accepted boolean
+* accepted_at timestamptz
+* accepted_ip text nullable
+* accepted_user_id uuid nullable
+* version text (e.g. "2026-02-17-v1")
+  Store acceptance required before WAHA connect.
+
+========================================================
+4) WHATSAPP HUB: /app/integrations/whatsapp
+===========================================
+
+Purpose: one “WhatsApp” card in overview but inside user chooses method.
+
+Layout:
+
+* Hero: “Запустить AI в WhatsApp”
+* Two option cards with comparison:
+
+A) “Официальный WhatsApp (Meta)” — Recommended
+
+* Pros: “Надёжно, без риска блокировок, лимиты, шаблоны”
+* CTA: “Подключить Meta” -> /app/integrations/whatsapp/meta
+* If already connected: “Управлять Meta” -> existing meta pages
+
+B) “Быстрый запуск (WAHA QR)” — For testing / small volumes
+
+* Pros: “Быстро, без Meta кабинета”
+* Warning badge: “Есть риск блокировки при нарушениях”
+* CTA: “Подключить WAHA” -> /app/integrations/whatsapp/waha
+
+Also show:
+
+* “Текущий статус” for both (Meta + WAHA) if both exist.
+
+========================================================
+5) WHATSAPP META: dedicated space
+=================================
+
+Do NOT rebuild from scratch if you already have a full Meta UI.
+Just ensure:
+
+* Unified entry points link here.
+* In Meta pages show breadcrumb: “Интеграции / WhatsApp / Meta”
+* Ensure status flows back to integrations table (CONNECTED/ERROR).
+
+========================================================
+6) WAHA WIZARD: /app/integrations/whatsapp/waha
+===============================================
+
+MUST INCLUDE DISCLAIMER GATING before showing QR.
+
+Step 0: Compliance warning (blocking)
+Title: “Перед подключением WAHA — важно”
+Content: show a clear, short, non-technical warning list (see below).
+At bottom:
+☐ “Я прочитал(а) и согласен(на) с условиями. Понимаю риски блокировки номера и что ответственность лежит на владельце номера.”
+Button “Продолжить” disabled until checked.
+On confirm:
+POST /api/integrations/waha/accept-disclaimer { version }
+Store acceptance in waha_disclaimer_acceptance for tenant.
+
+DISCLAIMER TEXT (MVP, must be displayed):
+
+* WAHA использует неофициальное подключение. WhatsApp может ограничить/заблокировать номер за нарушения правил.
+* Запрещено: массовые рассылки без согласия, спам, однотипные сообщения большому числу людей, покупные базы, агрессивные авто-сообщения.
+* Рекомендуется: отвечать на входящие запросы, получать явное согласие клиента, соблюдать частоту, использовать корректные шаблоны общения, быстро обрабатывать жалобы и стоп-слова.
+* Если нужен максимально безопасный вариант — используйте официальный Meta канал.
+
+Step 1: Connect QR
+
+* Show QR code card with “Сканируйте QR в WhatsApp”
+* Live status: “Ожидаем сканирование…”
+* After scan: “Сессия активна”
+  POST /api/integrations/waha/connect/start -> returns sessionId + qr
+  Poll /api/integrations/waha/connect/status?sessionId
+
+Step 2: Assign number & AI
+
+* Choose what this WAHA number is used for:
+
+  * ☑ Заказы из каталога
+  * ☑ AI ответы клиентам
+* Save to integrations table is_ai_enabled, display_name.
+
+Step 3: Test
+
+* “Отправить тестовое сообщение” -> sends to owner’s number OR internal testing
+* Show success checkmark + confetti micro animation (subtle).
+
+========================================================
+7) INSTAGRAM DIRECT: /app/integrations/instagram
+================================================
+
+Wizard steps:
+
+1. Requirements check (business account, permissions)
+2. Connect (OAuth placeholder if not implemented)
+3. Select pages/accounts
+4. Enable AI replies toggle
+5. Test (send test DM or internal simulator)
+
+WOW:
+
+* Progress checklist “Проверяю: доступы / бизнес-аккаунт / webhook”
+* Final “Instagram подключен” with “Протестировать”
+
+========================================================
+8) TELEGRAM BOT: /app/integrations/telegram
+===========================================
+
+Wizard steps:
+
+1. Explain: create bot via @BotFather (simple bullets)
+2. Input token
+3. Validate token via backend call
+4. Set webhook
+5. Enable AI replies
+6. Test message
+
+WOW:
+
+* Token validator animation + green ticks
+* “Скопировано” microcopy for webhook URL
+
+========================================================
+9) WEBSITE WIDGET: /app/integrations/widget
+===========================================
+
+Wizard steps:
+
+1. Create widget: name, color, greeting, working hours
+2. Generate embed code snippet
+3. Copy button + success toast
+4. “Проверить на сайте” (open instructions)
+
+WOW:
+
+* Live preview of widget in a mini phone/browser mock
+* Confetti on “Widget created”
+
+========================================================
+10) HEALTH + STATUS MODEL (MUST)
+================================
+
+Health checks:
+
+* Each integration has “Check now” button.
+  Backend:
+  POST /api/integrations/:type/health-check
+  Updates integrations.status + last_error + last_checked_at.
+
+Overview “Проверить все” calls:
+POST /api/integrations/health-check-all
+Show animated “scan” progress.
+
+Status mapping:
+
+* CONNECTED green
+* CONNECTING blue
+* NEEDS_ACTION yellow
+* ERROR red
+* NOT_CONNECTED gray
+
+========================================================
+11) BACKEND ENDPOINTS (EXPRESS)
+===============================
+
+GET  /api/integrations/list
+POST /api/integrations/health-check-all
+POST /api/integrations/:type/health-check
+
+WAHA:
+POST /api/integrations/waha/accept-disclaimer
+GET  /api/integrations/waha/disclaimer-status
+POST /api/integrations/waha/connect/start
+GET  /api/integrations/waha/connect/status
+POST /api/integrations/waha/disconnect
+
+Telegram:
+POST /api/integrations/telegram/validate
+POST /api/integrations/telegram/connect
+POST /api/integrations/telegram/test
+
+Widget:
+POST /api/integrations/widget/create
+GET  /api/integrations/widget/:id/script
+
+Instagram:
+Placeholder endpoints if OAuth not complete:
+POST /api/integrations/instagram/connect/start
+GET  /api/integrations/instagram/connect/status
+POST /api/integrations/instagram/test
+
+All endpoints must require tenant auth.
+
+========================================================
+12) FRONTEND FILE STRUCTURE (REACT)
+===================================
+
+client/src/features/integrations/
+pages/
+IntegrationsOverviewPage.tsx
+WhatsAppHubPage.tsx
+WhatsAppWahaWizardPage.tsx
+InstagramWizardPage.tsx
+TelegramWizardPage.tsx
+WidgetWizardPage.tsx
+components/
+IntegrationCard.tsx
+StatusDot.tsx
+HealthScanModal.tsx
+RecommendationCards.tsx
+WizardLayout.tsx
+WizardStepHeader.tsx
+DisclaimerGate.tsx
+QrConnectCard.tsx
+LiveStatusLine.tsx
+ChannelTestPanel.tsx
+WidgetPreview.tsx
+api/
+integrationsApi.ts
+types/
+integrationsTypes.ts
+
+Use Framer Motion in WizardLayout transitions and card stagger animations.
+
+========================================================
+13) NAVIGATION / RELOCATION
+===========================
+
+* Move/replace scattered entries so user finds everything in one place:
+
+  * Keep “WhatsApp Meta” as a sub-page but entry inside Integrations > WhatsApp.
+  * Remove/avoid duplicate “Integrations” inside AI-assistant; instead deep-link to /app/integrations.
+* Ensure breadcrumbs everywhere:
+  “Интеграции / WhatsApp / WAHA”
+
+========================================================
+14) MVP ACCEPTANCE CRITERIA
+===========================
+
+* One unified Integrations page shows all channels and statuses.
+* WhatsApp hub allows choosing Meta vs WAHA.
+* WAHA cannot be connected until disclaimer checkbox accepted (stored in DB).
+* Each channel has a wizard with clear steps + test.
+* Health checks and last errors visible and user-friendly.
+* Premium WOW feel via micro-interactions, clean spacing, strong empty states.
+* Multi-tenant enforced everywhere.
+
+Implement end-to-end now.

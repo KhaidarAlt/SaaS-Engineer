@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useRoute } from "wouter";
+import { useLocation } from "wouter";
 import { fetchOnboardingStatus, AI_ROP_KEYS } from "../api/aiRopApi";
 import { AiRopOnboardingPage } from "./AiRopOnboardingPage";
 import { AiRopLayout } from "../components/layout/AiRopLayout";
@@ -26,8 +26,9 @@ export default function AiRopEntryPage() {
     queryFn: fetchOnboardingStatus,
   });
 
-  const [, params] = useRoute("/dashboard/ai/rop/:tab");
-  const tab = params?.tab ?? "overview";
+  const [location] = useLocation();
+  const segments = location.replace("/dashboard/ai/rop/", "").split("/");
+  const tab = segments[0] || "overview";
   const TabComponent = TAB_COMPONENTS[tab] ?? OverviewPage;
 
   if (isLoading) {

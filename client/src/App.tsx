@@ -331,6 +331,9 @@ function Router() {
       <Route path="/dashboard/ai/rop/:tab">
         <ProtectedRoute component={AiRopEntryPage} />
       </Route>
+      <Route path="/dashboard/ai/rop/:tab/:rest*">
+        <ProtectedRoute component={AiRopEntryPage} />
+      </Route>
 
       <Route path="/admin">
         <ProtectedRoute component={AdminOverview} requireSuperAdmin />
