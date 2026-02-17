@@ -16,6 +16,34 @@ Key architectural decisions include:
 - **Custom Domains & Subdomains**: A flexible system allowing tenants to use branded subdomains (`*.botfactory.kz`) and self-service custom domains with automated DNS verification and SSL provisioning via Caddy.
 - **CRM System**: An internal CRM dashboard featuring Kanban and table views for deals, integrated with AI for analysis and message generation, and enhanced order detail pages.
 
+## AI-РОП Module Structure
+- **Overview Tab** (executive dashboard at /dashboard/ai/rop/overview):
+  - ScoreHeroCard: Circular animated progress 0-100, color-coded labels, breakdown bars (completeness/behavior/operations/testing), deep-link CTAs
+  - ReadinessCard: READY/WARNING/BLOCKED badge, prioritized blockers list, fix deep links
+  - KpiStrip: 5 KPI cards (dialogs, success, handover, abandoned, revenue/avg messages), empty state CTA
+  - BottleneckSummaryCard: Main drop-off stage with rate and reasons
+  - InsightsCard: Up to 5 auto-generated insights (price dropoff, early handover, low success, compare weak, no triggers, sparse KB, delivery weak)
+  - ActionCenter: Smart recommendations based on score + analytics (installment, price trigger, stress test, KB fill)
+  - RecentDialogs: Last 8 dialogs with stage/objection preview, clickable to detail modal
+  - QuickTestChatMini: Inline chat testing (last 5 messages), auto-creates testing session
+  - All components at client/src/features/aiRop/overview/
+
+- **AI Testing Tab** (fully implemented at /dashboard/ai/rop/testing):
+  - AI Readiness Score: 4-category scoring model (Completeness 0-30, Behavior 0-30, Operations 0-20, Testing 0-20)
+  - 3 test modes: Free Chat, Client Simulation (6 personas), Stress Test (10 scenarios)
+  - WhatsApp Simulator: Phone-frame UI with chat bubbles, typing indicator, micro-evaluation per AI response
+  - Schema: ai_testing_sessions, ai_testing_messages, ai_score_snapshots, ai_stress_test_runs
+  - API: 10 endpoints under /api/ai/testing/* in server/ai-testing-routes.ts
+  - Frontend: Feature module at client/src/features/aiRop/testing/
+
+- **AI Analytics Tab** (fully implemented at /dashboard/ai/rop/analytics):
+  - KPI Dashboard, Sales Funnel, Bottleneck Detection, Objection Tracking, Handover Analysis
+  - Training Impact, Trigger Effectiveness, Dialogs List with detail modal
+  - Auto-Audit System with severity-ranked findings and deep-link CTAs
+  - Schema: ai_dialogs, ai_dialog_events, ai_analytics_audit_runs, ai_audit_findings
+  - API: ~10 endpoints under /api/ai/analytics/* in server/ai-analytics-routes.ts
+  - Frontend: Feature module at client/src/features/aiRop/analytics/
+
 ## External Dependencies
 - **Database**: PostgreSQL
 - **Messaging Integrations**:

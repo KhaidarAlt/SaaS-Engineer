@@ -1,0 +1,184 @@
+# PROMPT: Build AI-РОП → Overview (Executive Dashboard, Final Production Version)
+
+Goal:
+Create a premium executive dashboard for /app/ai-rop/overview.
+This is the default landing page and must feel like a control center.
+
+DO NOT change logic of other tabs.
+Use existing APIs wherever possible.
+Multi-tenant always.
+
+========================================================
+
+1. LAYOUT STRUCTURE
+   ========================================================
+
+Row A (Hero Section):
+
+* ScoreHeroCard (left, 60%)
+* ReadinessCard (right, 40%)
+
+Row B:
+
+* KpiStrip (4–6 cards)
+
+Row C:
+
+* BottleneckCard (left)
+* InsightsCard (right)
+
+Row D:
+
+* ActionCenter (recommendations)
+
+Row E:
+
+* RecentDialogs (left)
+* QuickTestChatMini (right)
+
+Responsive stacking for mobile.
+
+========================================================
+2. SCORE HERO
+=============
+
+Call:
+GET /api/ai/testing/score
+
+Display:
+
+* Circular animated progress 0–100
+* Label:
+  <50 = red “Нужно настроить”
+  50–79 = yellow “Есть риски”
+  80+ = green “Готов к продажам”
+
+Show breakdown bars:
+
+* completeness
+* behavior
+* operations
+* testing
+
+Buttons:
+
+* “Улучшить” (deep link based on weakest breakdown)
+* “Пройти стресс-тест”
+
+========================================================
+3. READINESS CARD
+=================
+
+Call:
+GET /api/ai/testing/readiness
+
+Show:
+
+* READY / WARNING / BLOCKED badge
+* List top blockers
+* Deep link buttons
+
+========================================================
+4. KPI STRIP
+============
+
+Call:
+GET /api/ai/analytics/summary?period=...&source=...
+
+Display:
+
+* Dialogs
+* Success count + %
+* Handover %
+* Abandoned %
+* Revenue sum (if exists)
+
+If dialogs < 5:
+Show empty-state with CTA to Testing.
+
+========================================================
+5. BOTTLENECK CARD
+==================
+
+From analytics summary:
+
+* Show main dropoff stage
+* Show drop rate
+* Short explanation
+* CTA “Открыть аналитику”
+
+========================================================
+6. INSIGHTS CARD
+================
+
+Generate up to 5 insights from summary:
+
+* price dropoff high
+* handover too early
+* installment missing
+* premium low success
+* no USP configured
+
+Clickable deep links.
+
+========================================================
+7. ACTION CENTER
+================
+
+Display 3–5 recommendation cards.
+
+Rules:
+If CLOSE_DEAL and installment disabled:
+show “Включить рассрочку”
+
+If PRICE objection high and no trigger:
+show “Создать триггер ‘дорого’”
+
+If stress test not completed:
+show “Пройти стресс-тест”
+
+If KB items < 3:
+show “Заполнить базу знаний”
+
+Each card:
+
+* title
+* short why
+* impact label
+* CTA button
+
+========================================================
+8. RECENT DIALOGS
+=================
+
+Call:
+GET /api/ai/analytics/dialogs?limit=10
+
+Show:
+
+* outcome badge
+* last message preview
+* channel icon
+  Click -> open dialog modal.
+
+========================================================
+9. QUICK TEST CHAT MINI
+=======================
+
+* small WhatsApp-style box
+* send message using Testing endpoint
+* show 3–5 last messages
+* button “Открыть тестирование”
+
+========================================================
+10. ACCEPTANCE CRITERIA
+=======================
+
+* Overview loads fast
+* Shows meaningful info even with low data
+* Deep links work
+* Score and readiness consistent
+* Feels premium and clean
+* No duplication of heavy analytics logic
+
+Implement now.
