@@ -35,17 +35,6 @@ import UsersFreePageRoute from "@/pages/admin/UsersFreePageRoute";
 import LeadsPage from "@/pages/admin/LeadsPage";
 import PlanRequestsPage from "@/pages/admin/PlanRequestsPage";
 import PlansPage from "@/pages/admin/PlansPage";
-import AiOverviewPage from "@/pages/dashboard/ai/AiOverviewPage";
-import AiSalesScriptsPage from "@/pages/dashboard/ai/AiSalesScriptsPage";
-import AiTagsPage from "@/pages/dashboard/ai/AiTagsPage";
-import AiKnowledgePage from "@/pages/dashboard/ai/AiKnowledgePage";
-import AiFaqPage from "@/pages/dashboard/ai/AiFaqPage";
-import AiPoliciesPage from "@/pages/dashboard/ai/AiPoliciesPage";
-import AiInboxPage from "@/pages/dashboard/ai/AiInboxPage";
-import AiSandboxPage from "@/pages/dashboard/ai/AiSandboxPage";
-import AiAnalyticsPage from "@/pages/dashboard/ai/AiAnalyticsPage";
-import AiIntegrationsPage from "@/pages/dashboard/ai/AiIntegrationsPage";
-import AiSettingsPage from "@/pages/dashboard/ai/AiSettingsPage";
 import AiRopEntryPage from "@/features/aiRop/pages/AiRopEntryPage";
 import CatalogRouter from "@/pages/catalog/CatalogRouter";
 import ProductDetailPage from "@/pages/catalog/ProductDetailPage";
@@ -293,37 +282,7 @@ function Router() {
       </Route>
 
       <Route path="/dashboard/ai">
-        <ProtectedRoute component={AiOverviewPage} />
-      </Route>
-      <Route path="/dashboard/ai/scripts">
-        <ProtectedRoute component={AiSalesScriptsPage} />
-      </Route>
-      <Route path="/dashboard/ai/tags">
-        <ProtectedRoute component={AiTagsPage} />
-      </Route>
-      <Route path="/dashboard/ai/knowledge">
-        <ProtectedRoute component={AiKnowledgePage} />
-      </Route>
-      <Route path="/dashboard/ai/faq">
-        <ProtectedRoute component={AiFaqPage} />
-      </Route>
-      <Route path="/dashboard/ai/policies">
-        <ProtectedRoute component={AiPoliciesPage} />
-      </Route>
-      <Route path="/dashboard/ai/inbox">
-        <ProtectedRoute component={AiInboxPage} />
-      </Route>
-      <Route path="/dashboard/ai/sandbox">
-        <ProtectedRoute component={AiSandboxPage} />
-      </Route>
-      <Route path="/dashboard/ai/analytics">
-        <ProtectedRoute component={AiAnalyticsPage} />
-      </Route>
-      <Route path="/dashboard/ai/integrations">
-        <ProtectedRoute component={AiIntegrationsPage} />
-      </Route>
-      <Route path="/dashboard/ai/settings">
-        <ProtectedRoute component={AiSettingsPage} />
+        <Redirect to="/dashboard/ai/rop/overview" />
       </Route>
       <Route path="/dashboard/ai/rop">
         <Redirect to="/dashboard/ai/rop/overview" />

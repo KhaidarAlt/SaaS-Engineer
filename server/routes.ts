@@ -5941,11 +5941,11 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
       
       if (oauthError) {
         console.error("Instagram OAuth error:", oauthError, error_description);
-        return res.redirect(`/dashboard/ai/integrations?error=${encodeURIComponent(error_description as string || "OAuth failed")}`);
+        return res.redirect(`/dashboard/ai/rop/connections/instagram?error=${encodeURIComponent(error_description as string || "OAuth failed")}`);
       }
       
       if (!code || !state) {
-        return res.redirect("/dashboard/ai/integrations?error=missing_params");
+        return res.redirect("/dashboard/ai/rop/connections/instagram?error=missing_params");
       }
       
       const appId = process.env.META_APP_ID!;
@@ -5964,13 +5964,13 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
       );
       
       if (result.success) {
-        res.redirect("/dashboard/ai/integrations?instagram=success");
+        res.redirect("/dashboard/ai/rop/connections/instagram?instagram=success");
       } else {
-        res.redirect(`/dashboard/ai/integrations?error=${encodeURIComponent(result.error || "Connection failed")}`);
+        res.redirect(`/dashboard/ai/rop/connections/instagram?error=${encodeURIComponent(result.error || "Connection failed")}`);
       }
     } catch (error) {
       console.error("Instagram OAuth callback error:", error);
-      res.redirect("/dashboard/ai/integrations?error=callback_failed");
+      res.redirect("/dashboard/ai/rop/connections/instagram?error=callback_failed");
     }
   });
 
