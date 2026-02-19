@@ -1,0 +1,293 @@
+PROMPT FOR REPLIT — Auto WhatsApp History Sync + Growth Scenarios (Meta WA + WAHA) inside “Рост”
+
+You are joining an existing SaaS project SmartCatalog (Botfactory). Stack: Node.js + Express + TypeScript, Postgres (Neon via Replit), Drizzle ORM, React/Vite frontend, shadcn/ui + Tailwind. Unified Messaging is already implemented with canonical messaging tables and adapter-based providers. Outbound sending uses Postgres outbox + in-process worker.
+
+CRITICAL RULES:
+
+* DO NOT break existing architecture, DO NOT refactor unrelated code.
+* DO NOT remove or rewrite existing modules (AI-РОП, Integrations, existing Growth Engine).
+* Make additive, minimal, safe changes.
+* All new functionality MUST live in the “Рост” section and reuse the unified messaging pipeline (sendMessage/outbox/worker).
+* If anything is unclear: read existing DB schemas and code. Do not guess required fields. Show diffs.
+
+FEATURE GOAL:
+Implement “Auto Sync WhatsApp History” and “Niche Growth Scenarios” inside Рост, working for:
+A) WhatsApp Official Meta Cloud API
+B) WhatsApp via WAHA (QR)
+
+The purpose: build a warm audience list (existing contacts/threads) for safe reactivation/upsell workflows without requiring CSV import.
+
+IMPORTANT REALITY CHECK (do NOT ignore):
+
+* Meta WhatsApp Cloud API does NOT provide full historical chat export via API. Therefore, “history sync” for Meta must be implemented as:
+
+  1. Forward-looking capture: use already-ingested inbound/outbound messages from unified messaging tables to build contact history from the moment of connection onward.
+  2. Optional “bootstrap” sources: CRM import (if exists) or user-uploaded CSV (existing import), but keep this optional. The core value is automatic warm-audience building going forward.
+* WAHA CAN provide chat list/history (depending on WAHA API capabilities). For WAHA, implement real history sync using WAHA endpoints.
+
+Deliverables must include:
+
+1. Data model for “Audience / Contact Sync / Segmentation”
+2. WAHA history sync job (pull chats + last messages + participants)
+3. Meta warm-audience builder job (derive from stored messages)
+4. Growth “Niche Scenarios” templates (electronics, fashion, food delivery, general goods)
+5. UI in Рост to: Sync → Audience → Segment → Launch campaign (respect quiet hours, opt-out, safe limits especially for WAHA)
+
+========================================================
+
+1. DATA MODEL (Postgres + Drizzle migrations)
+   ========================================================
+
+Add new tables (names can be adjusted to existing naming conventions, but keep purpose):
+
+A) growth_contacts (tenant-level contact registry)
+
+* id uuid PK
+* tenant_id uuid NOT NULL
+* phone_e164 text NOT NULL
+* display_name text NULL
+* source text NOT NULL  // 'waha_sync' | 'meta_warm' | 'csv_import' | 'crm_import'
+* first_seen_at timestamptz NOT NULL default now()
+* last_seen_at timestamptz NOT NULL
+* last_inbound_at timestamptz NULL
+* last_outbound_at timestamptz NULL
+* last_dialog_id uuid NULL (FK ai_dialogs.id)
+* tags jsonb NULL  // optional
+  Unique index: (tenant_id, phone_e164)
+
+B) growth_contact_stats (optional, or embed into growth_contacts if preferred)
+
+* tenant_id, contact_id
+* inbound_count int
+* outbound_count int
+* last_message_preview text NULL
+* last_channel_provider text NULL  // meta_whatsapp / waha_whatsapp
+
+C) growth_sync_runs (tracking sync jobs)
+
+* id uuid PK
+* tenant_id uuid NOT NULL
+* provider text NOT NULL // meta_whatsapp | waha_whatsapp
+* status text NOT NULL // PENDING|RUNNING|SUCCESS|FAILED
+* started_at timestamptz
+* finished_at timestamptz
+* stats_json jsonb NULL  // counts: chats scanned, contacts upserted, errors
+* error text NULL
+
+D) growth_segments (saved segments)
+
+* id uuid PK
+* tenant_id uuid NOT NULL
+* name text NOT NULL
+* rules_json jsonb NOT NULL  // e.g. last_seen_at range, inbound/outbound thresholds, purchased flag if available, etc.
+* estimated_size int NULL
+* created_at timestamptz default now()
+
+E) growth_scenario_templates (seeded templates per niche)
+
+* id uuid PK
+* niche text NOT NULL // 'electronics'|'fashion'|'food'|'general'
+* key text NOT NULL  // 'reactivation'|'abandoned_dialog'|'upsell_post_order'|'price_availability_reminder'|'nps'
+* title text NOT NULL
+* message_blueprint_json jsonb NOT NULL  // placeholders and style
+* created_at timestamptz default now()
+  Unique: (niche, key)
+
+F) growth_campaigns (if exists already, extend; if not, create minimal)
+
+* id uuid PK
+* tenant_id uuid
+* provider text // meta_whatsapp|waha_whatsapp (or channel-agnostic; pick at runtime)
+* scenario_key text
+* status text // DRAFT|SCHEDULED|RUNNING|PAUSED|DONE
+* segment_id uuid
+* template_id uuid
+* settings_json jsonb // quiet hours, daily limit, random delay, approval requirements
+* created_at
+
+NOTE:
+Respect existing opt-out tables/settings. If they exist, integrate; if not, add:
+growth_opt_out (tenant_id, phone_e164, opted_out_at, channel nullable)
+
+========================================================
+2) PROVIDER CAPABILITIES + SYNC ARCHITECTURE
+============================================
+
+A) WAHA HISTORY SYNC (real sync)
+Implement in providers/waha adapter:
+
+* add method listChats() and getChatHistory(chatId, limit, since?)
+* Extract:
+
+  * customer phone / chat identifier
+  * display name if available
+  * last message timestamp and preview
+  * optional: message counts
+    Store results:
+* Upsert into growth_contacts
+* Update last_seen_at, last_inbound_at/last_outbound_at (best-effort if direction is detectable)
+* Optionally, mirror last message into canonical messaging_messages only if it is safe and needed; otherwise store just stats. DO NOT flood messaging_messages with entire history unless explicitly required (keep performance safe).
+
+B) META “HISTORY SYNC” (warm audience builder)
+Since Meta Cloud API cannot export history:
+Implement a job that scans existing canonical messaging tables (messaging_messages) for provider=meta_whatsapp:
+
+* group by phone/customer participant mapping (use ai_dialogs.contactPhone or participant registry if exists)
+* compute last_seen_at and inbound/outbound timestamps
+* upsert into growth_contacts with source='meta_warm'
+  This job can be run:
+* periodically (daily)
+* and also on-demand from Рост UI: “Обновить аудиторию”
+
+C) UNIFIED EXECUTION
+Both syncs MUST run through the existing in-process worker pattern (setInterval) OR reuse the outbox job table pattern used earlier. Do not introduce BullMQ now.
+Implement a “growth_sync_worker” that processes growth_sync_runs with PENDING status.
+
+========================================================
+3) SAFETY FOR WAHA: DAILY LIMITS + ANTI-BAN MODE
+================================================
+
+Inside Рост campaign settings, enforce:
+
+* Default daily limit for WAHA: 20–30 contacts/day (configurable)
+* Random delay between sends: 20–90 seconds (configurable)
+* Quiet hours per tenant (already exists in Growth; if not, implement)
+* Stop/slow down on high fail rate or reports (basic fail-rate circuit breaker):
+
+  * if FAILED rate > X% in last 24h => auto-pause campaign
+
+For Meta official:
+
+* support templates when required (24h window rules). If template is required, campaign must either:
+
+  * use approved template (if you have template mgmt)
+  * or block with clear UI reason “Нужен шаблон Meta для этого сценария”
+
+All sends MUST use the unified messaging send pipeline (sendMessage → outbox → worker → provider adapter).
+
+========================================================
+4) “РОСТ” UI / UX REQUIREMENTS
+==============================
+
+In Рост section, add a new flow:
+
+Tab: “Аудитория”
+
+* Button: “Синхронизировать WhatsApp”
+
+  * If tenant uses WAHA: starts WAHA sync run
+  * If tenant uses Meta WA: starts Meta warm-audience builder run
+* Show progress: RUNNING + counts (contacts found, updated)
+* Show audience size and last updated time
+* Provide filters:
+
+  * “Покупали/интересовались” (if order data exists; else hide)
+  * “Не писали X дней”
+  * “Брошенные диалоги”
+  * “Активные клиенты”
+* Allow saving as Segment
+
+Tab: “Сценарии”
+
+* Show niche selector (electronics/fashion/food/general)
+* Show scenario cards:
+
+  1. Reactivation (вернуть клиентов)
+  2. Abandoned Dialogs (брошенные диалоги)
+  3. Upsell after Order
+  4. Price/Availability reminder
+  5. NPS/Review
+     Each scenario has:
+* Default recommended message (editable)
+* Default safe settings (limits, delays)
+* Preview of message
+* “Запустить” (creates campaign in DRAFT → confirm → RUNNING)
+
+Tab: “Кампании”
+
+* list campaigns, status, sent, replies, conversion (if available)
+* pause/resume
+* show failures with reasons
+
+========================================================
+5) NICHE GROWTH SCENARIO TEMPLATES (SEED DATA)
+==============================================
+
+Seed these templates (RU text, short, non-spammy, warm tone). Use placeholders:
+{firstName}, {shopName}, {categoryHint}, {promo}, {city}, {linkToCatalog}
+
+A) Electronics / Appliances
+
+* Reactivation:
+  “{firstName}, привет! Это {shopName}. Вы раньше интересовались техникой. Сейчас есть новые поступления/акции по {categoryHint}. Подсказать варианты?”
+* Price/Availability:
+  “{firstName}, добрый день! По {categoryHint} обновили наличие и цены. Хотите пришлю актуальные варианты?”
+* Upsell:
+  “{firstName}, к вашему заказу часто берут: гарантия/аксессуары/расходники. Актуально?”
+
+B) Fashion
+
+* Reactivation:
+  “{firstName}, привет! {shopName}. У нас новое поступление/скидки. Под ваш стиль могу быстро подобрать 3–5 вариантов. Интересно?”
+* Upsell:
+  “К вашей покупке часто берут: ремень/сумку/уход. Хотите 2–3 предложения?”
+
+C) Food delivery
+
+* Reactivation:
+  “{firstName}, привет! {shopName}. Сегодня свежие акции/комбо. Хотите быстро соберу заказ на 2–3 позиции?”
+* Repeat purchase:
+  “Обычно после {days} дней заказывают повторно 🙂. Хотите предложу любимые позиции + новинку?”
+
+D) General
+
+* Reactivation:
+  “{firstName}, здравствуйте! Это {shopName}. Подскажите, актуально ли ещё подобрать {categoryHint}? Я помогу быстро.”
+
+All templates must be editable per tenant at launch time.
+
+========================================================
+6) ACCEPTANCE CRITERIA (MUST PASS)
+==================================
+
+1. WAHA tenant:
+
+* After connecting WAHA, user goes to Рост → Аудитория → “Синхронизировать”
+* System creates a sync run, fetches chats, upserts growth_contacts
+* UI shows audience size and last updated
+* Launch Reactivation campaign → outbox sends with daily limit 20–30 and random delays
+
+2. Meta tenant:
+
+* Рост → Аудитория → “Обновить аудиторию”
+* System derives audience from existing messaging_messages (meta_whatsapp) and ai_dialogs.contactPhone
+* Launch campaign uses Meta rules:
+
+  * if outside 24h window and template required, UI blocks with clear reason OR uses approved template if available
+
+3. Both:
+
+* opt-out respected
+* quiet hours respected
+* all sends go through unified messaging send pipeline
+* no duplication (campaign cannot send twice to same contact unless explicitly allowed)
+
+========================================================
+7) IMPLEMENTATION NOTES
+=======================
+
+* Reuse existing integrations config to determine provider for tenant: meta_whatsapp vs waha_whatsapp.
+* If tenant has both, select the active integration used for Growth.
+* Use FOR UPDATE SKIP LOCKED in sync worker and campaign sender worker to avoid concurrency issues.
+* Keep performance safe: do not import full message history into messaging_messages; store summary stats and last timestamps unless explicitly needed.
+
+DELIVER:
+
+* DB migrations + Drizzle schema
+* provider WAHA sync module
+* meta warm-audience builder module
+* Рост UI changes (Audience/Scenarios/Campaigns)
+* seed templates
+* test plan and manual steps
+
+Start by inspecting existing Рост pages, Growth queue/outbox tables, and integrations config, then implement the minimal additive changes.
