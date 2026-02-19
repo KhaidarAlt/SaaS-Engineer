@@ -100,7 +100,7 @@ async function getTenantContext(tenantId: string): Promise<TenantContext> {
     promotionsCount: promotions.length,
     discountsCount: discounts.length,
     paymentStats,
-    planName: subscription?.plan?.name || "Старт",
+    planName: subscription?.plan?.name || "Free",
     hasAiAccess: subscription?.plan?.hasAiAccess || false,
   };
 }

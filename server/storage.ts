@@ -1,4 +1,4 @@
-import { eq, and, desc, sql, gte, lte } from "drizzle-orm";
+import { eq, and, desc, sql, gte, lte, ne } from "drizzle-orm";
 import { db } from "./db";
 import {
   users, tenants, subscriptions, plans, products, categories,
@@ -13,6 +13,7 @@ import {
   instagramIntegrations, instagramMessages,
   telegramIntegrations, telegramMessages,
   widgetIntegrations, widgetConversations, widgetMessages,
+  aiDialogs,
   type User, type InsertUser, type Tenant, type InsertTenant,
   type Subscription, type InsertSubscription, type Plan, type InsertPlan,
   type Product, type InsertProduct, type Category, type InsertCategory,
@@ -86,6 +87,7 @@ export interface IStorage {
   createSubscription(subscription: InsertSubscription): Promise<Subscription>;
   updateSubscription(id: string, data: Partial<InsertSubscription>): Promise<Subscription | undefined>;
   extendSubscription(subscriptionId: string, days: number, reason: string, addedBy: string): Promise<void>;
+  countAiDialogsThisMonth(tenantId: string): Promise<number>;
   
   getProducts(tenantId: string): Promise<Product[]>;
   getProduct(id: string, tenantId: string): Promise<Product | undefined>;
@@ -480,6 +482,21 @@ export class DatabaseStorage implements IStorage {
   async updateSubscription(id: string, data: Partial<InsertSubscription>): Promise<Subscription | undefined> {
     const [subscription] = await db.update(subscriptions).set(data).where(eq(subscriptions.id, id)).returning();
     return subscription;
+  }
+
+  async countAiDialogsThisMonth(tenantId: string): Promise<number> {
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const result = await db.select({ count: sql<number>`count(*)` })
+      .from(aiDialogs)
+      .where(
+        and(
+          eq(aiDialogs.tenantId, tenantId),
+          gte(aiDialogs.startedAt, startOfMonth),
+          ne(aiDialogs.source, 'TESTING')
+        )
+      );
+    return Number(result[0]?.count || 0);
   }
 
   async extendSubscription(subscriptionId: string, days: number, reason: string, addedBy: string): Promise<void> {

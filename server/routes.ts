@@ -169,8 +169,62 @@ async function migratePlansToNewStructure() {
   const existingPlans = await storage.getAllPlans();
   
   for (const plan of existingPlans) {
-    // Migrate "Каталог + AI" to "Business"
+    // Migrate legacy "Каталог + AI" → deactivate
     if (plan.name === "Каталог + AI") {
+      await storage.updatePlan(plan.id, { isActive: false });
+      console.log("Deactivated legacy plan: Каталог + AI");
+    }
+    
+    // Migrate legacy "Про" → deactivate
+    if (plan.name === "Про") {
+      await storage.updatePlan(plan.id, { isActive: false });
+      console.log("Deactivated legacy plan: Про");
+    }
+    
+    // Deactivate old "Бизнес" plan (99900₸)
+    if (plan.name === "Бизнес" && plan.price === 99900) {
+      await storage.updatePlan(plan.id, { isActive: false });
+      console.log("Deactivated old plan: Бизнес (99900₸)");
+    }
+
+    // Migrate old "Старт" (free, Russian name) → "Free"
+    if (plan.name === "Старт" && plan.price === 0) {
+      await storage.updatePlan(plan.id, {
+        name: "Free",
+        price: 0,
+        maxProducts: 100,
+        maxCategories: 10,
+        maxPromotions: 2,
+        maxDiscountRules: 3,
+        maxManagers: 0,
+        maxWahaInstances: 0,
+        aiMessagesLimit: 0,
+        hasAiAccess: false,
+        features: ["Каталог до 100 товаров", "Приём заявок в WhatsApp", "Публичная ссылка"],
+      });
+      console.log("Migrated plan: Старт → Free");
+    }
+
+    // Migrate old "Каталог" → "Start"
+    if (plan.name === "Каталог" && !plan.hasAiAccess) {
+      await storage.updatePlan(plan.id, {
+        name: "Start",
+        price: 4990,
+        maxProducts: 500,
+        maxCategories: 30,
+        maxPromotions: 20,
+        maxDiscountRules: 50,
+        maxManagers: 2,
+        maxWahaInstances: 1,
+        aiMessagesLimit: 100,
+        hasAiAccess: true,
+        features: ["SmartCatalog", "AI-продавец (все функции)", "Раздел Рост", "1 канал подключения", "100 диалогов/мес"],
+      });
+      console.log("Migrated plan: Каталог → Start");
+    }
+
+    // Update "Business" plan pricing
+    if (plan.name === "Business") {
       await storage.updatePlan(plan.id, {
         name: "Business",
         price: 19990,
@@ -182,122 +236,79 @@ async function migratePlansToNewStructure() {
         maxWahaInstances: 1,
         aiMessagesLimit: 300,
         hasAiAccess: true,
-        features: ["Всё из Каталог", "AI-ассистент 24/7", "300 диалогов/мес", "Скрипты продаж + база знаний", "Передача менеджеру по триггерам"],
+        features: ["Все функции платформы", "AI-продавец", "Growth Engine", "Мультиканал (WhatsApp, Instagram, Telegram)", "Аналитика", "300 диалогов/мес"],
       });
-      console.log("Migrated plan: Каталог + AI → Business");
+      console.log("Updated plan: Business");
     }
-    
-    // Migrate "Про" to "PRO"
-    if (plan.name === "Про") {
+
+    // Migrate "PRO" → "Scale"
+    if (plan.name === "PRO") {
       await storage.updatePlan(plan.id, {
-        name: "PRO",
-        price: 34990,
+        name: "Scale",
+        price: 29990,
         maxProducts: 5000,
         maxCategories: 200,
         maxPromotions: 100,
         maxDiscountRules: 200,
         maxManagers: 10,
         maxWahaInstances: 3,
-        aiMessagesLimit: 900,
+        aiMessagesLimit: 700,
         hasAiAccess: true,
-        features: ["Всё из Business", "900 диалогов/мес", "Приоритетная обработка диалогов", "Максимальная автоматизация продаж"],
+        features: ["Все функции", "Growth автоматизации", "Расширенная аналитика", "Приоритетная поддержка", "700 диалогов/мес"],
       });
-      console.log("Migrated plan: Про → PRO");
-    }
-    
-    // Deactivate old "Бизнес" plan (99900₸)
-    if (plan.name === "Бизнес" && plan.price === 99900) {
-      await storage.updatePlan(plan.id, { isActive: false });
-      console.log("Deactivated old plan: Бизнес (99900₸)");
-    }
-    
-    // Update "Каталог" to correct structure
-    if (plan.name === "Каталог" && !plan.hasAiAccess) {
-      await storage.updatePlan(plan.id, {
-        price: 9990,
-        maxProducts: 1000,
-        maxCategories: 50,
-        maxPromotions: 20,
-        maxDiscountRules: 50,
-        maxManagers: 2,
-        maxWahaInstances: 0,
-        aiMessagesLimit: 0,
-        hasAiAccess: false,
-        features: ["Полноценный каталог", "Категории и вариации", "Скидки и акции", "Встроенная CRM", "Полная аналитика"],
-      });
-      console.log("Updated plan: Каталог");
-    }
-    
-    // Update "Старт" to correct structure
-    if (plan.name === "Старт" || plan.price === 0) {
-      await storage.updatePlan(plan.id, {
-        name: "Старт",
-        price: 0,
-        maxProducts: 20,
-        maxCategories: 5,
-        maxPromotions: 2,
-        maxDiscountRules: 3,
-        maxManagers: 0,
-        maxWahaInstances: 0,
-        aiMessagesLimit: 0,
-        hasAiAccess: false,
-        features: ["Каталог до 20 товаров", "Приём заявок в WhatsApp", "Публичная ссылка"],
-      });
-      console.log("Updated plan: Старт");
+      console.log("Migrated plan: PRO → Scale");
     }
   }
 }
 
 async function ensureDefaultPlans() {
-  // First migrate any old plans to new structure
   await migratePlansToNewStructure();
   
-  const existingPlans = await storage.getPlans();
+  const allPlans = await storage.getAllPlans();
   
-  // Check each required plan and create if missing
-  const hasStart = existingPlans.some(p => p.name === "Старт");
-  const hasCatalog = existingPlans.some(p => p.name === "Каталог");
-  const hasBusiness = existingPlans.some(p => p.name === "Business");
-  const hasPro = existingPlans.some(p => p.name === "PRO");
+  const hasFree = allPlans.some(p => p.name === "Free");
+  const hasStart = allPlans.some(p => p.name === "Start");
+  const hasBusiness = allPlans.some(p => p.name === "Business");
+  const hasScale = allPlans.some(p => p.name === "Scale");
   
-  if (!hasStart) {
+  if (!hasFree) {
     await storage.createPlan({
-      name: "Старт",
+      name: "Free",
       price: 0,
       currency: "KZT",
       periodDays: 365,
-      maxProducts: 20,
-      maxCategories: 5,
+      maxProducts: 100,
+      maxCategories: 10,
       maxPromotions: 2,
       maxDiscountRules: 3,
       maxManagers: 0,
       maxWahaInstances: 0,
       aiMessagesLimit: 0,
       hasAiAccess: false,
-      features: ["Каталог до 20 товаров", "Приём заявок в WhatsApp", "Публичная ссылка"],
+      features: ["Каталог до 100 товаров", "Приём заявок в WhatsApp", "Публичная ссылка"],
       isActive: true,
     });
-    console.log("Created plan: Старт");
+    console.log("Created plan: Free");
   }
   
-  if (!hasCatalog) {
+  if (!hasStart) {
     await storage.createPlan({
-      name: "Каталог",
-      price: 9990,
+      name: "Start",
+      price: 4990,
       currency: "KZT",
       periodDays: 30,
-      maxProducts: 1000,
-      maxCategories: 50,
+      maxProducts: 500,
+      maxCategories: 30,
       maxPromotions: 20,
       maxDiscountRules: 50,
       maxManagers: 2,
-      maxWahaInstances: 0,
-      aiMessagesLimit: 0,
-      hasAiAccess: false,
-      features: ["Полноценный каталог", "Категории и вариации", "Скидки и акции", "Встроенная CRM", "Полная аналитика"],
+      maxWahaInstances: 1,
+      aiMessagesLimit: 100,
+      hasAiAccess: true,
+      features: ["SmartCatalog", "AI-продавец (все функции)", "Раздел Рост", "1 канал подключения", "100 диалогов/мес"],
       isActive: true,
     });
-    console.log("Created plan: Каталог");
+    console.log("Created plan: Start");
   }
   
   if (!hasBusiness) {
@@ -314,16 +325,16 @@ async function ensureDefaultPlans() {
       maxWahaInstances: 1,
       aiMessagesLimit: 300,
       hasAiAccess: true,
-      features: ["Всё из Каталог", "AI-ассистент 24/7", "300 диалогов/мес", "Скрипты продаж + база знаний", "Передача менеджеру по триггерам"],
+      features: ["Все функции платформы", "AI-продавец", "Growth Engine", "Мультиканал (WhatsApp, Instagram, Telegram)", "Аналитика", "300 диалогов/мес"],
       isActive: true,
     });
     console.log("Created plan: Business");
   }
   
-  if (!hasPro) {
+  if (!hasScale) {
     await storage.createPlan({
-      name: "PRO",
-      price: 34990,
+      name: "Scale",
+      price: 29990,
       currency: "KZT",
       periodDays: 30,
       maxProducts: 5000,
@@ -332,12 +343,12 @@ async function ensureDefaultPlans() {
       maxDiscountRules: 200,
       maxManagers: 10,
       maxWahaInstances: 3,
-      aiMessagesLimit: 900,
+      aiMessagesLimit: 700,
       hasAiAccess: true,
-      features: ["Всё из Business", "900 диалогов/мес", "Приоритетная обработка диалогов", "Максимальная автоматизация продаж"],
+      features: ["Все функции", "Growth автоматизации", "Расширенная аналитика", "Приоритетная поддержка", "700 диалогов/мес"],
       isActive: true,
     });
-    console.log("Created plan: PRO");
+    console.log("Created plan: Scale");
   }
 }
 
@@ -507,9 +518,9 @@ async function ensureDemoTenant() {
   
   // Get the free plan
   const plans = await storage.getPlans();
-  const startPlan = plans.find(p => p.name === "Старт");
+  const startPlan = plans.find(p => p.name === "Free" || p.price === 0);
   if (!startPlan) {
-    console.log("Cannot create demo tenant: no Старт plan found");
+    console.log("Cannot create demo tenant: no Free plan found");
     return;
   }
   
@@ -1187,12 +1198,12 @@ export async function registerRoutes(
       const defaultPlan = await storage.getDefaultPlan();
       if (defaultPlan) {
         const endsAt = new Date();
-        endsAt.setDate(endsAt.getDate() + 14);
+        endsAt.setDate(endsAt.getDate() + 2);
         
         await storage.createSubscription({
           tenantId: tenant.id,
           planId: defaultPlan.id,
-          status: "active",
+          status: "trial",
           startsAt: new Date(),
           endsAt,
           gracePeriodDays: 3,
@@ -2529,6 +2540,11 @@ export async function registerRoutes(
       const plan = subscription.plan;
       const daysLeft = Math.ceil((new Date(subscription.endsAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
 
+      const aiDialogCount = plan?.aiMessagesLimit ? await storage.countAiDialogsThisMonth(req.user!.tenantId!) : 0;
+      const dialogLimit = plan?.aiMessagesLimit || 0;
+      const overageDialogs = Math.max(0, aiDialogCount - dialogLimit);
+      const overageCostKzt = overageDialogs * 50;
+
       res.json({
         subscription,
         usage: {
@@ -2537,9 +2553,14 @@ export async function registerRoutes(
           promotions: { current: promotions.length, limit: plan?.maxPromotions || 5 },
           discounts: { current: discounts.length, limit: plan?.maxDiscountRules || 10 },
           managers: { current: 1, limit: plan?.maxManagers || 1 },
-          aiMessages: { current: 0, limit: plan?.aiMessagesLimit || 100 },
+          aiMessages: { current: aiDialogCount, limit: dialogLimit },
         },
         daysLeft,
+        overage: {
+          dialogs: overageDialogs,
+          costPerDialog: 50,
+          totalCost: overageCostKzt,
+        },
       });
     } catch (error) {
       res.status(500).json({ message: "Ошибка получения биллинга" });

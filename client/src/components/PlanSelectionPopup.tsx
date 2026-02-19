@@ -52,11 +52,10 @@ export function PlanSelectionPopup({ open, onClose }: PlanSelectionPopupProps) {
     },
   });
 
-  // Match plans by name - order: Каталог, Business, PRO (same as landing page)
-  const catalogPlan = plans?.find((p) => p.name === "Каталог");
-  const businessPlan = plans?.find((p) => p.name === "Business" || p.name === "Бизнес");
-  const proPlan = plans?.find((p) => p.name === "PRO" || p.name === "Про");
-  const startPlan = plans?.find((p) => p.name === "Старт" || p.price === 0);
+  const startPlan = plans?.find((p) => p.name === "Start");
+  const businessPlan = plans?.find((p) => p.name === "Business");
+  const scalePlan = plans?.find((p) => p.name === "Scale");
+  const freePlan = plans?.find((p) => p.name === "Free" || p.price === 0);
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat("ru-KZ").format(price) + " ₸";
@@ -72,9 +71,9 @@ export function PlanSelectionPopup({ open, onClose }: PlanSelectionPopupProps) {
     }
   };
 
-  const handleActivateStart = () => {
-    if (startPlan) {
-      requestPlanMutation.mutate(startPlan.id);
+  const handleActivateFree = () => {
+    if (freePlan) {
+      requestPlanMutation.mutate(freePlan.id);
     }
   };
 
@@ -91,44 +90,45 @@ export function PlanSelectionPopup({ open, onClose }: PlanSelectionPopupProps) {
 
   const mainPlans = [
     {
-      plan: catalogPlan,
+      plan: startPlan,
       icon: Zap,
       color: "text-blue-500",
       bgColor: "bg-blue-500/10",
       features: [
-        "Полноценный каталог",
-        "Категории и вариации",
-        "Скидки и акции",
-        "Встроенная CRM",
-        "Полная аналитика",
+        "SmartCatalog",
+        "AI-продавец (все функции)",
+        "Раздел Рост",
+        "1 канал подключения",
+        "100 диалогов/мес",
       ],
-      noFeatures: ["AI-ассистент"],
+      noFeatures: [],
     },
     {
       plan: businessPlan,
       icon: Crown,
       color: "text-amber-500",
       bgColor: "bg-amber-500/10",
+      popular: true,
       features: [
-        "Всё из тарифа «Каталог»",
-        "AI-ассистент 24/7",
-        "До 300 диалогов/мес",
-        "Скрипты продаж + база знаний",
-        "Передача менеджеру по триггерам",
+        "Все функции платформы",
+        "AI-продавец + Growth Engine",
+        "Мультиканал (WA, IG, TG)",
+        "Аналитика",
+        "300 диалогов/мес",
       ],
       noFeatures: [],
     },
     {
-      plan: proPlan,
+      plan: scalePlan,
       icon: Rocket,
       color: "text-purple-500",
       bgColor: "bg-purple-500/10",
-      popular: true,
       features: [
-        "Всё из Business",
-        "До 900 диалогов/мес",
-        "Приоритетная обработка диалогов",
-        "Максимальная автоматизация продаж",
+        "Все функции",
+        "Growth автоматизации",
+        "Расширенная аналитика",
+        "Приоритетная поддержка",
+        "700 диалогов/мес",
       ],
       noFeatures: [],
     },
@@ -275,17 +275,17 @@ export function PlanSelectionPopup({ open, onClose }: PlanSelectionPopupProps) {
                 <Star className="h-5 w-5 text-muted-foreground" />
               </div>
               <div>
-                <h4 className="font-medium">Старт</h4>
+                <h4 className="font-medium">Free</h4>
                 <p className="text-sm text-muted-foreground">
-                  Бесплатно — до 20 товаров, базовый каталог
+                  Бесплатно — до 100 товаров, базовый каталог
                 </p>
               </div>
             </div>
             <Button
               variant="outline"
-              onClick={handleActivateStart}
+              onClick={handleActivateFree}
               disabled={requestPlanMutation.isPending}
-              data-testid="button-activate-start"
+              data-testid="button-activate-free"
             >
               Активировать
             </Button>

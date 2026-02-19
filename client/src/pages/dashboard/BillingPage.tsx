@@ -27,6 +27,11 @@ interface BillingData {
     aiMessages: { current: number; limit: number };
   };
   daysLeft: number;
+  overage?: {
+    dialogs: number;
+    costPerDialog: number;
+    totalCost: number;
+  };
 }
 
 function UsageBar({
@@ -88,6 +93,9 @@ export default function BillingPage() {
   };
 
   const getStatusBadge = (status: string, daysLeft: number) => {
+    if (status === "trial") {
+      return { label: `Пробный (${daysLeft > 0 ? daysLeft + " дн." : "истёк"})`, variant: "secondary" as const, icon: Clock };
+    }
     if (status === "active" && daysLeft > 7) {
       return { label: "Активна", variant: "default" as const, icon: CheckCircle2 };
     }
@@ -216,11 +224,21 @@ export default function BillingPage() {
                       current={billing.usage.managers.current}
                       limit={billing.usage.managers.limit}
                     />
-                    <UsageBar
-                      label="AI-сообщения (в месяц)"
-                      current={billing.usage.aiMessages.current}
-                      limit={billing.usage.aiMessages.limit}
-                    />
+                    {billing.usage.aiMessages.limit > 0 && (
+                      <>
+                        <UsageBar
+                          label="Диалоги AI (в месяц)"
+                          current={billing.usage.aiMessages.current}
+                          limit={billing.usage.aiMessages.limit}
+                        />
+                        {billing.usage.aiMessages.current > billing.usage.aiMessages.limit && (
+                          <div className="text-xs text-orange-500 flex items-center justify-between gap-2">
+                            <span>Сверх лимита: {billing.usage.aiMessages.current - billing.usage.aiMessages.limit} диалогов</span>
+                            <span className="font-medium">{new Intl.NumberFormat("ru-KZ").format((billing.usage.aiMessages.current - billing.usage.aiMessages.limit) * 50)} ₸</span>
+                          </div>
+                        )}
+                      </>
+                    )}
                   </CardContent>
                 </Card>
               </motion.div>
@@ -243,8 +261,9 @@ export default function BillingPage() {
                         `${new Intl.NumberFormat("ru-RU").format(plan.maxProducts)} товаров`,
                         `${new Intl.NumberFormat("ru-RU").format(plan.maxCategories)} категорий`,
                         plan.aiMessagesLimit > 0 
-                          ? `${new Intl.NumberFormat("ru-RU").format(plan.aiMessagesLimit)} AI-сообщ.`
+                          ? `${new Intl.NumberFormat("ru-RU").format(plan.aiMessagesLimit)} диалогов/мес`
                           : null,
+                        plan.hasAiAccess ? "AI-продавец" : null,
                       ].filter(Boolean) as string[];
 
                       return (
