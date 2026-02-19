@@ -4,7 +4,7 @@ import { eq, and, desc, sql, count } from "drizzle-orm";
 import {
   aiTriggers, aiAntiPatterns, aiTrainingEvents,
   knowledgeItems, trainingItems, products, categories,
-  tenants, aiSettings, aiTestingMessages,
+  tenants, aiSettings, aiTestingMessages, discounts, promotions,
 } from "@shared/schema";
 import { generateAiResponse } from "./services/openai";
 import OpenAI from "openai";
@@ -596,6 +596,31 @@ export function registerAiTrainingRoutes(
       const aiResult = await generateAiResponse(userText.trim(), [], context);
       const currentResponse = aiResult.content;
 
+      const activeDiscounts = await db.select().from(discounts)
+        .where(and(eq(discounts.tenantId, tenantId), eq(discounts.isActive, true)))
+        .limit(10);
+      const activePromotions = await db.select().from(promotions)
+        .where(and(eq(promotions.tenantId, tenantId), eq(promotions.isActive, true)))
+        .limit(10);
+
+      let installmentEnabled = false;
+      try {
+        const bpRes = await pool.query(
+          `SELECT installment_enabled FROM business_profiles WHERE tenant_id = $1 LIMIT 1`,
+          [tenantId]
+        );
+        installmentEnabled = bpRes.rows?.[0]?.installment_enabled === true;
+      } catch {}
+
+      const solutionHints: string[] = [];
+      if (installmentEnabled) solutionHints.push("рассрочка");
+      if (activeDiscounts.length > 0 || activePromotions.length > 0) solutionHints.push("скидки/акции");
+      solutionHints.push("гарантии");
+
+      const solutionsLine = solutionHints.length > 0
+        ? `- Предлагает конкретные решения (${solutionHints.join(", ")})`
+        : `- Предлагает конкретные решения (гарантии, удобство покупки)`;
+
       const improveCompletion = await openaiClient.chat.completions.create({
         model: "gpt-4o-mini",
         temperature: 0.7,
@@ -608,9 +633,10 @@ export function registerAiTrainingRoutes(
 Твоя задача — написать УЛУЧШЕННЫЙ вариант ответа, который:
 - Более убедительный и продающий
 - Лучше обрабатывает возражения клиента
-- Предлагает конкретные решения (рассрочка, скидки, гарантии)
+${solutionsLine}
 - Задаёт уточняющий вопрос для продолжения диалога
 - Сохраняет дружелюбный тон
+- НЕ выдумывай акции, скидки, рассрочки или бонусы, которых нет — предлагай ТОЛЬКО реально существующие
 
 Напиши ТОЛЬКО улучшенный ответ, без пояснений и комментариев.`,
           },
