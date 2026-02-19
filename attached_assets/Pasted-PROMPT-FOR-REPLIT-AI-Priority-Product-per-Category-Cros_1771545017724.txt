@@ -1,0 +1,142 @@
+PROMPT FOR REPLIT — AI Priority Product per Category + Cross-sell (manual) in Products section
+
+Context:
+SmartCatalog (Botfactory) SaaS. React 18 + TypeScript + Vite + Tailwind + shadcn/ui (frontend). Node/Express + TypeScript, Postgres + Drizzle (backend).
+There is a Products section with product cards and existing visible tags for catalog. We need AI-only controls (not visible to end customers) that influence AI seller behavior.
+
+GOAL (MVP, no overengineering):
+
+1. Allow user to choose ONE priority product per category (1 category = 1 priority).
+2. Allow user to set up to 3 cross-sell products for each product (manual selection).
+3. During AI dialogue, when the main product is selected/confirmed, AI should recommend exactly 2 cross-sell items (chosen from the manually configured list). If fewer than 2 configured, recommend what exists (1 or none).
+4. Cross-sell is BEFORE purchase/checkout (pre-sale), not after.
+5. No auto-generated recommendations, no confidence score, no analytics in this iteration.
+
+CRITICAL RULES:
+
+* These AI tags/settings must NOT be shown to end customers in the catalog UI.
+* Only visible in admin platform (Products section).
+* Do not break existing product tags and product card layout; add a new “AI продажи” block in product edit/drawer/modal.
+* Keep changes minimal and production-ready.
+
+====================================================
+
+1. UI/UX REQUIREMENTS (Products section)
+   ====================================================
+
+A) In Product Edit UI (drawer/modal/page), add a new block:
+
+Block title: “AI продажи”
+Subtitle (small): “Эти настройки видны только вам и влияют на то, что AI предлагает клиентам.”
+
+1. Priority toggle:
+   Label: “⭐ Приоритетный товар в категории”
+   Helper text:
+   “В каждой категории можно выбрать только один приоритетный товар. AI будет предлагать его в первую очередь.”
+
+Behavior:
+
+* If user turns ON this toggle for a product, the system must set this product as the category priority.
+* If another product in the same category is already priority, show confirm dialog:
+  Title: “Заменить приоритетный товар?”
+  Body: “В категории уже выбран приоритетный товар. Заменить его на этот?”
+  Actions: “Заменить” / “Отмена”
+* If confirmed, previous priority is unset automatically.
+
+2. Cross-sell selector:
+   Section title: “Сопутствующие товары”
+   Helper text:
+   “AI предложит клиенту 2 товара из списка до оформления заказа. Выберите до 3 товаров.”
+
+Control:
+
+* Multi-select product picker limited to max 3 items.
+* Show selected items as chips with remove (x).
+* If user tries to add 4th item, show inline error:
+  “Можно выбрать максимум 3 товара.”
+
+IMPORTANT:
+
+* Do NOT use the words “upsell/cross-sell” in UI. Only “Сопутствующие товары”.
+
+====================================================
+2) BACKEND / DATABASE (minimal schema)
+======================================
+
+A) Category priority (one per category):
+Create table (or Drizzle schema) e.g. category_ai_priority:
+
+* tenantId (FK)
+* categoryId (FK)
+* productId (FK)  // priority product
+* updatedAt
+
+Constraints:
+
+* Unique (tenantId, categoryId) so only one priority per category.
+* When setting a new priority for a category, upsert by (tenantId, categoryId).
+
+Endpoints:
+
+* GET priority for category (optional)
+* POST/PUT set priority (categoryId, productId)
+* DELETE unset priority (optional)
+
+B) Cross-sell relationships (up to 3 per product):
+Create table e.g. product_cross_sell:
+
+* tenantId
+* productId
+* relatedProductId
+* createdAt
+
+Constraints:
+
+* Unique (tenantId, productId, relatedProductId)
+* Enforce max 3 related items per (tenantId, productId) at API level.
+
+Endpoints:
+
+* GET cross-sell list for product
+* PUT set cross-sell list (replace with new array up to 3)
+
+====================================================
+3) AI BEHAVIOR (integration points)
+===================================
+
+A) Priority usage:
+When AI needs to propose a product within a category (user asks generic like “худи”):
+
+* Check if category has priority product for this tenant.
+* If yes, prefer it as the first recommended option (without being pushy; still respectful).
+
+B) Cross-sell usage:
+When user has effectively selected/confirmed the main product (stage: product selected / ready-to-buy):
+
+* Fetch configured cross-sell items for that product.
+* AI must recommend EXACTLY 2 items (if available), otherwise 1 or none.
+* AI phrasing should be short, natural:
+  “Часто берут вместе: 1) … 2) … Хотите добавить к заказу?”
+* Cross-sell happens BEFORE payment/checkout.
+
+Selection rules:
+
+* If 3 items configured, pick top 2 deterministically (e.g. first two by order saved) to avoid randomness.
+* Do not recommend more than 2 in a single message.
+* Do not loop endlessly; ask once, if user says “нет” then stop pushing.
+
+====================================================
+4) ACCEPTANCE CRITERIA
+======================
+
+1. In Products UI, user can set priority for product and it enforces 1-per-category with confirm replace.
+2. User can select up to 3 cross-sell items, cannot exceed 3.
+3. These settings are NOT visible in customer catalog product card.
+4. AI:
+
+* uses category priority when user asks generic category request
+* recommends exactly 2 cross-sells before purchase when main product chosen
+
+5. Provide code diff + file list changed.
+
+Start by implementing DB schemas + API, then wire UI controls in product edit screen, then integrate with AI prompt/context builder.
