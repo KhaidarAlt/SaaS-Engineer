@@ -4845,18 +4845,21 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
         await storage.updateWahaInstance(instance.id, instance.tenantId, { status: newStatus });
       }
       
-      // Handle incoming messages (only process "message" event to avoid duplicates, 
-      // WAHA sends both "message" and "message.any" for the same message)
+      if (event === "message" || event === "message.ack") {
+        const { acceptInboundWahaWebhook } = await import("./messaging/core");
+        acceptInboundWahaWebhook(instance.tenantId, { event, session, payload }).catch(err => {
+          console.error("[WAHA] Canonical ingest error (non-fatal):", err);
+        });
+      }
+
       if (event === "message") {
         const from = payload?.from;
         const text = payload?.body;
         const fromMe = payload?.fromMe;
         
-        // Only process incoming messages (not our own)
         if (from && text && !fromMe) {
           console.log(`[WAHA] Message from ${from}: ${text}`);
           
-          // Process message async to not block webhook response
           processIncomingWhatsAppMessage(instance, from, text).catch(err => {
             console.error("[WAHA] Error processing message:", err);
           });
@@ -5066,23 +5069,35 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
         await new Promise(resolve => setTimeout(resolve, typingDelay * 1000));
       }
       
-      // Send response via WAHA
-      const chatId = from.includes("@") ? from : `${from}@c.us`;
-      await wahaService.sendTextMessage(instance.instanceName, chatId, aiResult.content);
-      
-      console.log(`[WAHA] Sent response to ${chatId}`);
+      const { sendMessage: coreSendMessage } = await import("./messaging/core");
+      const sendResult = await coreSendMessage({
+        tenantId,
+        channel: "whatsapp",
+        provider: "waha",
+        fromAddress: instance.instanceName,
+        toAddress: customerPhone,
+        messageType: "text",
+        content: { text: aiResult.content, wahaSession: instance.instanceName },
+        meta: { isAiReply: true },
+        skipPolicyCheck: true,
+      });
+      console.log(`[WAHA] Enqueued AI reply to ${customerPhone} (msgId=${sendResult.messageId})`);
       
     } catch (error) {
       console.error("[WAHA] Error generating/sending AI response:", error);
       
-      // Try to send fallback message
       try {
-        const chatId = from.includes("@") ? from : `${from}@c.us`;
-        await wahaService.sendTextMessage(
-          instance.instanceName, 
-          chatId, 
-          "Извините, произошла ошибка. Пожалуйста, попробуйте позже или свяжитесь с нами напрямую."
-        );
+        const { sendMessage: fallbackCoreSend } = await import("./messaging/core");
+        await fallbackCoreSend({
+          tenantId,
+          channel: "whatsapp",
+          provider: "waha",
+          fromAddress: instance.instanceName,
+          toAddress: customerPhone,
+          messageType: "text",
+          content: { text: "Извините, произошла ошибка. Пожалуйста, попробуйте позже или свяжитесь с нами напрямую.", wahaSession: instance.instanceName },
+          skipPolicyCheck: true,
+        });
       } catch (sendError) {
         console.error("[WAHA] Error sending fallback message:", sendError);
       }

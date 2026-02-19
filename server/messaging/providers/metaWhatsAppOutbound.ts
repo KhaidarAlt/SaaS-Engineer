@@ -1,23 +1,9 @@
 import { db } from "../../db";
 import { eq, and } from "drizzle-orm";
 import { waCloudIntegrations, waCloudPhoneNumbers } from "@shared/schema";
+import type { NormalizedOutbound, ProviderSendResult } from "../types";
 
-export interface NormalizedOutbound {
-  tenantId: string;
-  channel: string;
-  provider: string;
-  toAddress: string;
-  messageType: string;
-  content: Record<string, unknown>;
-}
-
-export interface ProviderSendResult {
-  success: boolean;
-  providerMessageId?: string;
-  error?: string;
-  errorCode?: string;
-  retryable: boolean;
-}
+export type { NormalizedOutbound, ProviderSendResult };
 
 const META_GRAPH_API_URL = "https://graph.facebook.com/v18.0";
 

@@ -1,26 +1,11 @@
 import crypto from "crypto";
+import type {
+  NormalizedInboundMessage,
+  NormalizedStatusUpdate,
+  IngestResult,
+} from "../types";
 
-export interface NormalizedInboundMessage {
-  channel: "whatsapp_cloud";
-  provider: "meta";
-  direction: "inbound";
-  fromAddress: string;
-  toAddress: string;
-  messageType: string;
-  content: Record<string, unknown>;
-  providerMessageId: string;
-  providerTimestamp: Date;
-  contactName?: string;
-  meta?: Record<string, unknown>;
-}
-
-export interface NormalizedStatusUpdate {
-  providerMessageId: string;
-  status: string;
-  recipientId: string;
-  timestamp: Date;
-  meta?: Record<string, unknown>;
-}
+export type { NormalizedInboundMessage, NormalizedStatusUpdate };
 
 export interface MetaWebhookPayload {
   object?: string;
@@ -68,11 +53,7 @@ export interface MetaWebhookPayload {
   }>;
 }
 
-export interface IngestResult {
-  messages: NormalizedInboundMessage[];
-  statuses: NormalizedStatusUpdate[];
-  phoneNumberId: string;
-}
+export type { IngestResult };
 
 function extractContent(msg: MetaWebhookPayload["entry"][0]["changes"][0]["value"]["messages"][0]): {
   messageType: string;

@@ -8,13 +8,17 @@ import {
   smartContactSettings,
   type InsertMessagingMessage,
 } from "@shared/schema";
+import type { NormalizedInboundMessage, NormalizedStatusUpdate } from "./types";
 import {
-  ingestWebhook,
+  ingestWebhook as ingestMetaWebhook,
   computeDedupKey,
   type MetaWebhookPayload,
-  type NormalizedInboundMessage,
-  type NormalizedStatusUpdate,
 } from "./providers/metaWhatsAppAdapter";
+import {
+  ingestWebhook as ingestWahaWebhook,
+  computeDedupKey as wahaComputeDedupKey,
+  type WahaWebhookPayload,
+} from "./providers/wahaWhatsAppAdapter";
 
 async function resolveDialog(
   tenantId: string,
@@ -40,11 +44,16 @@ async function resolveDialog(
     return existing[0].id;
   }
 
+  const sourceMap: Record<string, string> = {
+    whatsapp_cloud: "WHATSAPP_CLOUD",
+    whatsapp: "WHATSAPP",
+  };
+
   const [newDialog] = await db
     .insert(aiDialogs)
     .values({
       tenantId,
-      source: "WHATSAPP_CLOUD",
+      source: sourceMap[channel] || channel.toUpperCase(),
       channel: channel.toUpperCase(),
       externalThreadId: threadId,
       status: "OPEN",
@@ -116,7 +125,7 @@ export async function acceptInboundMetaWebhook(
   tenantId: string,
   payload: MetaWebhookPayload
 ): Promise<ProcessedInboundResult> {
-  const chunks = ingestWebhook(payload);
+  const chunks = ingestMetaWebhook(payload);
   const result: ProcessedInboundResult = {
     stored: [],
     duplicates: [],
@@ -177,6 +186,75 @@ export async function acceptInboundMetaWebhook(
         `[Messaging] Status update: ${s.providerMessageId} → ${s.status}`
       );
     }
+  }
+
+  return result;
+}
+
+export async function acceptInboundWahaWebhook(
+  tenantId: string,
+  payload: WahaWebhookPayload
+): Promise<ProcessedInboundResult> {
+  const chunk = ingestWahaWebhook(payload);
+  return acceptInboundNormalized(tenantId, chunk.messages, chunk.statuses);
+}
+
+export async function acceptInboundNormalized(
+  tenantId: string,
+  messages: NormalizedInboundMessage[],
+  statuses: NormalizedStatusUpdate[] = []
+): Promise<ProcessedInboundResult> {
+  const result: ProcessedInboundResult = {
+    stored: [],
+    duplicates: [],
+    statuses: [],
+  };
+
+  for (const msg of messages) {
+    const dedupKey = computeDedupKey(msg.provider, msg.providerMessageId);
+
+    const dialogId = await resolveDialog(
+      tenantId,
+      msg.fromAddress,
+      msg.channel
+    );
+
+    const messageId = await storeMessageAtomic(
+      {
+        tenantId,
+        dialogId,
+        direction: msg.direction,
+        channel: msg.channel,
+        provider: msg.provider,
+        fromAddress: msg.fromAddress,
+        toAddress: msg.toAddress,
+        messageType: msg.messageType,
+        content: msg.content,
+        providerMessageId: msg.providerMessageId,
+        providerTimestamp: msg.providerTimestamp,
+        status: "received",
+        meta: msg.meta,
+        receivedAt: new Date(),
+      },
+      dedupKey
+    );
+
+    if (messageId === null) {
+      result.duplicates.push(msg.providerMessageId);
+      console.log(`[Messaging] Duplicate skipped: ${msg.providerMessageId}`);
+      continue;
+    }
+
+    await updateDialogActivity(dialogId);
+    result.stored.push({ messageId, dialogId, normalized: msg });
+    console.log(
+      `[Messaging] Stored message ${messageId} from ${msg.fromAddress} → dialog ${dialogId} (${msg.channel}/${msg.provider})`
+    );
+  }
+
+  result.statuses.push(...statuses);
+  for (const s of statuses) {
+    console.log(`[Messaging] Status update: ${s.providerMessageId} → ${s.status}`);
   }
 
   return result;

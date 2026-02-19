@@ -5,10 +5,8 @@ import {
   messagingMessages,
   messagingDeliveries,
 } from "@shared/schema";
-import {
-  sendOutbound,
-  type NormalizedOutbound,
-} from "./providers/metaWhatsAppOutbound";
+import { dispatchOutbound } from "./providers/registry";
+import type { NormalizedOutbound } from "./types";
 
 const BATCH_SIZE = 10;
 const POLL_INTERVAL_MS = 3000;
@@ -113,7 +111,7 @@ async function processJob(job: Awaited<ReturnType<typeof pickBatch>>[0]): Promis
     content: job.content,
   };
 
-  const result = await sendOutbound(outboundReq);
+  const result = await dispatchOutbound(outboundReq);
   const durationMs = Date.now() - startMs;
 
   await db.insert(messagingDeliveries).values({

@@ -193,8 +193,22 @@ async function sendMessage(params: SendMessageParams): Promise<SendResult> {
 
   try {
     if (channel === "WHATSAPP" && provider === "META") {
-      console.log(`[MessagingProvider] META WhatsApp — шаблоны не настроены, tenantId=${tenantId}, to=${to}`);
-      return { status: "NEEDS_ACTION", error: "Нужны шаблоны Meta" };
+      const { sendMessage: coreSendMessage } = await import("../messaging/core");
+      const coreResult = await coreSendMessage({
+        tenantId,
+        channel: "whatsapp_cloud",
+        provider: "meta",
+        fromAddress: "",
+        toAddress: to.replace(/\D/g, ""),
+        messageType: "text",
+        content: { text },
+        meta: params.meta,
+      });
+
+      if (!coreResult.success) {
+        return { status: "FAILED", error: coreResult.failReason || "Не удалось отправить" };
+      }
+      return { providerMessageId: coreResult.messageId, status: "SENT" };
     }
 
     if (channel === "WHATSAPP" && provider === "WAHA") {
@@ -207,9 +221,22 @@ async function sendMessage(params: SendMessageParams): Promise<SendResult> {
         return { status: "FAILED", error: "WAHA инстанс не найден" };
       }
 
-      const chatId = to.includes("@") ? to : `${to.replace(/\D/g, "")}@c.us`;
-      const result = await wahaService.sendTextMessage(instance.instanceName, chatId, text);
-      return { providerMessageId: result?.id, status: "SENT" };
+      const { sendMessage: coreSendMessage } = await import("../messaging/core");
+      const coreResult = await coreSendMessage({
+        tenantId,
+        channel: "whatsapp",
+        provider: "waha",
+        fromAddress: instance.instanceName,
+        toAddress: to.replace(/\D/g, ""),
+        messageType: "text",
+        content: { text, wahaSession: instance.instanceName },
+        meta: params.meta,
+      });
+
+      if (!coreResult.success) {
+        return { status: "FAILED", error: coreResult.failReason || "Не удалось отправить" };
+      }
+      return { providerMessageId: coreResult.messageId, status: "SENT" };
     }
 
     if (channel === "TELEGRAM") {
