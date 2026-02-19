@@ -1,0 +1,209 @@
+PROMPT FOR REPLIT — FINAL Pricing + Psychological Triggers + FAQ
+
+You are working on the existing SmartCatalog (Botfactory) SaaS project.
+
+Stack:
+React 18 + TypeScript + Vite + Tailwind + shadcn/ui.
+
+IMPORTANT:
+Do NOT redesign the entire website. Only improve the Pricing section and add a high-conversion FAQ block directly below it.
+
+The goal is to increase conversion, trust, and perceived ROI for SMB businesses in Kazakhstan.
+
+====================================================
+
+1. POSITIONING (VERY IMPORTANT)
+   ====================================================
+
+This is NOT a chatbot, NOT a catalog builder.
+SmartCatalog is positioned as:
+
+“AI-продавец, который увеличивает продажи и возвращает клиентов”.
+
+The pricing block must communicate:
+– growth
+– profit
+– fast ROI
+– low risk.
+
+A. Section title:
+
+“Тарифы SmartCatalog”
+
+Subtitle:
+“AI-продавец, который увеличивает продажи в WhatsApp, Instagram и Telegram”
+
+Small trust line:
+“Большинство клиентов получают первые заявки уже в первые недели”.
+
+Add the following:
+
+✔ Scarcity:
+– Start plan: “Цена фиксируется навсегда только для первых 50 компаний”.
+– Dynamic counter: “Осталось X мест”.
+
+✔ Anchor effect:
+– Show crossed price 9990 and current 4990.
+– Add small text: “Экономия более 60 000 ₸ в год”.
+
+✔ ROI message under pricing:
+“Даже один возвращённый клиент окупает тариф”.
+
+✔ Risk reversal:
+“Попробуйте бесплатно 2 дня. Без карты”.
+
+✔ Ownership:
+Use wording like:
+“Ваш AI-продавец”.
+
+✔ Social proof placeholder:
+“Уже используют магазины техники, одежды и доставки”.
+
+Cards must be:
+– modern
+– mobile-first
+– responsive
+– premium style
+– subtle animation
+– Business highlighted.
+
+Show:
+
+9990 ₸ (crossed)
+4990 ₸
+
+Badge:
+“Ранняя цена для первых 50 клиентов”
+
+Small scarcity text:
+“Цена фиксируется навсегда”.
+
+Short description:
+“Запустите AI-продажи и получите первые заказы”.
+
+Included:
+– SmartCatalog
+– Ваш AI-продавец (все функции)
+– Раздел Рост
+– 1 канал подключения
+– 100 диалогов в месяц
+
+Trial line:
+“Попробуйте бесплатно 2 дня”.
+
+Extra note:
+“50 тенге за диалог сверх лимита”.
+
+CTA:
+“Начать бесплатно”.
+
+Price:
+19990 ₸
+
+Badge:
+“Самый популярный”.
+
+Short description:
+“Полноценная система AI-продаж для роста бизнеса”.
+
+Included:
+– Все функции платформы
+– AI-продавец
+– Growth Engine
+– Мультиканал
+– Аналитика
+– 300 диалогов в месяц
+
+Trial:
+“Попробуйте бесплатно 2 дня”.
+
+Extra:
+“50 тенге за диалог сверх лимита”.
+
+CTA:
+“Запустить рост”.
+
+Price:
+29990 ₸
+
+Short description:
+“Для компаний, которые масштабируют продажи”.
+
+Included:
+– Все функции
+– Growth автоматизации
+– Расширенная аналитика
+– Приоритетная поддержка
+– 700 диалогов в месяц
+
+Trial:
+“Попробуйте бесплатно 2 дня”.
+
+Extra:
+“50 тенге за диалог сверх лимита”.
+
+CTA:
+“Масштабировать”.
+
+– Smooth hover.
+– Highlight Business.
+– Clear visual hierarchy.
+– Clean spacing.
+– Strong CTA contrast.
+– Responsive mobile layout.
+– Micro-animations.
+– Fast performance.
+
+Add a short ROI block:
+
+Title:
+“Сколько вы теряете сейчас?”
+
+Example:
+“500 клиентов в базе → 5% возврата → +1 250 000 ₸ выручки”.
+
+Small note:
+“SmartCatalog помогает вернуть клиентов и увеличить средний чек”.
+
+This section must be placed immediately under pricing.
+
+Accordion style.
+
+1. Смогу ли я подключить всё сам? Это сложно?
+   Нет. Большинство клиентов запускают SmartCatalog самостоятельно за 30–60 минут. Есть пошаговые инструкции, видео и встроенные подсказки. При необходимости наша команда поможет.
+
+2. Я уже пытался подключить официальный WhatsApp, но не получилось. Вы поможете?
+   Да. Мы сопровождаем процесс: верификация Meta, настройка шаблонов и корректное подключение.
+
+3. Что такое диалоги?
+   Диалог — это переписка клиента с вашим AI-продавцом. Один диалог может включать десятки сообщений.
+
+4. Мне может не хватить диалогов. Что делать?
+   Вы можете просто оплачивать дополнительные диалоги: 50 ₸ за диалог сверх лимита.
+
+5. Я уже пробовал AI-ботов, качество было слабым. Чем вы отличаетесь?
+   SmartCatalog обучается под ваш бизнес, товары и стиль общения. Наша цель — продажи, а не ответы.
+
+6. Это безопасно для WhatsApp?
+   Да. Мы используем официальный API и безопасные сценарии.
+
+7. Когда я увижу первые результаты?
+   Большинство клиентов получают первые заявки уже в первые 1–2 недели из вашей базы холодных клиентов. И в день подключения ваш AI продавец начнет обрабатывать входящий трафик с конверсией в продажу в 15-20% и более 60% после адаптации и обучения  
+
+8. Что если у меня маленькая база?
+   SmartCatalog также поможет максимально эффективно реанимировать вашу базу клиентов
+
+9. Нужно ли менять CRM?
+   На нашей платформе, уже есть встроенная CRM система. Но, если Вам удобнее работать в amoCRM или Bitrix24, мы реализовали интеграцию с данными сервисами
+
+10. Можно ли отменить подписку?
+    Да, в любой момент.
+
+– Conversion-focused design.
+– Strong psychological triggers.
+– Clear value.
+– Mobile optimized.
+– High trust.
+– FAQ directly under pricing.
+
+Show code diff and final component structure.
