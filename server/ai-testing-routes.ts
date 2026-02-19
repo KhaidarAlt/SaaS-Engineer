@@ -132,6 +132,22 @@ async function buildTenantContext(tenantId: string, pool: any, storage: any) {
   const activeAntiPatterns = await db.select().from(aiAntiPatterns)
     .where(and(eq(aiAntiPatterns.tenantId, tenantId), eq(aiAntiPatterns.isActive, true)));
 
+  let paymentOptions: any = undefined;
+  try {
+    const kaspiRes = await pool.query(
+      `SELECT status, kaspi_pay_link, auto_generate_invoice FROM kaspi_integrations WHERE tenant_id = $1 LIMIT 1`,
+      [tenantId]
+    );
+    const kaspi = kaspiRes.rows?.[0];
+    if (kaspi && (kaspi.status === "connected" || kaspi.kaspi_pay_link)) {
+      paymentOptions = {
+        kaspiEnabled: true,
+        autoInvoice: kaspi.auto_generate_invoice || false,
+        kaspiPayLink: kaspi.kaspi_pay_link || undefined,
+      };
+    }
+  } catch {}
+
   const context: any = {
     storeName: tenant.name,
     slug: tenant.slug,
@@ -151,6 +167,7 @@ async function buildTenantContext(tenantId: string, pool: any, storage: any) {
     goal: settings.goal || "CLOSE_DEAL",
     aiLanguages: tenant.aiLanguages || ["ru"],
     aiSystemPrompt: settings.systemPromptCustom || undefined,
+    paymentOptions,
   };
 
   return context;
