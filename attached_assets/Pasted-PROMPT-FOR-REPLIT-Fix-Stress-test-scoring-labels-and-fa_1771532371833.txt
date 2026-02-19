@@ -1,0 +1,161 @@
+PROMPT FOR REPLIT — Fix “Stress-test” scoring, labels, and failure details (AI-продавец тестирование)
+
+Context:
+SmartCatalog (Botfactory) SaaS. React 18 + TypeScript + Vite (frontend), Node/Express + TypeScript (backend), Postgres + Drizzle. There is a “Стресс-тест” UI that runs 10 scenarios to evaluate AI-продавца. Current issues:
+
+* The large green percentage shows 90–100% and looks like “success”, even while rows show “Провал”.
+* Scenario names/labels are empty.
+* Clicking “Провал” (or expanding) leads to an empty page / blank route.
+* There is no explanation: which scenarios failed and why.
+
+GOAL:
+Make the stress-test transparent, correct, and non-misleading.
+Percent must clearly mean “PASS RATE”, and completion must be displayed separately.
+
+CRITICAL RULES:
+
+* Do NOT redesign unrelated sections.
+* Keep existing database and testing logic, but fix pass/fail evaluation if it’s incorrect.
+* No new pages/routing for “Провал”; details must expand inline (accordion) within the list.
+* If any field is missing, fix the backend response to include it (don’t leave UI empty).
+* Provide code diffs and exact file names changed.
+
+========================================================
+
+1. DEFINE THE METRICS (USER-FACING)
+   ========================================================
+
+A) PASS RATE (main big metric)
+
+* Definition: passedScenarios / totalScenarios * 100
+* This is the ONLY number shown in the big center percentage.
+* Label text under it must be: “Прошло успешно”
+* Color rules:
+
+  * Green: >= 80%
+  * Yellow: 50–79%
+  * Red: < 50%
+
+B) COMPLETION (separate small metric)
+
+* Definition: completedScenarios / totalScenarios
+* Show as small text under the big metric, e.g.:
+  “Выполнено: 10/10”
+  This prevents confusion when all scenarios were executed but failed.
+
+C) Summary line at bottom:
+
+* “Пройдено: X/10 • Провалено: Y/10 • Выполнено: Z/10”
+
+========================================================
+2) FIX THE PASS/FAIL EVALUATION BUG (IF PRESENT)
+================================================
+
+Currently, seeing 100% with all failures suggests one of:
+
+* frontend mistakenly uses completed/total instead of passed/total
+* backend incorrectly marks failed scenarios as passed
+* default “passed=true” when parsing results
+* inverted logic
+
+Tasks:
+
+* Trace the source of:
+
+  * overallScore / percentage displayed
+  * per-scenario status
+* Ensure:
+
+  * per-scenario status is authoritative (PASS/FAIL)
+  * passCount is derived from scenario statuses, not from “completed”
+* If all scenarios are FAIL, pass rate MUST be 0%, not 100%.
+
+========================================================
+3) REQUIREMENTS FOR SCENARIO DATA (NO EMPTY ROWS)
+=================================================
+
+Each of 10 scenarios must have these fields (backend response):
+
+* scenarioId (stable id)
+* scenarioName (non-empty human-readable title)
+* status: "PASS" | "FAIL"
+* checks: array of check results (can be empty if not implemented)
+* failureReason: short string (required if FAIL)
+* recommendations: array of strings (required if FAIL)
+* evidence: optional object with:
+
+  * userMessage
+  * aiResponseExcerpt (trimmed)
+  * expectedBehavior (short)
+
+If scenarioName is currently empty:
+
+* Add scenario definitions on backend (or where scenarios are configured) and always return names.
+* Frontend must display scenarioName in the row.
+
+========================================================
+4) INLINE EXPAND (NO NAVIGATION / NO EMPTY PAGE)
+================================================
+
+Current bug: clicking “Провал” sends user to an empty page.
+Fix:
+
+* Replace any Link/router navigation with inline expand/collapse.
+* Clicking the chevron expands the row.
+* Expanded content shows:
+
+  * “Почему провалено” (failureReason)
+  * “Что исправить” (recommendations as bullet list)
+  * “Доказательство” (optional evidence block, collapsed by default)
+
+No route changes should happen from this list.
+
+========================================================
+5) UI COPY (CLARITY)
+====================
+
+Replace ambiguous labels:
+
+* Big label: “Прошло успешно”
+* Small: “Выполнено: X/10”
+* Per-row badge:
+
+  * PASS → “Успешно”
+  * FAIL → “Провал”
+* Add tiny tooltip near “Диалоги/сценарии”:
+  “Сценарий считается успешным, если AI соблюдает правила и достигает цели.”
+
+========================================================
+6) ACCEPTANCE CRITERIA (MUST DEMONSTRATE)
+=========================================
+
+1. If all 10 scenarios FAIL:
+
+* Big percent shows 0% (red)
+* “Выполнено: 10/10”
+* Rows show 10 failures with scenario names
+* Expanding shows failureReason + recommendations (not blank)
+
+2. If 9 PASS and 1 FAIL:
+
+* Big percent shows 90% (green)
+* Correct counts in summary
+
+3. Clicking “Провал” or chevron never navigates away; no blank page.
+4. Scenario titles are visible and meaningful.
+
+========================================================
+7) DELIVERABLES
+===============
+
+* Identify the exact bug (where 100% comes from) and fix it.
+* Update backend response shape if needed.
+* Update frontend component to render:
+
+  * pass rate
+  * completion
+  * inline expand details
+* Provide code diff and list of files changed.
+* Provide 1–2 sample JSON responses for PASS/FAIL cases for verification (sanitized).
+
+Start by inspecting the current Stress-test component and the API endpoint returning stress-test results. Do not guess fields—trace them. Implement minimally but correctly.
