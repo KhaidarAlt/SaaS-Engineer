@@ -2,6 +2,8 @@ import { useLocation } from "wouter";
 import { GrowthOverviewPage } from "./GrowthOverviewPage";
 import { GrowthModulePage } from "./GrowthModulePage";
 import { CampaignDetailPage } from "./CampaignDetailPage";
+import { AudiencePage } from "./AudiencePage";
+import { ScenariosPage } from "./ScenariosPage";
 
 export function GrowthRouter() {
   const [location] = useLocation();
@@ -10,6 +12,14 @@ export function GrowthRouter() {
 
   if (segments.length === 0 || segments[0] === "") {
     return <GrowthOverviewPage />;
+  }
+
+  if (segments[0] === "audience") {
+    return <AudiencePage />;
+  }
+
+  if (segments[0] === "scenarios") {
+    return <ScenariosPage />;
   }
 
   if (segments[0] === "campaign" && segments[1]) {

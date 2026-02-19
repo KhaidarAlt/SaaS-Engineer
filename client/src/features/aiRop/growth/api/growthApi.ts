@@ -1,5 +1,9 @@
 import { apiRequest } from "@/lib/queryClient";
-import type { GrowthCampaign, GrowthSummary, EstimateResult, PreviewResult, CampaignAnalytics, QueueItem } from "../types/growthTypes";
+import type {
+  GrowthCampaign, GrowthSummary, EstimateResult, PreviewResult,
+  CampaignAnalytics, QueueItem, GrowthSyncRun, GrowthSegment,
+  GrowthScenarioTemplate, ProviderInfo, AudienceResult, CampaignHealth,
+} from "../types/growthTypes";
 
 export const GROWTH_KEYS = {
   summary: ["/api/ai-rop/growth/summary"],
@@ -8,6 +12,13 @@ export const GROWTH_KEYS = {
   queue: (id: string) => ["/api/ai-rop/growth/campaigns", id, "queue"],
   analytics: (id: string) => ["/api/ai-rop/growth/campaigns", id, "analytics"],
   contacts: ["/api/ai-rop/growth/contacts"],
+  syncRuns: ["/api/ai-rop/growth/sync"],
+  syncLatest: ["/api/ai-rop/growth/sync/latest"],
+  audience: ["/api/ai-rop/growth/audience"],
+  segments: ["/api/ai-rop/growth/segments"],
+  scenarioTemplates: ["/api/ai-rop/growth/scenario-templates"],
+  providerInfo: ["/api/ai-rop/growth/provider-info"],
+  campaignHealth: (id: string) => ["/api/ai-rop/growth/campaigns", id, "health"],
 };
 
 export async function fetchSummary(): Promise<GrowthSummary> {
@@ -78,5 +89,63 @@ export async function fetchCampaignAnalytics(id: string): Promise<CampaignAnalyt
 
 export async function testSend(contactId: string, text: string, channelPolicy?: string): Promise<any> {
   const res = await apiRequest("POST", "/api/ai-rop/growth/test-send", { contactId, text, channelPolicy });
+  return res.json();
+}
+
+export async function triggerSync(): Promise<GrowthSyncRun> {
+  const res = await apiRequest("POST", "/api/ai-rop/growth/sync");
+  return res.json();
+}
+
+export async function fetchSyncRuns(): Promise<GrowthSyncRun[]> {
+  const res = await fetch("/api/ai-rop/growth/sync", { credentials: "include" });
+  if (!res.ok) throw new Error("Failed to fetch sync runs");
+  return res.json();
+}
+
+export async function fetchLatestSync(): Promise<GrowthSyncRun | null> {
+  const res = await fetch("/api/ai-rop/growth/sync/latest", { credentials: "include" });
+  if (!res.ok) throw new Error("Failed to fetch latest sync");
+  return res.json();
+}
+
+export async function fetchAudience(params: Record<string, string> = {}): Promise<AudienceResult> {
+  const qs = new URLSearchParams(params).toString();
+  const res = await fetch(`/api/ai-rop/growth/audience?${qs}`, { credentials: "include" });
+  if (!res.ok) throw new Error("Failed to fetch audience");
+  return res.json();
+}
+
+export async function fetchSegments(): Promise<GrowthSegment[]> {
+  const res = await fetch("/api/ai-rop/growth/segments", { credentials: "include" });
+  if (!res.ok) throw new Error("Failed to fetch segments");
+  return res.json();
+}
+
+export async function createSegment(name: string, rulesJson: Record<string, unknown>): Promise<GrowthSegment> {
+  const res = await apiRequest("POST", "/api/ai-rop/growth/segments", { name, rulesJson });
+  return res.json();
+}
+
+export async function deleteSegment(id: string): Promise<void> {
+  await apiRequest("DELETE", `/api/ai-rop/growth/segments/${id}`);
+}
+
+export async function fetchScenarioTemplates(niche?: string): Promise<GrowthScenarioTemplate[]> {
+  const qs = niche ? `?niche=${niche}` : "";
+  const res = await fetch(`/api/ai-rop/growth/scenario-templates${qs}`, { credentials: "include" });
+  if (!res.ok) throw new Error("Failed to fetch templates");
+  return res.json();
+}
+
+export async function fetchProviderInfo(): Promise<ProviderInfo> {
+  const res = await fetch("/api/ai-rop/growth/provider-info", { credentials: "include" });
+  if (!res.ok) throw new Error("Failed to fetch provider info");
+  return res.json();
+}
+
+export async function fetchCampaignHealth(id: string): Promise<CampaignHealth> {
+  const res = await fetch(`/api/ai-rop/growth/campaigns/${id}/health`, { credentials: "include" });
+  if (!res.ok) throw new Error("Failed to fetch campaign health");
   return res.json();
 }

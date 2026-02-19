@@ -54,6 +54,30 @@ Key architectural decisions include:
   - Frontend: Feature module at client/src/features/aiRop/growth/
   - Note: "Умный контакт" (Smart Contact) was merged into this Growth tab; old route redirects to growth
 
+- **Audience Tab** (at /dashboard/ai/rop/growth/audience):
+  - Auto-sync audience via WAHA (chat history) or Meta (messaging_messages aggregation)
+  - Sync runs tracked in growth_sync_runs table (PENDING → RUNNING → SUCCESS/FAILED)
+  - Contact list with filters: All, Inactive 30+d, Abandoned dialogs, Active 7d, Has inbound
+  - Segment management: save filtered audience as named segments with estimated size
+  - Provider detection: auto-detects WAHA or Meta provider for sync
+  - Schema: growth_sync_runs, growth_segments (extended growth_contacts with source, stats, lastChannelProvider)
+  - API: /api/ai-rop/growth/sync, /api/ai-rop/growth/audience, /api/ai-rop/growth/segments, /api/ai-rop/growth/provider-info
+  - Frontend: client/src/features/aiRop/growth/pages/AudiencePage.tsx
+
+- **Scenarios Tab** (at /dashboard/ai/rop/growth/scenarios):
+  - 20 pre-seeded scenario templates across 4 niches (electronics, fashion, food, general)
+  - 5 scenario types per niche: reactivation, upsell, abandoned_dialog, price_availability, nps
+  - Template cards with message preview, placeholders, copy-to-clipboard, "Use" navigation
+  - Niche filter selector
+  - Schema: growth_scenario_templates
+  - API: /api/ai-rop/growth/scenario-templates
+  - Frontend: client/src/features/aiRop/growth/pages/ScenariosPage.tsx
+
+- **Anti-ban Circuit Breaker**:
+  - Growth worker auto-pauses campaigns if fail rate > 30% with >= 5 processed messages
+  - Campaign health endpoint: /api/ai-rop/growth/campaigns/:id/health
+  - AUTO_PAUSED event logged with fail rate reason
+
 ## Canonical Messaging Layer
 - **Purpose**: Channel-agnostic inbound message normalization, deduplication, dialog resolution, and persistent storage
 - **Schema**: messaging_messages (uuid PK, tenantId, dialogId FK→ai_dialogs, direction, channel, provider, fromAddress, toAddress, messageType, content jsonb, providerMessageId, status, meta jsonb), messaging_dedup (sha256 dedupKey unique, messageId FK)

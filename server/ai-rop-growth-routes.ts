@@ -3,7 +3,9 @@ import { db } from "./db";
 import { eq, and, sql, desc, gte, lte, count, inArray } from "drizzle-orm";
 import {
   growthCampaigns, growthContacts, growthQueue, growthEvents,
+  growthSyncRuns, growthSegments, growthScenarioTemplates,
   insertGrowthCampaignSchema, insertGrowthContactSchema,
+  aiRopChannels, wahaInstances,
 } from "@shared/schema";
 import { messagingProvider } from "./services/messagingProvider";
 
@@ -480,6 +482,308 @@ export function registerGrowthRoutes(
     } catch (error) {
       console.error("Growth contacts error:", error);
       res.status(500).json({ error: "Ошибка загрузки контактов" });
+    }
+  });
+
+  // ============ SYNC RUNS ============
+  app.post("/api/ai-rop/growth/sync", requireAuth, requireAiAccess, async (req: Request, res: Response) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+
+      const runningRuns = await db.select().from(growthSyncRuns)
+        .where(and(
+          eq(growthSyncRuns.tenantId, tenantId),
+          sql`${growthSyncRuns.status} IN ('PENDING', 'RUNNING')`,
+        )).limit(1);
+
+      if (runningRuns.length > 0) {
+        return res.status(409).json({ error: "Синхронизация уже запущена" });
+      }
+
+      const channels = await db.select().from(aiRopChannels)
+        .where(and(
+          eq(aiRopChannels.tenantId, tenantId),
+          eq(aiRopChannels.status, "CONNECTED"),
+        ));
+
+      let provider: string;
+      const hasWaha = channels.some(c => c.channelType === "WHATSAPP_WAHA");
+      const hasMeta = channels.some(c => c.channelType === "WHATSAPP_META");
+
+      if (hasWaha) {
+        provider = "waha_whatsapp";
+      } else if (hasMeta) {
+        provider = "meta_whatsapp";
+      } else {
+        const wahaList = await db.select().from(wahaInstances)
+          .where(eq(wahaInstances.tenantId, tenantId));
+        if (wahaList.some((w: any) => w.status === "running" || w.status === "CONNECTED")) {
+          provider = "waha_whatsapp";
+        } else {
+          provider = "meta_whatsapp";
+        }
+      }
+
+      const [syncRun] = await db.insert(growthSyncRuns).values({
+        tenantId,
+        provider,
+        status: "PENDING",
+      }).returning();
+
+      res.json(syncRun);
+    } catch (error) {
+      console.error("Sync create error:", error);
+      res.status(500).json({ error: "Ошибка запуска синхронизации" });
+    }
+  });
+
+  app.get("/api/ai-rop/growth/sync", requireAuth, requireAiAccess, async (req: Request, res: Response) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const runs = await db.select().from(growthSyncRuns)
+        .where(eq(growthSyncRuns.tenantId, tenantId))
+        .orderBy(desc(growthSyncRuns.createdAt))
+        .limit(10);
+      res.json(runs);
+    } catch (error) {
+      console.error("Sync list error:", error);
+      res.status(500).json({ error: "Ошибка загрузки синхронизаций" });
+    }
+  });
+
+  app.get("/api/ai-rop/growth/sync/latest", requireAuth, requireAiAccess, async (req: Request, res: Response) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const [latest] = await db.select().from(growthSyncRuns)
+        .where(eq(growthSyncRuns.tenantId, tenantId))
+        .orderBy(desc(growthSyncRuns.createdAt))
+        .limit(1);
+      res.json(latest || null);
+    } catch (error) {
+      res.status(500).json({ error: "Ошибка" });
+    }
+  });
+
+  // ============ AUDIENCE WITH FILTERS ============
+  app.get("/api/ai-rop/growth/audience", requireAuth, requireAiAccess, async (req: Request, res: Response) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const { inactiveDays, abandoned, active, hasInbound, limit: rawLimit, offset: rawOffset } = req.query;
+      const limitNum = Math.min(Number(rawLimit) || 50, 200);
+      const offsetNum = Number(rawOffset) || 0;
+
+      let conditions = [
+        eq(growthContacts.tenantId, tenantId),
+        eq(growthContacts.optOut, false),
+      ];
+
+      if (inactiveDays) {
+        const threshold = new Date();
+        threshold.setDate(threshold.getDate() - Number(inactiveDays));
+        conditions.push(lte(growthContacts.lastInboundAt, threshold));
+        conditions.push(sql`${growthContacts.lastInboundAt} IS NOT NULL`);
+      }
+
+      if (abandoned === "true") {
+        const threshold = new Date();
+        threshold.setDate(threshold.getDate() - 3);
+        conditions.push(sql`${growthContacts.lastInboundAt} IS NOT NULL`);
+        conditions.push(lte(growthContacts.lastInboundAt, threshold));
+        conditions.push(sql`(${growthContacts.outboundCount} = 0 OR ${growthContacts.outboundCount} IS NULL OR ${growthContacts.outboundCount} < ${growthContacts.inboundCount})`);
+      }
+
+      if (active === "true") {
+        const threshold = new Date();
+        threshold.setDate(threshold.getDate() - 7);
+        conditions.push(gte(growthContacts.lastInboundAt, threshold));
+      }
+
+      if (hasInbound === "true") {
+        conditions.push(sql`${growthContacts.lastInboundAt} IS NOT NULL`);
+      }
+
+      const contacts = await db.select().from(growthContacts)
+        .where(and(...conditions))
+        .orderBy(desc(growthContacts.lastInboundAt))
+        .limit(limitNum).offset(offsetNum);
+
+      const [totalResult] = await db.select({ count: count() }).from(growthContacts)
+        .where(and(...conditions));
+
+      res.json({ contacts, total: totalResult?.count ?? 0 });
+    } catch (error) {
+      console.error("Audience error:", error);
+      res.status(500).json({ error: "Ошибка загрузки аудитории" });
+    }
+  });
+
+  // ============ SEGMENTS CRUD ============
+  app.get("/api/ai-rop/growth/segments", requireAuth, requireAiAccess, async (req: Request, res: Response) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const segments = await db.select().from(growthSegments)
+        .where(eq(growthSegments.tenantId, tenantId))
+        .orderBy(desc(growthSegments.createdAt));
+      res.json(segments);
+    } catch (error) {
+      res.status(500).json({ error: "Ошибка загрузки сегментов" });
+    }
+  });
+
+  app.post("/api/ai-rop/growth/segments", requireAuth, requireAiAccess, async (req: Request, res: Response) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const { name, rulesJson } = req.body;
+      if (!name || !rulesJson) {
+        return res.status(400).json({ error: "Нужно имя и правила сегмента" });
+      }
+
+      let conditions = [
+        eq(growthContacts.tenantId, tenantId),
+        eq(growthContacts.optOut, false),
+      ];
+      if (rulesJson.inactiveDays) {
+        const threshold = new Date();
+        threshold.setDate(threshold.getDate() - Number(rulesJson.inactiveDays));
+        conditions.push(lte(growthContacts.lastInboundAt, threshold));
+        conditions.push(sql`${growthContacts.lastInboundAt} IS NOT NULL`);
+      }
+      if (rulesJson.abandoned === "true" || rulesJson.abandoned === true) {
+        const threshold = new Date();
+        threshold.setDate(threshold.getDate() - 3);
+        conditions.push(sql`${growthContacts.lastInboundAt} IS NOT NULL`);
+        conditions.push(lte(growthContacts.lastInboundAt, threshold));
+        conditions.push(sql`(${growthContacts.outboundCount} = 0 OR ${growthContacts.outboundCount} IS NULL OR ${growthContacts.outboundCount} < ${growthContacts.inboundCount})`);
+      }
+      if (rulesJson.active === "true" || rulesJson.active === true) {
+        const threshold = new Date();
+        threshold.setDate(threshold.getDate() - 7);
+        conditions.push(gte(growthContacts.lastInboundAt, threshold));
+      }
+      if (rulesJson.hasInbound === "true" || rulesJson.hasInbound === true) {
+        conditions.push(sql`${growthContacts.lastInboundAt} IS NOT NULL`);
+      }
+
+      const [sizeResult] = await db.select({ count: count() }).from(growthContacts)
+        .where(and(...conditions));
+
+      const [segment] = await db.insert(growthSegments).values({
+        tenantId,
+        name,
+        rulesJson,
+        estimatedSize: sizeResult?.count ?? 0,
+      }).returning();
+
+      res.json(segment);
+    } catch (error) {
+      console.error("Segment create error:", error);
+      res.status(500).json({ error: "Ошибка создания сегмента" });
+    }
+  });
+
+  app.delete("/api/ai-rop/growth/segments/:id", requireAuth, requireAiAccess, async (req: Request, res: Response) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      await db.delete(growthSegments)
+        .where(and(eq(growthSegments.id, req.params.id), eq(growthSegments.tenantId, tenantId)));
+      res.json({ ok: true });
+    } catch (error) {
+      res.status(500).json({ error: "Ошибка удаления сегмента" });
+    }
+  });
+
+  // ============ SCENARIO TEMPLATES ============
+  app.get("/api/ai-rop/growth/scenario-templates", requireAuth, requireAiAccess, async (req: Request, res: Response) => {
+    try {
+      const { niche } = req.query;
+      let conditions = [];
+      if (niche && typeof niche === "string") {
+        conditions.push(eq(growthScenarioTemplates.niche, niche));
+      }
+      const templates = conditions.length > 0
+        ? await db.select().from(growthScenarioTemplates).where(and(...conditions))
+        : await db.select().from(growthScenarioTemplates);
+      res.json(templates);
+    } catch (error) {
+      res.status(500).json({ error: "Ошибка загрузки шаблонов" });
+    }
+  });
+
+  // ============ PROVIDER DETECTION ============
+  app.get("/api/ai-rop/growth/provider-info", requireAuth, requireAiAccess, async (req: Request, res: Response) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const channels = await db.select().from(aiRopChannels)
+        .where(and(
+          eq(aiRopChannels.tenantId, tenantId),
+          eq(aiRopChannels.status, "CONNECTED"),
+        ));
+
+      const hasWaha = channels.some(c => c.channelType === "WHATSAPP_WAHA");
+      const hasMeta = channels.some(c => c.channelType === "WHATSAPP_META");
+
+      if (!hasWaha && !hasMeta) {
+        const wahaList = await db.select().from(wahaInstances)
+          .where(eq(wahaInstances.tenantId, tenantId));
+        const wahaConnected = wahaList.some((w: any) => w.status === "running" || w.status === "CONNECTED");
+        res.json({
+          provider: wahaConnected ? "waha_whatsapp" : "none",
+          hasWaha: wahaConnected,
+          hasMeta: false,
+          syncLabel: wahaConnected ? "Синхронизировать WhatsApp (WAHA)" : "Обновить аудиторию",
+        });
+        return;
+      }
+
+      res.json({
+        provider: hasWaha ? "waha_whatsapp" : "meta_whatsapp",
+        hasWaha,
+        hasMeta,
+        syncLabel: hasWaha ? "Синхронизировать WhatsApp" : "Обновить аудиторию",
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Ошибка определения провайдера" });
+    }
+  });
+
+  // ============ CIRCUIT BREAKER CHECK ============
+  app.get("/api/ai-rop/growth/campaigns/:id/health", requireAuth, requireAiAccess, async (req: Request, res: Response) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const { id } = req.params;
+
+      const [campaign] = await db.select().from(growthCampaigns)
+        .where(and(eq(growthCampaigns.id, id), eq(growthCampaigns.tenantId, tenantId)));
+
+      if (!campaign) return res.status(404).json({ error: "Кампания не найдена" });
+
+      const last24h = new Date();
+      last24h.setHours(last24h.getHours() - 24);
+
+      const queueStats = await db.execute(sql`
+        SELECT
+          COUNT(*) FILTER (WHERE status = 'SENT') AS sent,
+          COUNT(*) FILTER (WHERE status = 'FAILED') AS failed,
+          COUNT(*) AS total
+        FROM growth_queue
+        WHERE campaign_id = ${id}
+          AND created_at >= ${last24h}
+      `);
+
+      const stats = (queueStats as any).rows?.[0] || { sent: 0, failed: 0, total: 0 };
+      const failRate = stats.total > 0 ? Number(stats.failed) / Number(stats.total) : 0;
+      const needsPause = failRate > 0.3 && Number(stats.total) >= 5;
+
+      res.json({
+        failRate: Math.round(failRate * 100),
+        sent: Number(stats.sent),
+        failed: Number(stats.failed),
+        total: Number(stats.total),
+        needsPause,
+        reason: needsPause ? `Высокий процент ошибок: ${Math.round(failRate * 100)}%` : null,
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Ошибка проверки" });
     }
   });
 }

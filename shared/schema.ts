@@ -2679,8 +2679,15 @@ export const growthContacts = pgTable("growth_contacts", {
   widgetUserId: text("widget_user_id"),
   lastChannel: text("last_channel"),
   primaryChannel: text("primary_channel"),
+  source: text("source"), // waha_sync | meta_warm | csv_import | crm_import | organic
+  firstSeenAt: timestamp("first_seen_at"),
   lastInboundAt: timestamp("last_inbound_at"),
   lastOutboundAt: timestamp("last_outbound_at"),
+  lastDialogId: varchar("last_dialog_id"),
+  inboundCount: integer("inbound_count").notNull().default(0),
+  outboundCount: integer("outbound_count").notNull().default(0),
+  lastMessagePreview: text("last_message_preview"),
+  lastChannelProvider: text("last_channel_provider"), // whatsapp_cloud:meta | whatsapp:waha
   optOut: boolean("opt_out").notNull().default(false),
   tags: text("tags").array().default(sql`ARRAY[]::text[]`),
   meta: jsonb("meta").$type<Record<string, unknown>>(),
@@ -2704,6 +2711,8 @@ export const growthCampaigns = pgTable("growth_campaigns", {
   status: text("status").notNull().default("DRAFT"),
   name: text("name").notNull(),
   channelPolicy: text("channel_policy").notNull().default("AUTO"),
+  segmentId: varchar("segment_id"),
+  scenarioTemplateId: varchar("scenario_template_id"),
   audienceRules: jsonb("audience_rules").$type<Record<string, unknown>>(),
   messageRules: jsonb("message_rules").$type<Record<string, unknown>>(),
   scheduleRules: jsonb("schedule_rules").$type<Record<string, unknown>>(),
@@ -2771,6 +2780,60 @@ export const growthEventsRelations = relations(growthEvents, ({ one }) => ({
 export const insertGrowthEventSchema = createInsertSchema(growthEvents).omit({ id: true, createdAt: true });
 export type InsertGrowthEvent = z.infer<typeof insertGrowthEventSchema>;
 export type GrowthEvent = typeof growthEvents.$inferSelect;
+
+// ============ GROWTH: SYNC RUNS ============
+export const growthSyncRuns = pgTable("growth_sync_runs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  provider: text("provider").notNull(), // waha_whatsapp | meta_whatsapp
+  status: text("status").notNull().default("PENDING"), // PENDING | RUNNING | SUCCESS | FAILED
+  startedAt: timestamp("started_at"),
+  finishedAt: timestamp("finished_at"),
+  statsJson: jsonb("stats_json").$type<Record<string, unknown>>(),
+  error: text("error"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const growthSyncRunsRelations = relations(growthSyncRuns, ({ one }) => ({
+  tenant: one(tenants, { fields: [growthSyncRuns.tenantId], references: [tenants.id] }),
+}));
+
+export const insertGrowthSyncRunSchema = createInsertSchema(growthSyncRuns).omit({ id: true, createdAt: true });
+export type InsertGrowthSyncRun = z.infer<typeof insertGrowthSyncRunSchema>;
+export type GrowthSyncRun = typeof growthSyncRuns.$inferSelect;
+
+// ============ GROWTH: SEGMENTS ============
+export const growthSegments = pgTable("growth_segments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  name: text("name").notNull(),
+  rulesJson: jsonb("rules_json").$type<Record<string, unknown>>().notNull(),
+  estimatedSize: integer("estimated_size"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const growthSegmentsRelations = relations(growthSegments, ({ one }) => ({
+  tenant: one(tenants, { fields: [growthSegments.tenantId], references: [tenants.id] }),
+}));
+
+export const insertGrowthSegmentSchema = createInsertSchema(growthSegments).omit({ id: true, createdAt: true });
+export type InsertGrowthSegment = z.infer<typeof insertGrowthSegmentSchema>;
+export type GrowthSegment = typeof growthSegments.$inferSelect;
+
+// ============ GROWTH: SCENARIO TEMPLATES ============
+export const growthScenarioTemplates = pgTable("growth_scenario_templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  niche: text("niche").notNull(), // electronics | fashion | food | general
+  key: text("key").notNull(), // reactivation | abandoned_dialog | upsell_post_order | price_availability | nps
+  title: text("title").notNull(),
+  description: text("description"),
+  messageBlueprintJson: jsonb("message_blueprint_json").$type<Record<string, unknown>>().notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertGrowthScenarioTemplateSchema = createInsertSchema(growthScenarioTemplates).omit({ id: true, createdAt: true });
+export type InsertGrowthScenarioTemplate = z.infer<typeof insertGrowthScenarioTemplateSchema>;
+export type GrowthScenarioTemplate = typeof growthScenarioTemplates.$inferSelect;
 
 // ============ WAHA DISCLAIMER ACCEPTANCE ============
 export const wahaDisclaimerAcceptance = pgTable("waha_disclaimer_acceptance", {

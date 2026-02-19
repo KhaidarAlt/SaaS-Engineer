@@ -143,6 +143,15 @@ export const wahaService = {
     });
   },
 
+  async getChats(sessionName: string): Promise<any[]> {
+    try {
+      return await wahaRequest("GET", `/api/${sessionName}/chats`);
+    } catch (error: any) {
+      console.error(`[WAHA] getChats error for ${sessionName}:`, error?.message || error);
+      return [];
+    }
+  },
+
   async checkHealth(): Promise<boolean> {
     try {
       await wahaRequest("GET", "/api/sessions");

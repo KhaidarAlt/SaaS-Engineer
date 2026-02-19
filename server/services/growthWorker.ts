@@ -99,6 +99,31 @@ async function processQueue() {
           continue;
         }
 
+        const [failedToday] = await db.select({ count: sql<number>`count(*)` })
+          .from(growthQueue)
+          .where(and(
+            eq(growthQueue.tenantId, item.tenantId),
+            eq(growthQueue.campaignId, item.campaignId),
+            eq(growthQueue.status, "FAILED"),
+            sql`${growthQueue.sentAt} >= ${today} OR ${growthQueue.createdAt} >= ${today}`,
+          ));
+        const totalProcessedToday = (sentToday?.count ?? 0) + (failedToday?.count ?? 0);
+        const failRate = totalProcessedToday > 0 ? (failedToday?.count ?? 0) / totalProcessedToday : 0;
+        if (failRate > 0.3 && totalProcessedToday >= 5) {
+          console.log(`[GrowthWorker] Circuit breaker: auto-pausing campaign ${campaign.id} (fail rate ${Math.round(failRate * 100)}%)`);
+          await db.update(growthCampaigns).set({
+            status: "PAUSED",
+            updatedAt: new Date(),
+          }).where(eq(growthCampaigns.id, campaign.id));
+          await db.insert(growthEvents).values({
+            tenantId: item.tenantId,
+            campaignId: item.campaignId,
+            eventType: "AUTO_PAUSED",
+            meta: { reason: `Высокий процент ошибок: ${Math.round(failRate * 100)}%`, failRate },
+          });
+          continue;
+        }
+
         const safetyRules = (campaign.safetyRules as any) || {};
         if (safetyRules.respectOptOut !== false) {
           const { growthContacts } = await import("@shared/schema");

@@ -27,6 +27,8 @@ import { registerAiTrainingRoutes } from "./ai-training-routes.js";
 import { registerAiAnalyticsRoutes } from "./ai-analytics-routes.js";
 import { registerAiRopConnectRoutes } from "./ai-rop-connect-routes.js";
 import { registerGrowthRoutes } from "./ai-rop-growth-routes.js";
+import { seedScenarioTemplates } from "./growth/seedScenarioTemplates.js";
+import { startGrowthSyncWorker } from "./growth/syncWorker.js";
 
 const SessionStore = MemoryStore(session);
 
@@ -610,6 +612,8 @@ export async function registerRoutes(
   startDomainWorker();
   startGrowthWorker();
   startOutboxWorker();
+  startGrowthSyncWorker();
+  seedScenarioTemplates();
 
   app.get("/__ping", (_req: Request, res: Response) => {
     res.type("text/plain").status(200).send("pong");

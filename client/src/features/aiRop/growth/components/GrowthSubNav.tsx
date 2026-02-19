@@ -1,8 +1,10 @@
 import { useLocation } from "wouter";
-import { RefreshCw, TrendingUp, ShoppingBag, MessageCircle, Bell, Star } from "lucide-react";
+import { RefreshCw, TrendingUp, ShoppingBag, MessageCircle, Bell, Star, Users, FileText } from "lucide-react";
 
 const SUBNAV_ITEMS = [
   { key: "", label: "Обзор", icon: TrendingUp, path: "/dashboard/ai/rop/growth" },
+  { key: "audience", label: "Аудитория", icon: Users, path: "/dashboard/ai/rop/growth/audience" },
+  { key: "scenarios", label: "Сценарии", icon: FileText, path: "/dashboard/ai/rop/growth/scenarios" },
   { key: "reactivation", label: "Реактивация", icon: RefreshCw, path: "/dashboard/ai/rop/growth/reactivation" },
   { key: "upsell", label: "Апселл", icon: ShoppingBag, path: "/dashboard/ai/rop/growth/upsell" },
   { key: "abandoned", label: "Брошенные", icon: MessageCircle, path: "/dashboard/ai/rop/growth/abandoned" },

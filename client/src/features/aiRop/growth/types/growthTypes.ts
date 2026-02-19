@@ -120,3 +120,94 @@ export const CAMPAIGN_TYPE_DESCRIPTIONS: Record<CampaignType, string> = {
   REMINDER: "Напомнить о ценах, наличии, акциях",
   NPS: "Собрать отзывы и оценки после покупки",
 };
+
+export interface GrowthSyncRun {
+  id: string;
+  tenantId: string;
+  provider: string;
+  status: "PENDING" | "RUNNING" | "SUCCESS" | "FAILED";
+  contactsFound: number;
+  contactsCreated: number;
+  contactsUpdated: number;
+  error: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  createdAt: string;
+}
+
+export interface GrowthSegment {
+  id: string;
+  tenantId: string;
+  name: string;
+  rulesJson: Record<string, unknown>;
+  estimatedSize: number;
+  createdAt: string;
+}
+
+export interface GrowthScenarioTemplate {
+  id: string;
+  niche: string;
+  scenarioType: string;
+  nameRu: string;
+  descriptionRu: string;
+  messageTemplate: string;
+  placeholders: string[];
+  createdAt: string;
+}
+
+export interface ProviderInfo {
+  provider: string;
+  hasWaha: boolean;
+  hasMeta: boolean;
+  syncLabel: string;
+}
+
+export interface AudienceResult {
+  contacts: GrowthContact[];
+  total: number;
+}
+
+export interface GrowthContact {
+  id: string;
+  tenantId: string;
+  name: string | null;
+  phone: string | null;
+  channel: string | null;
+  source: string | null;
+  tags: string[];
+  optOut: boolean;
+  lastInboundAt: string | null;
+  lastOutboundAt: string | null;
+  inboundCount: number;
+  outboundCount: number;
+  lastMessagePreview: string | null;
+  lastChannelProvider: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CampaignHealth {
+  failRate: number;
+  sent: number;
+  failed: number;
+  total: number;
+  needsPause: boolean;
+  reason: string | null;
+}
+
+export type NicheType = "electronics" | "fashion" | "food" | "general";
+
+export const NICHE_LABELS: Record<NicheType, string> = {
+  electronics: "Электроника",
+  fashion: "Одежда и обувь",
+  food: "Еда и доставка",
+  general: "Универсальные",
+};
+
+export const SCENARIO_TYPE_LABELS: Record<string, string> = {
+  reactivation: "Реактивация",
+  upsell: "Апселл",
+  abandoned_dialog: "Брошенные",
+  price_availability: "Цена / наличие",
+  nps: "NPS / Отзывы",
+};
