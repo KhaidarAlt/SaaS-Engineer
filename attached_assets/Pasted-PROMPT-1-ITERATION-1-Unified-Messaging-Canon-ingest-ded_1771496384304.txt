@@ -1,0 +1,104 @@
+PROMPT #1 — ITERATION 1 (Unified Messaging Canon: ingest + dedup + storage)
+
+You are joining an existing SaaS project SmartCatalog (Botfactory). Tech stack: Node.js + Express + TypeScript backend, Postgres (Neon via Replit), Drizzle ORM, React/Vite frontend. DO NOT redesign architecture, DO NOT remove or rewrite existing modules. Make minimal additive changes only.
+
+GOAL (Iteration 1):
+Introduce a canonical, channel-agnostic messaging storage layer for inbound messages, starting with Meta WhatsApp Cloud webhooks, WITHOUT changing AI logic. Implement:
+
+1. canonical table messaging_messages
+2. idempotency/dedup for inbound webhooks (messaging_dedup)
+3. a small internal “Messaging Core” module that:
+
+   * normalizes inbound events
+   * resolves/creates an existing ai_dialogs thread
+   * writes a canonical message row
+   * keeps provider raw payload for debugging
+4. integrate this into the existing Meta WhatsApp webhook handler:
+
+   * On POST /api/whatsapp-cloud/webhook: call adapter.ingest(raw) -> normalized messages
+   * For each normalized inbound message:
+     a) build a dedup key
+     b) if seen => ignore
+     c) else store into messaging_messages and mark dedup
+   * After storing, call the existing AI pipeline exactly as it is today (if there is a function that handles inbound WA messages, call it; if not, add a TODO but do not break flows).
+
+IMPORTANT CONSTRAINTS:
+
+* Keep existing tables ai_dialogs and ai_dialog_events. Do not delete. Do not migrate their semantics.
+* DO NOT modify Growth engine logic in this iteration.
+* DO NOT introduce Redis/BullMQ now.
+* Keep Meta WA integration behavior unchanged for end-users.
+
+DATA MODEL (additive):
+Create Drizzle schema + migration for:
+
+Table: messaging_messages
+
+* id uuid PK
+* tenant_id uuid NOT NULL
+* dialog_id uuid NOT NULL (FK to ai_dialogs.id)
+* provider text NOT NULL  // 'meta_whatsapp' for now
+* provider_account_id text NULL // number/account identifier if available
+* direction text NOT NULL // 'IN'|'OUT'
+* type text NOT NULL // 'TEXT'|'IMAGE'|'AUDIO'|'VIDEO'|'FILE'|'INTERACTIVE'|'SYSTEM'
+* text text NULL
+* payload_json jsonb NULL
+* provider_message_id text NULL
+* status text NOT NULL // 'RECEIVED' initially for inbound
+* provider_raw_json jsonb NULL  // store raw webhook portion per message
+* created_at timestamptz NOT NULL default now()
+
+Table: messaging_dedup
+
+* key text PK (unique idempotency key)
+* tenant_id uuid NOT NULL
+* provider text NOT NULL
+* provider_account_id text NULL
+* seen_at timestamptz NOT NULL default now()
+* dialog_id uuid NULL
+
+Adapter contract (Meta WA only for iteration 1):
+Implement provider adapter module: providers/metaWhatsAppAdapter.ts with function:
+ingestWebhook(raw: any): NormalizedInbound[]
+NormalizedInbound:
+
+* provider='meta_whatsapp'
+* providerMessageId
+* externalEventId (if available)
+* fromPhone (wa phone)
+* toPhone (business number id if available)
+* timestamp
+* type
+* text
+* payload (json)
+* raw (json for this message)
+
+Dialog resolution:
+Implement a function resolveDialog(tenantId, fromPhone) that returns ai_dialogs row id:
+
+* If an ai_dialogs exists for this tenantId + contactPhone=fromPhone with active/open status => use it
+* Else create a new ai_dialogs row (minimal required fields only) and return id
+  DO NOT change any existing status/stage semantics beyond what is required to create a new row.
+
+Idempotency key:
+Compute key = sha256(tenantId + provider + provider_account_id + (externalEventId || providerMessageId || hash(raw)))
+Store in messaging_dedup before processing; if conflict => ignore inbound.
+
+INTEGRATION:
+Update existing /api/whatsapp-cloud/webhook handler to call the adapter + messaging core store logic.
+Keep existing verification GET unchanged.
+
+ACCEPTANCE CRITERIA (must demonstrate):
+
+1. Inbound WhatsApp message results in exactly one messaging_messages row, even if webhook is re-sent.
+2. messaging_dedup prevents duplicates.
+3. Existing AI reply pipeline still triggers as before (no regressions).
+
+DELIVERABLES:
+
+* Drizzle migrations + schema definitions
+* messaging core module: messaging/core.ts with functions acceptInboundMetaWebhook(tenantId, raw)
+* meta adapter module
+* Minimal unit/integration test or a reproducible manual test script (curl sample payload structure + instructions)
+
+If anything is unclear, inspect current code to find existing WA webhook handler and existing ai_dialogs schema requirements; do not guess missing fields—read the schema and insert only required fields. Keep changes minimal and safe.
