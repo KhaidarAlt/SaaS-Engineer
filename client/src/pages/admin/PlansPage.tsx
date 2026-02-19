@@ -96,7 +96,7 @@ export default function PlansPage() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.1 }}
               >
-                <Card className={`h-full flex flex-col ${plan.name === "PRO" ? "border-primary" : ""}`}>
+                <Card className={`h-full flex flex-col ${plan.name === "Business" ? "border-primary" : ""}`}>
                   <CardHeader>
                     <div className="flex items-center justify-between">
                       <CardTitle className="text-xl flex items-center gap-2">
