@@ -6,7 +6,6 @@ import { FunnelCard } from "../components/dashboard/FunnelCard";
 import { DropoffReasonsCard } from "../components/dashboard/DropoffReasonsCard";
 import { AiDiagnosisCard } from "../components/dashboard/AiDiagnosisCard";
 import { RecommendationCards } from "../components/dashboard/RecommendationCards";
-import { TestChatPanel } from "../components/chat/TestChatPanel";
 import { StrategyPanel } from "../components/strategy/StrategyPanel";
 import { TrainingHistoryDrawer } from "../components/training/TrainingHistoryDrawer";
 import { VersionHistoryDrawer } from "../components/training/VersionHistoryDrawer";
@@ -127,7 +126,7 @@ export default function StrategyPage() {
         isAuditing={auditMutation.isPending}
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-4" data-testid="dashboard-grid">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4" data-testid="dashboard-grid">
         <div className="space-y-4">
           {hasEnoughData ? (
             <>
@@ -148,9 +147,6 @@ export default function StrategyPage() {
                   <div className="text-center space-y-2">
                     <p className="text-sm text-muted-foreground">
                       После первых 5 диалогов появится аналитика.
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Попробуйте тестовый чат справа
                     </p>
                   </div>
                 )}
@@ -184,10 +180,6 @@ export default function StrategyPage() {
               </CardContent>
             </Card>
           )}
-        </div>
-
-        <div className="space-y-4">
-          <TestChatPanel />
         </div>
       </div>
 
