@@ -157,12 +157,7 @@ export default function TestingPage() {
         },
         createdAt: result.assistantMessage.createdAt,
       };
-      setMessages(prev => [...prev.slice(0, -0), assistantMsg]);
-      setMessages(prev => {
-        const updated = [...prev];
-        updated[updated.length - 1] = { ...updated[updated.length - 1], id: userMsg.id };
-        return [...updated.slice(0, -1), updated[updated.length - 1], assistantMsg];
-      });
+      setMessages(prev => [...prev, assistantMsg]);
     } catch {
       setMessages(prev => [...prev, {
         id: `error-${Date.now()}`,
