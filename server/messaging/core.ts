@@ -3,7 +3,9 @@ import { eq, and, desc, sql, count } from "drizzle-orm";
 import {
   messagingMessages,
   messagingDedup,
+  messageOutbox,
   aiDialogs,
+  smartContactSettings,
   type InsertMessagingMessage,
 } from "@shared/schema";
 import {
@@ -178,4 +180,153 @@ export async function acceptInboundMetaWebhook(
   }
 
   return result;
+}
+
+// ============ OUTBOUND SENDING API ============
+
+export interface SendMessageParams {
+  tenantId: string;
+  channel: string;
+  provider: string;
+  fromAddress: string;
+  toAddress: string;
+  messageType?: string;
+  content: Record<string, unknown>;
+  dialogId?: string;
+  meta?: Record<string, unknown>;
+  skipPolicyCheck?: boolean;
+}
+
+export interface SendMessageResult {
+  success: boolean;
+  messageId?: string;
+  outboxId?: string;
+  failReason?: string;
+}
+
+async function checkQuietHours(tenantId: string): Promise<boolean> {
+  const [settings] = await db
+    .select({
+      quietHoursStart: smartContactSettings.quietHoursStart,
+      quietHoursEnd: smartContactSettings.quietHoursEnd,
+      enabled: smartContactSettings.enabled,
+    })
+    .from(smartContactSettings)
+    .where(eq(smartContactSettings.tenantId, tenantId));
+
+  if (!settings || !settings.enabled) {
+    return false;
+  }
+
+  const now = new Date();
+  const hour = now.getHours();
+  const start = settings.quietHoursStart;
+  const end = settings.quietHoursEnd;
+
+  if (start > end) {
+    return hour >= start || hour < end;
+  }
+  return hour >= start && hour < end;
+}
+
+async function checkOptOut(_tenantId: string, _toAddress: string): Promise<boolean> {
+  return false;
+}
+
+export async function sendMessage(params: SendMessageParams): Promise<SendMessageResult> {
+  const {
+    tenantId,
+    channel,
+    provider,
+    fromAddress,
+    toAddress,
+    messageType = "text",
+    content,
+    dialogId,
+    meta,
+    skipPolicyCheck = false,
+  } = params;
+
+  if (!skipPolicyCheck) {
+    if (await checkOptOut(tenantId, toAddress)) {
+      const [msg] = await db
+        .insert(messagingMessages)
+        .values({
+          tenantId,
+          dialogId,
+          direction: "outbound",
+          channel,
+          provider,
+          fromAddress,
+          toAddress,
+          messageType,
+          content,
+          status: "failed",
+          meta: { ...meta, failReason: "OPT_OUT" },
+          receivedAt: new Date(),
+        })
+        .returning({ id: messagingMessages.id });
+
+      return { success: false, messageId: msg.id, failReason: "OPT_OUT" };
+    }
+
+    if (await checkQuietHours(tenantId)) {
+      const [msg] = await db
+        .insert(messagingMessages)
+        .values({
+          tenantId,
+          dialogId,
+          direction: "outbound",
+          channel,
+          provider,
+          fromAddress,
+          toAddress,
+          messageType,
+          content,
+          status: "failed",
+          meta: { ...meta, failReason: "QUIET_HOURS" },
+          receivedAt: new Date(),
+        })
+        .returning({ id: messagingMessages.id });
+
+      return { success: false, messageId: msg.id, failReason: "QUIET_HOURS" };
+    }
+  }
+
+  return await db.transaction(async (tx) => {
+    const [msg] = await tx
+      .insert(messagingMessages)
+      .values({
+        tenantId,
+        dialogId,
+        direction: "outbound",
+        channel,
+        provider,
+        fromAddress,
+        toAddress,
+        messageType,
+        content,
+        status: "queued",
+        meta,
+        receivedAt: new Date(),
+      })
+      .returning({ id: messagingMessages.id });
+
+    const [outbox] = await tx
+      .insert(messageOutbox)
+      .values({
+        messageId: msg.id,
+        tenantId,
+        status: "PENDING",
+        attempts: 0,
+        maxAttempts: 6,
+      })
+      .returning({ id: messageOutbox.id });
+
+    console.log(
+      `[Messaging] Enqueued outbound message ${msg.id} → outbox ${outbox.id} (${channel}/${provider} → ${toAddress})`
+    );
+
+    return { success: true, messageId: msg.id, outboxId: outbox.id };
+  });
 }

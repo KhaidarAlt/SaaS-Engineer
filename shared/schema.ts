@@ -2846,3 +2846,70 @@ export const messagingDedupRelations = relations(messagingDedup, ({ one }) => ({
 export const insertMessagingDedupSchema = createInsertSchema(messagingDedup).omit({ id: true, createdAt: true });
 export type InsertMessagingDedup = z.infer<typeof insertMessagingDedupSchema>;
 export type MessagingDedup = typeof messagingDedup.$inferSelect;
+
+// ============ CANONICAL MESSAGING: OUTBOX ============
+export const messageOutbox = pgTable("message_outbox", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  messageId: varchar("message_id").notNull().references(() => messagingMessages.id, { onDelete: "cascade" }),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  status: text("status").notNull().default("PENDING"), // PENDING | PROCESSING | SENT | FAILED | RETRY
+  attempts: integer("attempts").notNull().default(0),
+  maxAttempts: integer("max_attempts").notNull().default(6),
+  nextRetryAt: timestamp("next_retry_at"),
+  failReason: text("fail_reason"),
+  failCode: text("fail_code"),
+  lockedAt: timestamp("locked_at"),
+  lockedBy: text("locked_by"),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const messageOutboxRelations = relations(messageOutbox, ({ one }) => ({
+  message: one(messagingMessages, {
+    fields: [messageOutbox.messageId],
+    references: [messagingMessages.id],
+  }),
+  tenant: one(tenants, {
+    fields: [messageOutbox.tenantId],
+    references: [tenants.id],
+  }),
+}));
+
+export const insertMessageOutboxSchema = createInsertSchema(messageOutbox).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertMessageOutbox = z.infer<typeof insertMessageOutboxSchema>;
+export type MessageOutbox = typeof messageOutbox.$inferSelect;
+
+// ============ CANONICAL MESSAGING: DELIVERIES ============
+export const messagingDeliveries = pgTable("messaging_deliveries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  outboxId: varchar("outbox_id").notNull().references(() => messageOutbox.id, { onDelete: "cascade" }),
+  messageId: varchar("message_id").notNull().references(() => messagingMessages.id, { onDelete: "cascade" }),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  attemptNumber: integer("attempt_number").notNull(),
+  providerMessageId: text("provider_message_id"),
+  providerStatus: text("provider_status"),
+  providerError: text("provider_error"),
+  providerResponse: jsonb("provider_response").$type<Record<string, unknown>>(),
+  durationMs: integer("duration_ms"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const messagingDeliveriesRelations = relations(messagingDeliveries, ({ one }) => ({
+  outbox: one(messageOutbox, {
+    fields: [messagingDeliveries.outboxId],
+    references: [messageOutbox.id],
+  }),
+  message: one(messagingMessages, {
+    fields: [messagingDeliveries.messageId],
+    references: [messagingMessages.id],
+  }),
+  tenant: one(tenants, {
+    fields: [messagingDeliveries.tenantId],
+    references: [tenants.id],
+  }),
+}));
+
+export const insertMessagingDeliverySchema = createInsertSchema(messagingDeliveries).omit({ id: true, createdAt: true });
+export type InsertMessagingDelivery = z.infer<typeof insertMessagingDeliverySchema>;
+export type MessagingDelivery = typeof messagingDeliveries.$inferSelect;

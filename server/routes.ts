@@ -20,6 +20,7 @@ import { pool } from "./db";
 import domainRoutes from "./domains/routes.js";
 import { startDomainWorker } from "./domains/worker.js";
 import { startGrowthWorker } from "./services/growthWorker.js";
+import { startOutboxWorker } from "./messaging/worker.js";
 import { registerAiRopRoutes } from "./ai-rop-routes.js";
 import { registerAiTestingRoutes } from "./ai-testing-routes.js";
 import { registerAiTrainingRoutes } from "./ai-training-routes.js";
@@ -608,6 +609,7 @@ export async function registerRoutes(
   app.use(domainRoutes);
   startDomainWorker();
   startGrowthWorker();
+  startOutboxWorker();
 
   app.get("/__ping", (_req: Request, res: Response) => {
     res.type("text/plain").status(200).send("pong");

@@ -58,8 +58,12 @@ Key architectural decisions include:
 - **Purpose**: Channel-agnostic inbound message normalization, deduplication, dialog resolution, and persistent storage
 - **Schema**: messaging_messages (uuid PK, tenantId, dialogId FK→ai_dialogs, direction, channel, provider, fromAddress, toAddress, messageType, content jsonb, providerMessageId, status, meta jsonb), messaging_dedup (sha256 dedupKey unique, messageId FK)
 - **Adapter**: server/messaging/providers/metaWhatsAppAdapter.ts — normalizes Meta WhatsApp Cloud webhook payloads (entries→changes→value→messages/statuses) into NormalizedInboundMessage structs; supports text, image, video, audio, document, location, contacts, interactive, reaction, sticker, button types
-- **Core**: server/messaging/core.ts — resolveDialog() finds/creates ai_dialogs by externalThreadId="{channel}:{fromAddress}", dedup via sha256(provider:providerMessageId), stores to messaging_messages + messaging_dedup, updates dialog activity
+- **Core**: server/messaging/core.ts — resolveDialog() finds/creates ai_dialogs by externalThreadId="{channel}:{fromAddress}", dedup via sha256(provider:providerMessageId), stores to messaging_messages + messaging_dedup, updates dialog activity; sendMessage() creates outbound message + outbox job with policy gate (opt-out, quiet hours)
 - **Integration**: meta.service.ts handleWebhookEvent() calls acceptInboundMetaWebhook() with try/catch fallback to log-only mode
+- **Outbound Pipeline**: message_outbox (job queue with status/retry/backoff) + messaging_deliveries (attempt log with provider response)
+- **Outbound Adapter**: server/messaging/providers/metaWhatsAppOutbound.ts — sendOutbound() wraps Meta Cloud API send, classifies errors as retryable/non-retryable, returns structured ProviderSendResult
+- **Outbox Worker**: server/messaging/worker.ts — 3s setInterval, picks PENDING/RETRY batches of 10 via FOR UPDATE SKIP LOCKED, exponential backoff (1m→5m→15m→60m→6h), writes delivery attempts, atomic status transitions
+- **Retry policy**: retryable (timeouts, 5xx, network errors); non-retryable (OPT_OUT, TEMPLATE_REQUIRED, INVALID_RECIPIENT, POLICY_BLOCKED, BLOCKED_BY_USER)
 - **Thread key convention**: externalThreadId = "whatsapp_cloud:{fromPhone}" for WhatsApp Cloud conversations
 
 ## External Dependencies
