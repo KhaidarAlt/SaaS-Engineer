@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Check, Crown, Zap, Rocket, Star, Loader2 } from "lucide-react";
+import { Check, Crown, Zap, Rocket, Star, Loader2, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -17,12 +18,14 @@ import type { Plan } from "@shared/schema";
 interface PlanSelectionPopupProps {
   open: boolean;
   onClose: () => void;
+  blockDismiss?: boolean;
 }
 
-export function PlanSelectionPopup({ open, onClose }: PlanSelectionPopupProps) {
+export function PlanSelectionPopup({ open, onClose, blockDismiss = false }: PlanSelectionPopupProps) {
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
   const { toast } = useToast();
+  const [, navigate] = useLocation();
 
   const { data: plans, isLoading: plansLoading } = useQuery<Plan[]>({
     queryKey: ["/api/plans"],
@@ -31,7 +34,6 @@ export function PlanSelectionPopup({ open, onClose }: PlanSelectionPopupProps) {
   const requestPlanMutation = useMutation({
     mutationFn: async (planId: string) => {
       await apiRequest("POST", `/api/request-plan`, { planId });
-      await apiRequest("POST", `/api/dismiss-plan-popup`);
     },
     onSuccess: () => {
       setShowSuccess(true);
@@ -43,22 +45,13 @@ export function PlanSelectionPopup({ open, onClose }: PlanSelectionPopupProps) {
     },
   });
 
-  const dismissPopupMutation = useMutation({
-    mutationFn: async () => {
-      return apiRequest("POST", `/api/dismiss-plan-popup`);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-    },
-  });
-
   const startPlan = plans?.find((p) => p.name === "Start");
   const businessPlan = plans?.find((p) => p.name === "Business");
   const scalePlan = plans?.find((p) => p.name === "Scale");
   const freePlan = plans?.find((p) => p.name === "Free" || p.price === 0);
 
   const formatPrice = (price: number) => {
-    return new Intl.NumberFormat("ru-KZ").format(price) + " ₸";
+    return new Intl.NumberFormat("ru-KZ").format(price) + " \u20B8";
   };
 
   const handleSelectPlan = (planId: string) => {
@@ -78,14 +71,17 @@ export function PlanSelectionPopup({ open, onClose }: PlanSelectionPopupProps) {
   };
 
   const handleClose = () => {
+    if (blockDismiss) return;
     setShowSuccess(false);
     setSelectedPlanId(null);
     onClose();
   };
 
-  const handleDismiss = () => {
-    dismissPopupMutation.mutate();
-    handleClose();
+  const handleGoToBilling = () => {
+    setShowSuccess(false);
+    setSelectedPlanId(null);
+    onClose();
+    navigate("/dashboard/billing");
   };
 
   const mainPlans = [
@@ -96,12 +92,11 @@ export function PlanSelectionPopup({ open, onClose }: PlanSelectionPopupProps) {
       bgColor: "bg-blue-500/10",
       features: [
         "SmartCatalog",
-        "AI-продавец (все функции)",
-        "Раздел Рост",
-        "1 канал подключения",
-        "100 диалогов/мес",
+        "AI-\u043F\u0440\u043E\u0434\u0430\u0432\u0435\u0446 (\u0432\u0441\u0435 \u0444\u0443\u043D\u043A\u0446\u0438\u0438)",
+        "\u0420\u0430\u0437\u0434\u0435\u043B \u0420\u043E\u0441\u0442",
+        "1 \u043A\u0430\u043D\u0430\u043B \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u044F",
+        "100 \u0434\u0438\u0430\u043B\u043E\u0433\u043E\u0432/\u043C\u0435\u0441",
       ],
-      noFeatures: [],
     },
     {
       plan: businessPlan,
@@ -110,13 +105,12 @@ export function PlanSelectionPopup({ open, onClose }: PlanSelectionPopupProps) {
       bgColor: "bg-amber-500/10",
       popular: true,
       features: [
-        "Все функции платформы",
-        "AI-продавец + Growth Engine",
-        "Мультиканал (WA, IG, TG)",
-        "Аналитика",
-        "300 диалогов/мес",
+        "\u0412\u0441\u0435 \u0444\u0443\u043D\u043A\u0446\u0438\u0438 \u043F\u043B\u0430\u0442\u0444\u043E\u0440\u043C\u044B",
+        "AI-\u043F\u0440\u043E\u0434\u0430\u0432\u0435\u0446 + Growth Engine",
+        "\u041C\u0443\u043B\u044C\u0442\u0438\u043A\u0430\u043D\u0430\u043B (WA, IG, TG)",
+        "\u0410\u043D\u0430\u043B\u0438\u0442\u0438\u043A\u0430",
+        "300 \u0434\u0438\u0430\u043B\u043E\u0433\u043E\u0432/\u043C\u0435\u0441",
       ],
-      noFeatures: [],
     },
     {
       plan: scalePlan,
@@ -124,24 +118,22 @@ export function PlanSelectionPopup({ open, onClose }: PlanSelectionPopupProps) {
       color: "text-purple-500",
       bgColor: "bg-purple-500/10",
       features: [
-        "Все функции",
-        "Growth автоматизации",
-        "Расширенная аналитика",
-        "Приоритетная поддержка",
-        "700 диалогов/мес",
+        "\u0412\u0441\u0435 \u0444\u0443\u043D\u043A\u0446\u0438\u0438",
+        "Growth \u0430\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0437\u0430\u0446\u0438\u0438",
+        "\u0420\u0430\u0441\u0448\u0438\u0440\u0435\u043D\u043D\u0430\u044F \u0430\u043D\u0430\u043B\u0438\u0442\u0438\u043A\u0430",
+        "\u041F\u0440\u0438\u043E\u0440\u0438\u0442\u0435\u0442\u043D\u0430\u044F \u043F\u043E\u0434\u0434\u0435\u0440\u0436\u043A\u0430",
+        "700 \u0434\u0438\u0430\u043B\u043E\u0433\u043E\u0432/\u043C\u0435\u0441",
       ],
-      noFeatures: [],
     },
   ];
 
-  // Loading state
   if (plansLoading) {
     return (
       <Dialog open={open} onOpenChange={handleClose}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className={`sm:max-w-md ${blockDismiss ? "[&>button.absolute]:hidden" : ""}`} onPointerDownOutside={blockDismiss ? (e) => e.preventDefault() : undefined} onEscapeKeyDown={blockDismiss ? (e) => e.preventDefault() : undefined}>
           <div className="flex flex-col items-center justify-center py-12">
             <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
-            <p className="text-muted-foreground">Загрузка тарифов...</p>
+            <p className="text-muted-foreground">\u0417\u0430\u0433\u0440\u0443\u0437\u043A\u0430 \u0442\u0430\u0440\u0438\u0444\u043E\u0432...</p>
           </div>
         </DialogContent>
       </Dialog>
@@ -151,7 +143,7 @@ export function PlanSelectionPopup({ open, onClose }: PlanSelectionPopupProps) {
   if (showSuccess) {
     return (
       <Dialog open={open} onOpenChange={handleClose}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className={`sm:max-w-md ${blockDismiss ? "[&>button.absolute]:hidden" : ""}`} onPointerDownOutside={blockDismiss ? (e) => e.preventDefault() : undefined} onEscapeKeyDown={blockDismiss ? (e) => e.preventDefault() : undefined}>
           <div className="flex flex-col items-center text-center py-6">
             <motion.div
               initial={{ scale: 0 }}
@@ -161,12 +153,12 @@ export function PlanSelectionPopup({ open, onClose }: PlanSelectionPopupProps) {
             >
               <Check className="h-8 w-8 text-green-500" />
             </motion.div>
-            <h2 className="text-xl font-bold mb-2">Спасибо, ваш запрос отправлен!</h2>
+            <h2 className="text-xl font-bold mb-2">\u0421\u043F\u0430\u0441\u0438\u0431\u043E, \u0432\u0430\u0448 \u0437\u0430\u043F\u0440\u043E\u0441 \u043E\u0442\u043F\u0440\u0430\u0432\u043B\u0435\u043D!</h2>
             <p className="text-muted-foreground mb-6">
-              С вами в самое ближайшее время свяжется наш менеджер. Можете начинать создавать ваш каталог.
+              \u0421 \u0432\u0430\u043C\u0438 \u0432 \u0441\u0430\u043C\u043E\u0435 \u0431\u043B\u0438\u0436\u0430\u0439\u0448\u0435\u0435 \u0432\u0440\u0435\u043C\u044F \u0441\u0432\u044F\u0436\u0435\u0442\u0441\u044F \u043D\u0430\u0448 \u043C\u0435\u043D\u0435\u0434\u0436\u0435\u0440.
             </p>
-            <Button onClick={handleClose} data-testid="button-close-success">
-              Начать работу
+            <Button onClick={handleGoToBilling} data-testid="button-go-to-billing">
+              \u041F\u0435\u0440\u0435\u0439\u0442\u0438 \u043A \u043E\u043F\u043B\u0430\u0442\u0435
             </Button>
           </div>
         </DialogContent>
@@ -176,15 +168,23 @@ export function PlanSelectionPopup({ open, onClose }: PlanSelectionPopupProps) {
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className={`sm:max-w-4xl max-h-[90vh] overflow-y-auto ${blockDismiss ? "[&>button.absolute]:hidden" : ""}`} onPointerDownOutside={blockDismiss ? (e) => e.preventDefault() : undefined} onEscapeKeyDown={blockDismiss ? (e) => e.preventDefault() : undefined}>
+        {blockDismiss && (
+          <div className="flex items-center gap-3 p-3 rounded-md bg-destructive/10 border border-destructive/20 mb-2">
+            <AlertTriangle className="h-5 w-5 text-destructive flex-shrink-0" />
+            <p className="text-sm">
+              \u0412\u0430\u0448 \u0431\u0435\u0441\u043F\u043B\u0430\u0442\u043D\u044B\u0439 \u043F\u0440\u043E\u0431\u043D\u044B\u0439 \u043F\u0435\u0440\u0438\u043E\u0434 \u0437\u0430\u0432\u0435\u0440\u0448\u0451\u043D. \u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0442\u0430\u0440\u0438\u0444, \u0447\u0442\u043E\u0431\u044B \u043F\u0440\u043E\u0434\u043E\u043B\u0436\u0438\u0442\u044C \u0440\u0430\u0431\u043E\u0442\u0443.
+            </p>
+          </div>
+        )}
         <DialogHeader>
           <DialogTitle className="text-2xl text-center">
-            Выберите тариф для вашего магазина
+            {blockDismiss ? "\u041F\u0440\u043E\u0431\u043D\u044B\u0439 \u043F\u0435\u0440\u0438\u043E\u0434 \u0437\u0430\u0432\u0435\u0440\u0448\u0451\u043D \u2014 \u0432\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0442\u0430\u0440\u0438\u0444" : "\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0442\u0430\u0440\u0438\u0444 \u0434\u043B\u044F \u0432\u0430\u0448\u0435\u0433\u043E \u043C\u0430\u0433\u0430\u0437\u0438\u043D\u0430"}
           </DialogTitle>
         </DialogHeader>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-          {mainPlans.map(({ plan, icon: Icon, color, bgColor, popular, features, noFeatures }) => {
+          {mainPlans.map(({ plan, icon: Icon, color, bgColor, popular, features }) => {
             if (!plan) return null;
             const isSelected = selectedPlanId === plan.id;
 
@@ -194,7 +194,7 @@ export function PlanSelectionPopup({ open, onClose }: PlanSelectionPopupProps) {
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 onClick={() => handleSelectPlan(plan.id)}
-                className={`relative p-5 rounded-xl border-2 cursor-pointer transition-all ${
+                className={`relative p-5 rounded-md border-2 cursor-pointer transition-all ${
                   isSelected
                     ? "border-primary bg-primary/5 ring-2 ring-primary/20"
                     : "border-border hover:border-primary/50"
@@ -203,30 +203,24 @@ export function PlanSelectionPopup({ open, onClose }: PlanSelectionPopupProps) {
               >
                 {popular && (
                   <Badge className="absolute -top-3 left-1/2 -translate-x-1/2 bg-amber-500 text-white">
-                    Популярный
+                    \u041F\u043E\u043F\u0443\u043B\u044F\u0440\u043D\u044B\u0439
                   </Badge>
                 )}
 
-                <div className={`w-12 h-12 rounded-xl ${bgColor} flex items-center justify-center mb-4`}>
+                <div className={`w-12 h-12 rounded-md ${bgColor} flex items-center justify-center mb-4`}>
                   <Icon className={`h-6 w-6 ${color}`} />
                 </div>
 
                 <h3 className="text-xl font-bold mb-1">{plan.name}</h3>
                 <p className="text-2xl font-bold mb-4">
                   {formatPrice(plan.price)}
-                  <span className="text-sm font-normal text-muted-foreground"> / мес</span>
+                  <span className="text-sm font-normal text-muted-foreground"> / \u043C\u0435\u0441</span>
                 </p>
 
                 <ul className="space-y-2 mb-4">
                   {features.map((feature) => (
                     <li key={feature} className="flex items-center gap-2 text-sm">
                       <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
-                      {feature}
-                    </li>
-                  ))}
-                  {noFeatures.map((feature) => (
-                    <li key={feature} className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <X className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                       {feature}
                     </li>
                   ))}
@@ -262,47 +256,63 @@ export function PlanSelectionPopup({ open, onClose }: PlanSelectionPopupProps) {
                 disabled={requestPlanMutation.isPending}
                 data-testid="button-submit-request"
               >
-                Отправить запрос
+                \u041E\u0442\u043F\u0440\u0430\u0432\u0438\u0442\u044C \u0437\u0430\u043F\u0440\u043E\u0441
               </Button>
             </motion.div>
           )}
         </AnimatePresence>
 
-        <div className="mt-6 pt-6 border-t border-border">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 rounded-lg bg-muted/50">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
-                <Star className="h-5 w-5 text-muted-foreground" />
+        {!blockDismiss && (
+          <div className="mt-6 pt-6 border-t border-border">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 rounded-md bg-muted/50">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-md bg-muted flex items-center justify-center">
+                  <Star className="h-5 w-5 text-muted-foreground" />
+                </div>
+                <div>
+                  <h4 className="font-medium">Free</h4>
+                  <p className="text-sm text-muted-foreground">
+                    \u0411\u0435\u0441\u043F\u043B\u0430\u0442\u043D\u043E \u2014 \u0434\u043E 100 \u0442\u043E\u0432\u0430\u0440\u043E\u0432, \u0431\u0430\u0437\u043E\u0432\u044B\u0439 \u043A\u0430\u0442\u0430\u043B\u043E\u0433
+                  </p>
+                </div>
               </div>
-              <div>
-                <h4 className="font-medium">Free</h4>
-                <p className="text-sm text-muted-foreground">
-                  Бесплатно — до 100 товаров, базовый каталог
-                </p>
-              </div>
+              <Button
+                variant="outline"
+                onClick={handleActivateFree}
+                disabled={requestPlanMutation.isPending}
+                data-testid="button-activate-free"
+              >
+                \u0410\u043A\u0442\u0438\u0432\u0438\u0440\u043E\u0432\u0430\u0442\u044C
+              </Button>
             </div>
-            <Button
-              variant="outline"
-              onClick={handleActivateFree}
-              disabled={requestPlanMutation.isPending}
-              data-testid="button-activate-free"
-            >
-              Активировать
-            </Button>
           </div>
-        </div>
+        )}
 
-        <div className="flex justify-center mt-4">
-          <Button
-            variant="ghost"
-            onClick={handleDismiss}
-            disabled={dismissPopupMutation.isPending}
-            data-testid="button-dismiss-popup"
-            className="text-muted-foreground"
-          >
-            Решу позже
-          </Button>
-        </div>
+        {blockDismiss && (
+          <div className="mt-6 pt-6 border-t border-border">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 rounded-md bg-muted/50">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-md bg-muted flex items-center justify-center">
+                  <Star className="h-5 w-5 text-muted-foreground" />
+                </div>
+                <div>
+                  <h4 className="font-medium">Free</h4>
+                  <p className="text-sm text-muted-foreground">
+                    \u0411\u0435\u0441\u043F\u043B\u0430\u0442\u043D\u043E \u2014 \u0434\u043E 100 \u0442\u043E\u0432\u0430\u0440\u043E\u0432, \u0431\u0430\u0437\u043E\u0432\u044B\u0439 \u043A\u0430\u0442\u0430\u043B\u043E\u0433, \u0431\u0435\u0437 AI
+                  </p>
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                onClick={handleActivateFree}
+                disabled={requestPlanMutation.isPending}
+                data-testid="button-activate-free"
+              >
+                \u041F\u0440\u043E\u0434\u043E\u043B\u0436\u0438\u0442\u044C \u0431\u0435\u0441\u043F\u043B\u0430\u0442\u043D\u043E
+              </Button>
+            </div>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );

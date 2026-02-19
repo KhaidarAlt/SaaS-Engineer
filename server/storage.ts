@@ -1737,8 +1737,10 @@ export class DatabaseStorage implements IStorage {
 
   // ============ ADMIN: PLAN MANAGEMENT ============
   async changeSubscriptionPlan(subscriptionId: string, planId: string): Promise<void> {
+    const endsAt = new Date();
+    endsAt.setDate(endsAt.getDate() + 30);
     await db.update(subscriptions)
-      .set({ planId, requestedPlanId: null } as any)
+      .set({ planId, requestedPlanId: null, status: "active", endsAt } as any)
       .where(eq(subscriptions.id, subscriptionId));
   }
 

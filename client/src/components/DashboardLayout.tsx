@@ -140,6 +140,24 @@ interface DashboardLayoutProps {
 interface BillingData {
   subscription: Subscription & { plan: Plan };
   daysLeft: number;
+  overage?: {
+    dialogs: number;
+    costPerDialog: number;
+    totalCost: number;
+  };
+}
+
+function isTrialExpired(billing: BillingData | undefined): boolean {
+  if (!billing?.subscription) return false;
+  const sub = billing.subscription;
+  if (sub.status !== "trial") return false;
+  return new Date(sub.endsAt) < new Date();
+}
+
+function hasActivePaidPlan(billing: BillingData | undefined): boolean {
+  if (!billing?.subscription) return false;
+  const sub = billing.subscription;
+  return sub.status === "active" && (sub.plan?.price ?? 0) > 0;
 }
 
 const getMenuStateKey = (userId?: string) => `smartcatalog_menu_state_${userId || "guest"}`;
@@ -173,18 +191,21 @@ export function DashboardLayout({ children, isSuperAdmin = false }: DashboardLay
     }
   }, [expandedGroup, user?.id]);
 
+  const trialExpired = isTrialExpired(billing);
+  const paidActive = hasActivePaidPlan(billing);
+  const isBillingPage = location === "/dashboard/billing";
+  const shouldBlockAccess = trialExpired && !paidActive && !isSuperAdmin && !isBillingPage;
+
   useEffect(() => {
     if (isSuperAdmin || !user || user.role === "superadmin") return;
+    if (!billing) return;
 
-    const createdAt = new Date(user.createdAt);
-    const now = new Date();
-    const hoursSinceRegistration = (now.getTime() - createdAt.getTime()) / (1000 * 60 * 60);
-
-    const popupShown = (user as any).planPopupShown;
-    if (hoursSinceRegistration >= 24 && !popupShown) {
+    if (trialExpired && !paidActive) {
       setShowPlanPopup(true);
+    } else {
+      setShowPlanPopup(false);
     }
-  }, [user, isSuperAdmin]);
+  }, [billing, user, isSuperAdmin, trialExpired, paidActive]);
 
   const tenantVersion = user?.tenant?.updatedAt ? new Date(user.tenant.updatedAt).getTime() : Date.now();
   const t = user?.tenant as any;
@@ -416,11 +437,26 @@ export function DashboardLayout({ children, isSuperAdmin = false }: DashboardLay
           </div>
         </header>
 
-        <main className="p-4 lg:p-6">
+        <main className="p-4 lg:p-6 relative">
+          {shouldBlockAccess && (
+            <div className="absolute inset-0 z-30 bg-background/80 backdrop-blur-sm flex items-start justify-center pt-20" data-testid="trial-expired-overlay">
+              <div className="text-center max-w-md p-6">
+                <Lock className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+                <h3 className="text-xl font-bold mb-2">Пробный период завершён</h3>
+                <p className="text-muted-foreground mb-4">
+                  Выберите тариф, чтобы продолжить работу с платформой
+                </p>
+                <Button onClick={() => setShowPlanPopup(true)} data-testid="button-open-plan-popup">
+                  Выбрать тариф
+                </Button>
+              </div>
+            </div>
+          )}
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3 }}
+            className={shouldBlockAccess ? "pointer-events-none select-none" : ""}
           >
             {children}
           </motion.div>
@@ -430,6 +466,7 @@ export function DashboardLayout({ children, isSuperAdmin = false }: DashboardLay
       <PlanSelectionPopup
         open={showPlanPopup}
         onClose={() => setShowPlanPopup(false)}
+        blockDismiss={trialExpired && !paidActive && !isSuperAdmin}
       />
     </div>
   );
