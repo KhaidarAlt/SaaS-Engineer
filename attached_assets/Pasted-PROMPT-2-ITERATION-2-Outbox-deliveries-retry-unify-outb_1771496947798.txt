@@ -1,0 +1,54 @@
+PROMPT #2 — ITERATION 2 (Outbox + deliveries + retry; unify outbound sending)
+
+You are working on the existing SmartCatalog project. DO NOT redesign. This iteration builds on Iteration 1 tables messaging_messages + messaging_dedup. Keep existing Growth system (growth_queue) and AI tables.
+
+GOAL (Iteration 2):
+Introduce a robust outbound sending pipeline (Outbox + delivery attempts + retry/backoff) that is channel-agnostic, starting with Meta WhatsApp sending, without introducing Redis/BullMQ yet.
+
+IMPLEMENT:
+
+1. Table messaging_deliveries (delivery attempts) and Table message_outbox (or reuse growth_queue if that is safer, but prefer a dedicated table for messaging)
+2. Messaging Core send API: messaging/core.ts function sendMessage(params) that:
+
+   * creates messaging_messages row with direction='OUT' and status='QUEUED'
+   * enqueues an outbox job row referencing the message_id
+3. Worker loop (in-process setInterval) dedicated to message_outbox that runs every 2–5 seconds:
+
+   * picks PENDING rows in batches of 10 FOR UPDATE SKIP LOCKED
+   * sends via provider adapter (Meta WhatsApp send)
+   * writes messaging_deliveries attempt row
+   * updates messaging_messages.status to SENT or FAILED
+   * on technical errors schedules retry with exponential backoff and sets next_retry_at
+   * on non-retryable errors sets FAILED with structured fail_reason
+
+RETRY POLICY:
+
+* retryable: timeouts, 5xx, network errors
+* non-retryable: OPT_OUT, TEMPLATE_REQUIRED (if not provided), INVALID_RECIPIENT, POLICY_BLOCKED, BLOCKED_BY_USER
+  Backoff: 1m, 5m, 15m, 60m, 6h then give up.
+
+POLICIES:
+Before enqueueing, check:
+
+* opt-out (existing Growth opt-out rules if available; otherwise add a minimal check stub returning false)
+* quiet hours (if enabled at tenant level)
+  If blocked => do not enqueue; create messaging_messages with status FAILED and fail_reason.
+
+META WA SENDING:
+Use existing WhatsApp Cloud sending code. Wrap it into adapter function:
+sendOutbound(req: NormalizedOutbound): ProviderSendResult
+Ensure it returns provider_message_id and any errors.
+
+ACCEPTANCE CRITERIA:
+
+1. AI outbound messages are sent via sendMessage() (replace direct send calls in AI pipeline with messaging core).
+2. Outbox retries work: simulate provider downtime and observe retries scheduled, no message loss.
+3. No duplicate sends when worker restarts (idempotency: outbox row transitions must be atomic; deliveries attempt increments properly).
+
+DELIVERABLES:
+
+* Drizzle migrations for message_outbox and messaging_deliveries
+* messaging/core.ts sendMessage + enqueue + policy gate
+* message worker module: messaging/worker.ts started from server bootstrap
+* update AI reply path to call sendMessage()
+  Keep all changes minimal and backward-compatible.
