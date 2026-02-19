@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { SiWhatsapp, SiTelegram } from "react-icons/si";
 import { z } from "zod";
+import { resolveImageUrl } from "@/lib/imageUrl";
 import QRCodeLib from "qrcode";
 import { QRCodeSVG } from "qrcode.react";
 import { Button } from "@/components/ui/button";
@@ -588,8 +589,8 @@ export default function SettingsPage() {
         showFloatingWhatsApp: (tenant as any).showFloatingWhatsApp ?? true,
         showAiConsultant: (tenant as any).showAiConsultant ?? true,
       });
-      setLogoPreview(tenant.logoUrl || "");
-      setOgImagePreview((tenant as any).ogImageUrl || "");
+      setLogoPreview(resolveImageUrl(tenant.logoUrl));
+      setOgImagePreview(resolveImageUrl((tenant as any).ogImageUrl));
       generateQRCode(tenant.slug, tenant.updatedAt);
     }
   }, [tenant, form]);
@@ -673,10 +674,10 @@ export default function SettingsPage() {
       
       if (type === "logo") {
         form.setValue("logoUrl", imageUrl);
-        setLogoPreview(imageUrl);
+        setLogoPreview(resolveImageUrl(imageUrl));
       } else {
         form.setValue("ogImageUrl", imageUrl);
-        setOgImagePreview(imageUrl);
+        setOgImagePreview(resolveImageUrl(imageUrl));
       }
       
       toast({ title: "Изображение загружено" });

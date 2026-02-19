@@ -26,6 +26,7 @@ import {
 import { useCart } from "@/contexts/CartContext";
 import { useToast } from "@/hooks/use-toast";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { resolveImageUrl } from "@/lib/imageUrl";
 import type { Product } from "@shared/schema";
 
 interface FashionCatalogProps {
@@ -43,11 +44,6 @@ const TAG_CONFIG: Record<string, { label: string; color: string }> = {
   sale: { label: "Распродажа", color: "bg-red-500" },
 };
 
-function normalizeImageUrl(url: string | null | undefined): string {
-  if (!url) return "";
-  if (url.startsWith("http") || url.startsWith("/objects/")) return url;
-  return `/objects/${url}`;
-}
 
 function useFavorites(tenantSlug: string) {
   const storageKey = `favorites_${tenantSlug}`;
@@ -231,7 +227,7 @@ export default function FashionCatalog({
           <div className="flex items-center gap-2">
             {tenant?.logoUrl && (
               <img
-                src={normalizeImageUrl(tenant.logoUrl)}
+                src={resolveImageUrl(tenant.logoUrl)}
                 alt={tenant.name}
                 className="h-8 w-8 rounded-full object-cover"
                 data-testid="img-tenant-logo"
@@ -292,7 +288,7 @@ export default function FashionCatalog({
         <div className="flex items-center gap-2">
           {tenant?.logoUrl && (
             <img
-              src={normalizeImageUrl(tenant.logoUrl)}
+              src={resolveImageUrl(tenant.logoUrl)}
               alt={tenant.name}
               className="h-8 w-8 rounded-full object-cover border border-white/20"
               data-testid="img-tenant-logo"
@@ -371,7 +367,7 @@ export default function FashionCatalog({
         style={{ height: `calc(100vh - ${TOTAL_TOP}px)` }}
       >
         {filteredProducts.map((product: any, index: number) => {
-          const imageUrl = normalizeImageUrl(product.mainImageUrl);
+          const imageUrl = resolveImageUrl(product.mainImageUrl);
           const viewers = getViewerCount(product.id);
           const favorite = isFavorite(product.id);
 
@@ -385,8 +381,8 @@ export default function FashionCatalog({
               <div className="absolute inset-0 bg-black">
                 {(product as any).videoUrl && (product as any).videoPrimary ? (
                   <video
-                    src={normalizeImageUrl((product as any).videoUrl)}
-                    poster={normalizeImageUrl((product as any).videoPosterUrl || product.mainImageUrl)}
+                    src={resolveImageUrl((product as any).videoUrl)}
+                    poster={resolveImageUrl((product as any).videoPosterUrl || product.mainImageUrl)}
                     autoPlay
                     muted
                     loop
@@ -576,7 +572,7 @@ export default function FashionCatalog({
               <div className="flex items-center gap-3">
                 {activeProduct.mainImageUrl && (
                   <img
-                    src={normalizeImageUrl(activeProduct.mainImageUrl)}
+                    src={resolveImageUrl(activeProduct.mainImageUrl)}
                     alt={activeProduct.name}
                     className="w-16 h-16 rounded-md object-cover"
                   />

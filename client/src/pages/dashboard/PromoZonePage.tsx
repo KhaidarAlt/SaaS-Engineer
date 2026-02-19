@@ -36,16 +36,8 @@ import { CardSkeleton } from "@/components/LoadingSpinner";
 import { useToast } from "@/hooks/use-toast";
 import { useUpload } from "@/hooks/use-upload";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { resolveImageUrl } from "@/lib/imageUrl";
 import type { PromoBlock } from "@shared/schema";
-
-// Helper to normalize image URL (handles both old objectPath and new /objects/ URLs)
-function normalizeImageUrl(url: string | null | undefined): string {
-  if (!url) return "";
-  if (url.startsWith("http") || url.startsWith("/objects/")) {
-    return url;
-  }
-  return `/objects/${url}`;
-}
 
 function AiDescriptionBlock({ block }: { block: PromoBlock }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -415,7 +407,7 @@ export default function PromoZonePage() {
                     {block.imageUrl ? (
                       block.mediaType === "video" ? (
                         <video
-                          src={normalizeImageUrl(block.imageUrl)}
+                          src={resolveImageUrl(block.imageUrl)}
                           className="w-full h-full object-cover"
                           muted
                           loop
@@ -425,7 +417,7 @@ export default function PromoZonePage() {
                         />
                       ) : (
                         <img
-                          src={normalizeImageUrl(block.imageUrl)}
+                          src={resolveImageUrl(block.imageUrl)}
                           alt={block.title || "Промо-блок"}
                           className="w-full h-full object-cover"
                           data-testid={`img-promo-block-${block.id}`}
@@ -559,7 +551,7 @@ export default function PromoZonePage() {
                   <div className="relative aspect-[3/1] rounded-lg overflow-hidden bg-muted">
                     {mediaType === "video" ? (
                       <video
-                        src={normalizeImageUrl(imageUrl)}
+                        src={resolveImageUrl(imageUrl)}
                         className="w-full h-full object-cover"
                         muted
                         loop
@@ -569,7 +561,7 @@ export default function PromoZonePage() {
                       />
                     ) : (
                       <img
-                        src={normalizeImageUrl(imageUrl)}
+                        src={resolveImageUrl(imageUrl)}
                         alt="Превью"
                         className="w-full h-full object-cover"
                         data-testid="img-preview"

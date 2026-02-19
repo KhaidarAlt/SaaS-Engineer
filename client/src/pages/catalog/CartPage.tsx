@@ -1,6 +1,7 @@
 import { Link, useLocation } from "wouter";
 import { motion } from "framer-motion";
 import { ArrowLeft, Minus, Plus, Trash2, ShoppingCart, Package, MessageCircle } from "lucide-react";
+import { resolveImageUrl } from "@/lib/imageUrl";
 import { useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -103,7 +104,7 @@ export default function CartPage() {
                         <div className="w-20 h-20 rounded-lg bg-muted overflow-hidden shrink-0">
                           {item.product.mainImageUrl ? (
                             <img
-                              src={item.product.mainImageUrl}
+                              src={resolveImageUrl(item.product.mainImageUrl)}
                               alt={item.product.name}
                               className="w-full h-full object-cover"
                             />

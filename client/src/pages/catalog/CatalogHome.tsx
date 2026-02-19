@@ -63,6 +63,7 @@ import { CardSkeleton } from "@/components/LoadingSpinner";
 import { useCart } from "@/contexts/CartContext";
 import { useToast } from "@/hooks/use-toast";
 import { trackEvent, updateCartSession } from "@/lib/analytics";
+import { resolveImageUrl } from "@/lib/imageUrl";
 import type { Tenant, Product, Category, Promotion, PromoBlock } from "@shared/schema";
 
 interface ProductWithPrice extends Product {
@@ -85,16 +86,6 @@ const TAG_CONFIG: Record<string, { label: string; color: string }> = {
   low_stock: { label: "Заканчивается", color: "bg-orange-500" },
 };
 
-// Helper to normalize image URL (handles both old objectPath and new /objects/ URLs)
-function normalizeImageUrl(url: string | null | undefined): string {
-  if (!url) return "";
-  // Already a full URL or starts with /objects/
-  if (url.startsWith("http") || url.startsWith("/objects/")) {
-    return url;
-  }
-  // Object path without /objects/ prefix
-  return `/objects/${url}`;
-}
 
 interface CatalogData {
   tenant: Tenant;
@@ -189,8 +180,8 @@ function ProductCard({
           >
             {(product as any).videoUrl && (product as any).videoPrimary ? (
               <video
-                src={normalizeImageUrl((product as any).videoUrl)}
-                poster={normalizeImageUrl((product as any).videoPosterUrl || product.mainImageUrl)}
+                src={resolveImageUrl((product as any).videoUrl)}
+                poster={resolveImageUrl((product as any).videoPosterUrl || product.mainImageUrl)}
                 autoPlay
                 muted
                 loop
@@ -200,7 +191,7 @@ function ProductCard({
               />
             ) : product.mainImageUrl ? (
               <img
-                src={normalizeImageUrl(product.mainImageUrl)}
+                src={resolveImageUrl(product.mainImageUrl)}
                 alt={product.name}
                 className="w-full h-full object-cover"
                 loading="lazy"
@@ -369,7 +360,7 @@ function QuickViewModal({
       <div className="w-full aspect-square bg-muted rounded-lg overflow-hidden">
         {product.mainImageUrl ? (
           <img
-            src={product.mainImageUrl}
+            src={resolveImageUrl(product.mainImageUrl)}
             alt={product.name}
             className="w-full h-full object-cover"
             data-testid={`img-quick-view-product-${product.id}`}
@@ -501,7 +492,7 @@ function QuickViewModal({
           <div className="w-full aspect-square bg-muted rounded-lg overflow-hidden">
             {product.mainImageUrl ? (
               <img
-                src={product.mainImageUrl}
+                src={resolveImageUrl(product.mainImageUrl)}
                 alt={product.name}
                 className="w-full h-full object-cover"
                 data-testid={`img-dialog-quick-view-product-${product.id}`}
@@ -612,7 +603,7 @@ function PromoCarousel({
                 >
                   {block.mediaType === "video" ? (
                     <video
-                      src={normalizeImageUrl(block.imageUrl)}
+                      src={resolveImageUrl(block.imageUrl)}
                       className="w-full h-full object-cover"
                       autoPlay
                       muted
@@ -622,7 +613,7 @@ function PromoCarousel({
                     />
                   ) : (
                     <img
-                      src={normalizeImageUrl(block.imageUrl)}
+                      src={resolveImageUrl(block.imageUrl)}
                       alt={block.title || "Promo"}
                       className="w-full h-full object-cover"
                       loading={index === 0 ? "eager" : "lazy"}
@@ -876,7 +867,7 @@ export default function CatalogHome({ basePath: parentBasePath }: { basePath?: s
                 <div className="flex items-center gap-3">
                   {data?.tenant?.logoUrl && (
                     <img 
-                      src={data.tenant.logoUrl} 
+                      src={resolveImageUrl(data.tenant.logoUrl)} 
                       alt={data.tenant.name} 
                       className="h-10 w-10 object-contain rounded-lg"
                     />
@@ -1308,7 +1299,7 @@ export default function CatalogHome({ basePath: parentBasePath }: { basePath?: s
                           <div className="w-24 h-24 rounded-lg overflow-hidden bg-muted shrink-0 cursor-pointer relative">
                             {product.mainImageUrl ? (
                               <img
-                                src={product.mainImageUrl}
+                                src={resolveImageUrl(product.mainImageUrl)}
                                 alt={product.name}
                                 className="w-full h-full object-cover"
                                 loading="lazy"
@@ -1414,7 +1405,7 @@ export default function CatalogHome({ basePath: parentBasePath }: { basePath?: s
                                 <div className="w-12 h-12 rounded-md overflow-hidden bg-muted cursor-pointer">
                                   {product.mainImageUrl ? (
                                     <img
-                                      src={product.mainImageUrl}
+                                      src={resolveImageUrl(product.mainImageUrl)}
                                       alt={product.name}
                                       className="w-full h-full object-cover"
                                       loading="lazy"
@@ -1517,7 +1508,7 @@ export default function CatalogHome({ basePath: parentBasePath }: { basePath?: s
             <div className="text-center md:text-left flex-1">
               {data?.tenant?.logoUrl && (
                 <img 
-                  src={data.tenant.logoUrl} 
+                  src={resolveImageUrl(data.tenant.logoUrl)} 
                   alt={data.tenant.name} 
                   className="h-12 w-12 object-contain rounded-lg mx-auto md:mx-0 mb-3"
                 />

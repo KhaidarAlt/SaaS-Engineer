@@ -5,15 +5,8 @@ import { motion } from "framer-motion";
 import { ArrowLeft, MessageCircle, Loader2 } from "lucide-react";
 import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
+import { resolveImageUrl } from "@/lib/imageUrl";
 import type { PromoBlock, Tenant } from "@shared/schema";
-
-function normalizeImageUrl(url: string | null | undefined): string {
-  if (!url) return "";
-  if (url.startsWith("http") || url.startsWith("/objects/")) {
-    return url;
-  }
-  return `/objects/${url}`;
-}
 
 export default function PromoPage() {
   const [, routeParams] = useRoute("/c/:slug/promo/:promoId");
@@ -103,7 +96,7 @@ export default function PromoPage() {
             <div className="relative aspect-video rounded-lg overflow-hidden">
               {promo.mediaType === "video" ? (
                 <video
-                  src={normalizeImageUrl(promo.imageUrl)}
+                  src={resolveImageUrl(promo.imageUrl)}
                   className="w-full h-full object-cover"
                   autoPlay
                   muted
@@ -114,7 +107,7 @@ export default function PromoPage() {
                 />
               ) : (
                 <img
-                  src={normalizeImageUrl(promo.imageUrl)}
+                  src={resolveImageUrl(promo.imageUrl)}
                   alt={promo.title || "Промо"}
                   className="w-full h-full object-cover"
                   data-testid="img-promo-banner"

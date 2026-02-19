@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/sheet";
 import { useCart } from "@/contexts/CartContext";
 import { useToast } from "@/hooks/use-toast";
+import { resolveImageUrl } from "@/lib/imageUrl";
 import type { Product } from "@shared/schema";
 
 interface FoodCatalogProps {
@@ -44,11 +45,6 @@ const TAG_CONFIG: Record<string, { label: string; color: string }> = {
   sale: { label: "Распродажа", color: "bg-red-500" },
 };
 
-function normalizeImageUrl(url: string | null | undefined): string {
-  if (!url) return "";
-  if (url.startsWith("http") || url.startsWith("/objects/")) return url;
-  return `/objects/${url}`;
-}
 
 function formatPrice(value: number | string) {
   const num = typeof value === "string" ? parseFloat(value) : value;
@@ -355,7 +351,7 @@ export default function FoodCatalog({
           <div className="flex items-center gap-2">
             {tenant?.logoUrl && (
               <img
-                src={normalizeImageUrl(tenant.logoUrl)}
+                src={resolveImageUrl(tenant.logoUrl)}
                 alt={tenant.name}
                 className="h-8 w-8 rounded-full object-cover"
                 data-testid="img-tenant-logo"
@@ -388,7 +384,7 @@ export default function FoodCatalog({
         <div className="flex items-center gap-2 min-w-0">
           {tenant?.logoUrl && (
             <img
-              src={normalizeImageUrl(tenant.logoUrl)}
+              src={resolveImageUrl(tenant.logoUrl)}
               alt={tenant.name}
               className="h-8 w-8 rounded-full object-cover shrink-0"
               data-testid="img-tenant-logo"
@@ -483,7 +479,7 @@ export default function FoodCatalog({
                   >
                     {p.mainImageUrl ? (
                       <img
-                        src={normalizeImageUrl(p.mainImageUrl)}
+                        src={resolveImageUrl(p.mainImageUrl)}
                         alt={p.name}
                         className="w-full h-full object-cover"
                         loading="lazy"
@@ -524,7 +520,7 @@ export default function FoodCatalog({
                 <div key={item.id} className="shrink-0 flex items-center gap-2 rounded-md bg-muted p-2 min-w-[140px]">
                   {item.mainImageUrl ? (
                     <img
-                      src={normalizeImageUrl(item.mainImageUrl)}
+                      src={resolveImageUrl(item.mainImageUrl)}
                       alt={item.name}
                       className="w-10 h-10 rounded-md object-cover shrink-0"
                       loading="lazy"
@@ -611,7 +607,7 @@ export default function FoodCatalog({
               {activeProduct.mainImageUrl && (
                 <div className="w-full h-48 overflow-hidden">
                   <img
-                    src={normalizeImageUrl(activeProduct.mainImageUrl)}
+                    src={resolveImageUrl(activeProduct.mainImageUrl)}
                     alt={activeProduct.name}
                     className="w-full h-full object-cover"
                   />
@@ -770,7 +766,7 @@ function DishCard({
   slug: string;
 }) {
   const isInStock = product.alwaysInStock || product.stockQty > 0;
-  const imgUrl = normalizeImageUrl(product.mainImageUrl);
+  const imgUrl = resolveImageUrl(product.mainImageUrl);
 
   return (
     <div
@@ -836,8 +832,8 @@ function DishCard({
         <div className="w-full h-full rounded-md overflow-hidden bg-muted">
           {product.videoUrl && product.videoPrimary ? (
             <video
-              src={normalizeImageUrl(product.videoUrl)}
-              poster={normalizeImageUrl(product.videoPosterUrl || product.mainImageUrl)}
+              src={resolveImageUrl(product.videoUrl)}
+              poster={resolveImageUrl(product.videoPosterUrl || product.mainImageUrl)}
               autoPlay
               muted
               loop

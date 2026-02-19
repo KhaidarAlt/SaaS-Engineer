@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/collapsible";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { resolveImageUrl } from "@/lib/imageUrl";
 import type { ProductImage } from "@shared/schema";
 
 interface ProductImagesSectionProps {
@@ -449,7 +450,7 @@ export function ProductImagesSection({ productId }: ProductImagesSectionProps) {
                     className="relative group rounded-lg overflow-hidden border bg-muted/30 aspect-square"
                   >
                     <img
-                      src={image.url}
+                      src={resolveImageUrl(image.url)}
                       alt=""
                       className="w-full h-full object-cover"
                     />

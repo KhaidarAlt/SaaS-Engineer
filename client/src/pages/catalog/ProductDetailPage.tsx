@@ -34,13 +34,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { trackEvent } from "@/lib/analytics";
 import { apiRequest } from "@/lib/queryClient";
+import { resolveImageUrl } from "@/lib/imageUrl";
 import type { Product, Category, Promotion, Tenant } from "@shared/schema";
-
-function normalizeImageUrl(url: string | null | undefined): string {
-  if (!url) return "";
-  if (url.startsWith("http") || url.startsWith("/objects/")) return url;
-  return `/objects/${url}`;
-}
 
 interface ChatMessage {
   id: string;
@@ -198,7 +193,7 @@ export default function ProductDetailPage() {
             <div className="aspect-square relative overflow-hidden bg-muted cursor-pointer">
               {product.mainImageUrl ? (
                 <img
-                  src={product.mainImageUrl}
+                  src={resolveImageUrl(product.mainImageUrl)}
                   alt={product.name}
                   className="w-full h-full object-cover"
                   loading="lazy"
@@ -334,13 +329,13 @@ export default function ProductDetailPage() {
   }
 
   const product = data.product;
-  const videoUrl = (product as any).videoUrl ? normalizeImageUrl((product as any).videoUrl) : null;
-  const videoPosterUrl = (product as any).videoPosterUrl ? normalizeImageUrl((product as any).videoPosterUrl) : null;
+  const videoUrl = (product as any).videoUrl ? resolveImageUrl((product as any).videoUrl) : null;
+  const videoPosterUrl = (product as any).videoPosterUrl ? resolveImageUrl((product as any).videoPosterUrl) : null;
   const isVideoPrimary = (product as any).videoPrimary;
   const allMedia: string[] = [
     ...(videoUrl && isVideoPrimary ? [videoUrl] : []),
-    ...(product.mainImageUrl ? [normalizeImageUrl(product.mainImageUrl)] : []),
-    ...((product.galleryUrls || []).map((u: string) => normalizeImageUrl(u))),
+    ...(product.mainImageUrl ? [resolveImageUrl(product.mainImageUrl)] : []),
+    ...((product.galleryUrls || []).map((u: string) => resolveImageUrl(u))),
     ...(videoUrl && !isVideoPrimary ? [videoUrl] : []),
   ].filter(Boolean) as string[];
   const allImages = allMedia;
@@ -419,7 +414,7 @@ export default function ProductDetailPage() {
                     >
                       <video
                         src={videoUrl}
-                        poster={videoPosterUrl || normalizeImageUrl(product.mainImageUrl)}
+                        poster={videoPosterUrl || resolveImageUrl(product.mainImageUrl)}
                         controls
                         autoPlay
                         muted
@@ -504,7 +499,7 @@ export default function ProductDetailPage() {
                       {isVideo ? (
                         <video
                           src={img}
-                          poster={videoPosterUrl || normalizeImageUrl(product.mainImageUrl)}
+                          poster={videoPosterUrl || resolveImageUrl(product.mainImageUrl)}
                           muted
                           playsInline
                           className="w-full h-full object-contain bg-black"

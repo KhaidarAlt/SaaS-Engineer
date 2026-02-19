@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
+import { resolveImageUrl } from "@/lib/imageUrl";
 import { motion } from "framer-motion";
 import {
   Plus,
@@ -327,7 +328,7 @@ export default function ProductsPage() {
                         <div className="w-12 h-12 rounded-lg bg-muted overflow-hidden">
                           {product.mainImageUrl ? (
                             <img
-                              src={product.mainImageUrl}
+                              src={resolveImageUrl(product.mainImageUrl)}
                               alt={product.name}
                               className="w-full h-full object-cover"
                             />

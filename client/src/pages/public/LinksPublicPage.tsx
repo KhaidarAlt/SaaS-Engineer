@@ -3,6 +3,7 @@ import { useParams } from "wouter";
 import { motion } from "framer-motion";
 import { ExternalLink, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { resolveImageUrl } from "@/lib/imageUrl";
 import type { TenantLink } from "@shared/schema";
 
 interface LinksPageData {
@@ -57,7 +58,7 @@ export default function LinksPublicPage() {
         >
           {tenant.logoUrl ? (
             <img
-              src={tenant.logoUrl}
+              src={resolveImageUrl(tenant.logoUrl)}
               alt={tenant.name}
               className="w-24 h-24 rounded-full mx-auto mb-4 object-cover border-4 border-background shadow-lg"
             />

@@ -34,6 +34,7 @@ import { DashboardLayout } from "@/components/DashboardLayout";
 import { CardSkeleton } from "@/components/LoadingSpinner";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { resolveImageUrl } from "@/lib/imageUrl";
 import type { Category } from "@shared/schema";
 
 const categoryFormSchema = z.object({
@@ -269,7 +270,7 @@ export default function CategoriesPage() {
                         <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
                           {parentCategory.imageUrl ? (
                             <img
-                              src={parentCategory.imageUrl}
+                              src={resolveImageUrl(parentCategory.imageUrl)}
                               alt={parentCategory.name}
                               className="w-full h-full object-cover rounded-lg"
                             />
@@ -329,7 +330,7 @@ export default function CategoriesPage() {
                               <div className="w-8 h-8 rounded-lg bg-secondary/50 flex items-center justify-center">
                                 {subCategory.imageUrl ? (
                                   <img
-                                    src={subCategory.imageUrl}
+                                    src={resolveImageUrl(subCategory.imageUrl)}
                                     alt={subCategory.name}
                                     className="w-full h-full object-cover rounded-lg"
                                   />
