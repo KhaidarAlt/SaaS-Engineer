@@ -6,6 +6,13 @@ import {
   knowledgeItems, trainingItems, products, categories,
   tenants, aiSettings, aiTestingMessages,
 } from "@shared/schema";
+import { generateAiResponse } from "./services/openai";
+import OpenAI from "openai";
+
+const openaiClient = new OpenAI({
+  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+});
 
 function guessKnowledgeType(text: string): string {
   const lower = text.toLowerCase();
@@ -508,6 +515,175 @@ export function registerAiTrainingRoutes(
     } catch (error: any) {
       console.error("Ошибка получения последних сообщений:", error);
       res.status(500).json({ error: "Ошибка получения последних сообщений" });
+    }
+  });
+
+  app.post("/api/ai/training/preview-response", requireAuth, requireAiAccess, async (req: Request, res: Response) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const { userText } = req.body;
+
+      if (!userText || typeof userText !== "string" || !userText.trim()) {
+        return res.status(400).json({ error: "Необходимо указать userText" });
+      }
+
+      const tenant = await storage.getTenant(tenantId);
+      if (!tenant) return res.status(404).json({ error: "Тенант не найден" });
+
+      const settings = await storage.getOrCreateAiSettings(tenantId);
+
+      const productRows = await db.select({
+        name: products.name,
+        price: products.price,
+        description: products.description,
+        categoryName: categories.name,
+      })
+        .from(products)
+        .leftJoin(categories, eq(products.categoryId, categories.id))
+        .where(and(eq(products.tenantId, tenantId), eq(products.isActive, true)))
+        .limit(20);
+
+      const kbItems = await db.select().from(knowledgeItems)
+        .where(and(eq(knowledgeItems.tenantId, tenantId), eq(knowledgeItems.isActive, true)))
+        .limit(30);
+
+      const activeTriggers = await db.select().from(aiTriggers)
+        .where(and(eq(aiTriggers.tenantId, tenantId), eq(aiTriggers.isEnabled, true)))
+        .orderBy(aiTriggers.priority)
+        .limit(20);
+
+      const activeAntiPatterns = await db.select().from(aiAntiPatterns)
+        .where(and(eq(aiAntiPatterns.tenantId, tenantId), eq(aiAntiPatterns.isActive, true)));
+
+      let paymentOptions: any = undefined;
+      try {
+        const kaspiRes = await pool.query(
+          `SELECT status, kaspi_pay_link, auto_generate_invoice FROM kaspi_integrations WHERE tenant_id = $1 LIMIT 1`,
+          [tenantId]
+        );
+        const kaspi = kaspiRes.rows?.[0];
+        if (kaspi && (kaspi.status === "connected" || kaspi.kaspi_pay_link)) {
+          paymentOptions = {
+            kaspiEnabled: true,
+            autoInvoice: kaspi.auto_generate_invoice || false,
+            kaspiPayLink: kaspi.kaspi_pay_link || undefined,
+          };
+        }
+      } catch {}
+
+      const context: any = {
+        storeName: tenant.name,
+        slug: tenant.slug,
+        customDomain: tenant.customDomain || undefined,
+        storeDescription: tenant.description || undefined,
+        contactPhone: tenant.contactPhone || undefined,
+        products: productRows.map((p: any) => ({
+          name: p.name,
+          price: parseFloat(p.price),
+          description: p.description || undefined,
+          category: p.categoryName || undefined,
+        })),
+        knowledge: kbItems.map((k: any) => ({ title: k.title || k.question, content: k.content || k.answer })),
+        triggers: activeTriggers,
+        antiPatterns: activeAntiPatterns,
+        tone: settings.tone || "friendly",
+        goal: settings.goal || "CLOSE_DEAL",
+        aiLanguages: tenant.aiLanguages || ["ru"],
+        aiSystemPrompt: settings.systemPromptCustom || undefined,
+        paymentOptions,
+      };
+
+      const aiResult = await generateAiResponse(userText.trim(), [], context);
+      const currentResponse = aiResult.content;
+
+      const improveCompletion = await openaiClient.chat.completions.create({
+        model: "gpt-4o-mini",
+        temperature: 0.7,
+        max_tokens: 600,
+        messages: [
+          {
+            role: "system",
+            content: `Ты — эксперт по продажам и клиентскому сервису. Тебе дан вопрос клиента и текущий ответ AI-продавца магазина "${tenant.name}".
+
+Твоя задача — написать УЛУЧШЕННЫЙ вариант ответа, который:
+- Более убедительный и продающий
+- Лучше обрабатывает возражения клиента
+- Предлагает конкретные решения (рассрочка, скидки, гарантии)
+- Задаёт уточняющий вопрос для продолжения диалога
+- Сохраняет дружелюбный тон
+
+Напиши ТОЛЬКО улучшенный ответ, без пояснений и комментариев.`,
+          },
+          {
+            role: "user",
+            content: `Вопрос клиента: "${userText.trim()}"
+
+Текущий ответ AI: "${currentResponse}"
+
+Напиши улучшенный вариант ответа:`,
+          },
+        ],
+      });
+
+      const improvedResponse = improveCompletion.choices[0]?.message?.content?.trim() || currentResponse;
+
+      res.json({
+        currentResponse,
+        improvedResponse,
+      });
+    } catch (error: any) {
+      console.error("Ошибка preview-response:", error);
+      res.status(500).json({ error: "Ошибка генерации ответа" });
+    }
+  });
+
+  app.post("/api/ai/training/regenerate-improved", requireAuth, requireAiAccess, async (req: Request, res: Response) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const { userText, currentResponse } = req.body;
+
+      if (!userText || !currentResponse) {
+        return res.status(400).json({ error: "Необходимы userText и currentResponse" });
+      }
+
+      const tenant = await storage.getTenant(tenantId);
+      if (!tenant) return res.status(404).json({ error: "Тенант не найден" });
+
+      const completion = await openaiClient.chat.completions.create({
+        model: "gpt-4o-mini",
+        temperature: 0.9,
+        max_tokens: 600,
+        messages: [
+          {
+            role: "system",
+            content: `Ты — эксперт по продажам и клиентскому сервису. Тебе дан вопрос клиента и текущий ответ AI-продавца магазина "${tenant.name}".
+
+Твоя задача — написать ДРУГОЙ, АЛЬТЕРНАТИВНЫЙ улучшенный вариант ответа (не повторяй предыдущий), который:
+- Более убедительный и продающий
+- Использует другой подход к обработке возражения
+- Предлагает конкретные решения
+- Задаёт уточняющий вопрос
+- Сохраняет дружелюбный тон
+
+Напиши ТОЛЬКО улучшенный ответ, без пояснений.`,
+          },
+          {
+            role: "user",
+            content: `Вопрос клиента: "${userText}"
+
+Текущий ответ AI: "${currentResponse}"
+
+Напиши другой улучшенный вариант ответа:`,
+          },
+        ],
+      });
+
+      const improvedResponse = completion.choices[0]?.message?.content?.trim() || currentResponse;
+
+      res.json({ improvedResponse });
+    } catch (error: any) {
+      console.error("Ошибка regenerate-improved:", error);
+      res.status(500).json({ error: "Ошибка генерации ответа" });
     }
   });
 }

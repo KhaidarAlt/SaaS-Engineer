@@ -110,3 +110,13 @@ export async function fetchRecentMessages(limit = 20): Promise<RecentTestMessage
   if (!res.ok) throw new Error("Failed to fetch recent messages");
   return res.json();
 }
+
+export async function previewResponse(userText: string): Promise<{ currentResponse: string; improvedResponse: string }> {
+  const res = await apiRequest("POST", "/api/ai/training/preview-response", { userText });
+  return res.json();
+}
+
+export async function regenerateImproved(userText: string, currentResponse: string): Promise<{ improvedResponse: string }> {
+  const res = await apiRequest("POST", "/api/ai/training/regenerate-improved", { userText, currentResponse });
+  return res.json();
+}

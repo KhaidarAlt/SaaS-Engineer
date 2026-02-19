@@ -4,13 +4,14 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Zap, Lightbulb, MessageSquare, ChevronRight, MousePointerClick } from "lucide-react";
+import { Zap, Lightbulb, MessageSquare, ChevronRight, MousePointerClick, Send, RefreshCw, Loader2 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { previewResponse, regenerateImproved } from "../api/trainingApi";
 import type { QuickTrainRequest, RecentTestMessage, ApplyMode } from "../types/trainingTypes";
 
 const EXAMPLE_SCENARIOS = [
@@ -18,36 +19,26 @@ const EXAMPLE_SCENARIOS = [
     id: "price_objection",
     label: "Дорого!",
     userText: "Почему так дорого? У конкурентов дешевле",
-    assistantText: "Понимаю ваше сомнение. Давайте посмотрим другие варианты подешевле.",
-    editedText: "Понимаю! Наша цена включает гарантию 2 года и бесплатную доставку. Также у нас есть рассрочка на 3 месяца без переплаты. Хотите расскажу подробнее?",
   },
   {
     id: "delivery",
     label: "Доставка",
     userText: "А вы доставляете? Сколько стоит доставка?",
-    assistantText: "Да, мы доставляем.",
-    editedText: "Да, доставляем по всему Казахстану! По городу доставка бесплатная при заказе от 10 000 тг. В другие города — через Kaspi Доставку за 1-3 дня. Какой у вас город?",
   },
   {
     id: "competitor",
     label: "Сравнение",
     userText: "А чем вы лучше других магазинов?",
-    assistantText: "У нас хорошие товары и цены.",
-    editedText: "Наши преимущества: оригинальные товары с сертификатами, гарантия возврата 14 дней, бесплатная консультация и быстрая доставка. Многие клиенты выбирают нас именно за надёжность. Что для вас важнее всего при выборе?",
   },
   {
     id: "not_sure",
     label: "Сомневаюсь",
     userText: "Я пока не уверен, мне надо подумать",
-    assistantText: "Хорошо, подумайте и напишите когда решите.",
-    editedText: "Конечно, не торопитесь! Могу я уточнить, что именно вызывает сомнения? Может быть я смогу помочь с выбором. Кстати, сейчас на этот товар действует скидка — она заканчивается через 2 дня.",
   },
   {
     id: "wrong_topic",
     label: "Не по теме",
     userText: "Какая сейчас погода в Алматы?",
-    assistantText: "Сейчас в Алматы солнечно, температура около 25 градусов.",
-    editedText: "Я AI-помощник магазина и могу помочь с выбором товаров, ценами, доставкой и оплатой. Чем могу помочь по нашему каталогу?",
   },
 ];
 
@@ -61,7 +52,10 @@ export function QuickTrainPanel({ recentMessages, onQuickTrain, isPending }: Qui
   const [userText, setUserText] = useState("");
   const [assistantText, setAssistantText] = useState("");
   const [editedText, setEditedText] = useState("");
-  const [showExamples, setShowExamples] = useState(true);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [isRegenerating, setIsRegenerating] = useState(false);
+  const [hasGenerated, setHasGenerated] = useState(false);
+  const [currentResponseRef, setCurrentResponseRef] = useState("");
 
   const showPriceHint = userText.toLowerCase().includes("дорого");
 
@@ -84,11 +78,50 @@ export function QuickTrainPanel({ recentMessages, onQuickTrain, isPending }: Qui
     }
   }
 
+  async function handlePreview() {
+    if (!userText.trim() || isGenerating) return;
+    setIsGenerating(true);
+    setAssistantText("");
+    setEditedText("");
+    try {
+      const result = await previewResponse(userText.trim());
+      setAssistantText(result.currentResponse);
+      setEditedText(result.improvedResponse);
+      setCurrentResponseRef(result.currentResponse);
+      setHasGenerated(true);
+    } catch {
+      setAssistantText("Ошибка генерации. Попробуйте ещё раз.");
+      setEditedText("Напишите свой вариант правильного ответа вручную");
+    } finally {
+      setIsGenerating(false);
+    }
+  }
+
+  async function handleRegenerate() {
+    if (!userText.trim() || !currentResponseRef.trim() || isRegenerating) return;
+    setIsRegenerating(true);
+    try {
+      const result = await regenerateImproved(userText.trim(), currentResponseRef.trim());
+      setEditedText(result.improvedResponse);
+    } catch {
+      // keep current text on error
+    } finally {
+      setIsRegenerating(false);
+    }
+  }
+
   function handleSelectExample(example: typeof EXAMPLE_SCENARIOS[0]) {
     setUserText(example.userText);
-    setAssistantText(example.assistantText);
-    setEditedText(example.editedText);
-    setShowExamples(false);
+    setAssistantText("");
+    setEditedText("");
+    setHasGenerated(false);
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      handlePreview();
+    }
   }
 
   const isDisabled = isPending || !userText.trim() || !editedText.trim();
@@ -134,11 +167,11 @@ export function QuickTrainPanel({ recentMessages, onQuickTrain, isPending }: Qui
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
           <div className="flex items-start gap-2">
             <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold">1</span>
-            <p className="text-xs text-muted-foreground">Напишите вопрос клиента, на который AI ответил плохо</p>
+            <p className="text-xs text-muted-foreground">Напишите вопрос клиента и нажмите "Получить ответ AI"</p>
           </div>
           <div className="flex items-start gap-2">
             <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold">2</span>
-            <p className="text-xs text-muted-foreground">Напишите правильный ответ, как AI должен был ответить</p>
+            <p className="text-xs text-muted-foreground">Посмотрите текущий и улучшенный ответ, отредактируйте при необходимости</p>
           </div>
           <div className="flex items-start gap-2">
             <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold">3</span>
@@ -147,7 +180,7 @@ export function QuickTrainPanel({ recentMessages, onQuickTrain, isPending }: Qui
         </div>
       </div>
 
-      {showExamples && !hasContent && (
+      {!hasContent && (
         <div className="space-y-2" data-testid="section-examples">
           <div className="flex items-center gap-2">
             <MousePointerClick className="h-4 w-4 text-muted-foreground" />
@@ -176,11 +209,31 @@ export function QuickTrainPanel({ recentMessages, onQuickTrain, isPending }: Qui
           <Textarea
             id="userText"
             value={userText}
-            onChange={(e) => setUserText(e.target.value)}
+            onChange={(e) => { setUserText(e.target.value); setHasGenerated(false); }}
+            onKeyDown={handleKeyDown}
             placeholder={'Например: "Почему так дорого?" или "Есть доставка в Караганду?"'}
             rows={5}
             data-testid="textarea-user-text"
           />
+          <Button
+            className="w-full"
+            onClick={handlePreview}
+            disabled={!userText.trim() || isGenerating}
+            data-testid="button-preview-response"
+          >
+            {isGenerating ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                AI думает...
+              </>
+            ) : (
+              <>
+                <Send className="h-4 w-4" />
+                Получить ответ AI
+              </>
+            )}
+          </Button>
+          <p className="text-xs text-muted-foreground text-center">или нажмите Ctrl+Enter</p>
         </div>
 
         <div className="space-y-3">
@@ -190,19 +243,39 @@ export function QuickTrainPanel({ recentMessages, onQuickTrain, isPending }: Qui
               id="assistantText"
               value={assistantText}
               onChange={(e) => setAssistantText(e.target.value)}
-              placeholder={'Необязательно. Вставьте текущий ответ AI, если хотите сравнить'}
+              placeholder={isGenerating ? "Генерация ответа..." : "Нажмите 'Получить ответ AI' слева"}
               rows={2}
+              className={isGenerating ? "animate-pulse" : ""}
               data-testid="textarea-assistant-text"
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="editedText">Как должно быть (исправление)</Label>
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <Label htmlFor="editedText">Как должно быть (исправление)</Label>
+              {hasGenerated && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRegenerate}
+                  disabled={isRegenerating || !currentResponseRef.trim()}
+                  data-testid="button-regenerate"
+                >
+                  {isRegenerating ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-3 w-3" />
+                  )}
+                  Другой вариант
+                </Button>
+              )}
+            </div>
             <Textarea
               id="editedText"
               value={editedText}
               onChange={(e) => setEditedText(e.target.value)}
-              placeholder={'Например: "Цена включает гарантию 2 года и бесплатную доставку. Есть рассрочка!"'}
+              placeholder={isGenerating ? "Генерация улучшенного ответа..." : 'Здесь появится улучшенный вариант, который можно отредактировать'}
               rows={3}
+              className={isGenerating || isRegenerating ? "animate-pulse" : ""}
               data-testid="textarea-edited-text"
             />
           </div>
