@@ -1,9 +1,14 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Play, RotateCcw, ChevronDown, ChevronUp } from "lucide-react";
+import { Play, RotateCcw, ChevronDown, ChevronUp, AlertTriangle, CheckCircle2, Info } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface StressTestResult {
   scenarioKey: string;
@@ -13,6 +18,8 @@ interface StressTestResult {
   pass: boolean;
   issues: string[];
   suggestions: string[];
+  failureReason?: string | null;
+  expectedBehavior?: string;
 }
 
 interface StressTestPanelProps {
@@ -40,13 +47,13 @@ function ResultRow({ result }: { result: StressTestResult }) {
         onClick={() => setExpanded((v) => !v)}
         data-testid={`button-expand-${result.scenarioKey}`}
       >
-        <span className="font-medium">{result.label}</span>
-        <div className="flex items-center gap-2">
+        <span className="font-medium flex-1 min-w-0 truncate">{result.label || result.scenarioKey}</span>
+        <div className="flex items-center gap-2 flex-shrink-0">
           <Badge
             variant={result.pass ? "default" : "destructive"}
             className="text-xs"
           >
-            {result.pass ? "Пройден" : "Провал"}
+            {result.pass ? "Успешно" : "Провал"}
           </Badge>
           {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
         </div>
@@ -59,25 +66,48 @@ function ResultRow({ result }: { result: StressTestResult }) {
             exit={{ height: 0, opacity: 0 }}
             className="overflow-hidden"
           >
-            <div className="space-y-2 border-t p-3 text-xs">
+            <div className="space-y-3 border-t p-3 text-xs">
               <div>
-                <span className="text-muted-foreground">Клиент: </span>
+                <span className="text-muted-foreground font-medium">Клиент: </span>
                 <span>{result.userText}</span>
               </div>
-              <div>
-                <span className="text-muted-foreground">AI: </span>
-                <span>{result.assistantText}</span>
-              </div>
-              {result.issues.length > 0 && (
+              {result.assistantText && (
                 <div>
-                  <span className="text-muted-foreground">Проблемы: </span>
+                  <span className="text-muted-foreground font-medium">AI: </span>
+                  <span className="whitespace-pre-wrap">{result.assistantText.length > 300 ? result.assistantText.slice(0, 300) + "..." : result.assistantText}</span>
+                </div>
+              )}
+              {!result.pass && result.failureReason && (
+                <div className="p-2 rounded-md bg-destructive/10 border border-destructive/20">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="h-3.5 w-3.5 text-destructive mt-0.5 flex-shrink-0" />
+                    <div>
+                      <span className="font-medium text-destructive">Почему провалено: </span>
+                      <span>{result.failureReason}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+              {result.issues.length > 0 && !result.failureReason && (
+                <div className="p-2 rounded-md bg-destructive/10 border border-destructive/20">
+                  <span className="text-muted-foreground font-medium">Проблемы: </span>
                   <span>{result.issues.join("; ")}</span>
                 </div>
               )}
               {result.suggestions.length > 0 && (
-                <div>
-                  <span className="text-muted-foreground">Рекомендации: </span>
-                  <span>{result.suggestions.join("; ")}</span>
+                <div className="p-2 rounded-md bg-blue-500/10 border border-blue-500/20">
+                  <span className="font-medium">Что исправить:</span>
+                  <ul className="list-disc list-inside mt-1 space-y-0.5">
+                    {result.suggestions.map((s, i) => (
+                      <li key={i}>{s}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {result.expectedBehavior && (
+                <div className="text-muted-foreground">
+                  <span className="font-medium">Ожидаемое поведение: </span>
+                  <span>{result.expectedBehavior}</span>
                 </div>
               )}
             </div>
@@ -97,11 +127,24 @@ export default function StressTestPanel({
   summary,
 }: StressTestPanelProps) {
   const hasResults = results.length > 0;
+  const passedCount = results.filter(r => r.pass).length;
+  const failedCount = results.filter(r => !r.pass).length;
+  const totalCount = results.length;
 
   return (
     <Card data-testid="card-stress-test">
       <CardHeader>
-        <CardTitle className="text-lg">Стресс-тест</CardTitle>
+        <div className="flex items-center gap-2 flex-wrap">
+          <CardTitle className="text-lg">Стресс-тест</CardTitle>
+          <Tooltip>
+            <TooltipTrigger>
+              <Info className="h-4 w-4 text-muted-foreground" />
+            </TooltipTrigger>
+            <TooltipContent side="right" className="max-w-xs">
+              <p className="text-xs">Сценарий считается успешным, если AI соблюдает правила и достигает цели в ответе.</p>
+            </TooltipContent>
+          </Tooltip>
+        </div>
         <CardDescription>
           Запуск 10 сценариев для проверки AI-продавца
         </CardDescription>
@@ -136,7 +179,12 @@ export default function StressTestPanel({
             <span className={`text-4xl font-bold ${scoreColor(overallScore)}`} data-testid="text-overall-score">
               {overallScore}%
             </span>
-            <span className="text-sm text-muted-foreground">Общий результат</span>
+            <span className="text-sm text-muted-foreground">Прошло успешно</span>
+            {totalCount > 0 && (
+              <span className="text-xs text-muted-foreground" data-testid="text-completion">
+                Выполнено: {totalCount}/{totalCount}
+              </span>
+            )}
           </motion.div>
         )}
 
@@ -148,10 +196,17 @@ export default function StressTestPanel({
           </div>
         )}
 
-        {!isRunning && summary && (
-          <p className="text-sm text-muted-foreground" data-testid="text-summary">
-            {summary}
-          </p>
+        {!isRunning && hasResults && (
+          <div className="flex items-center justify-center gap-3 text-xs text-muted-foreground flex-wrap" data-testid="text-summary-line">
+            <span className="flex items-center gap-1">
+              <CheckCircle2 className="h-3 w-3 text-green-500" />
+              Пройдено: {passedCount}/{totalCount}
+            </span>
+            <span className="flex items-center gap-1">
+              <AlertTriangle className="h-3 w-3 text-red-500" />
+              Провалено: {failedCount}/{totalCount}
+            </span>
+          </div>
         )}
 
         <Button

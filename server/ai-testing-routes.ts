@@ -36,18 +36,72 @@ const PERSONAS: Record<string, { openers: string[]; followUps: string[] }> = {
   },
 };
 
-const DEFAULT_STRESS_SCENARIOS: Record<string, string> = {
-  PRICE_HIGH: "Дорого",
-  ASK_DISCOUNT: "Есть скидка?",
-  WANT_CHEAPER: "Хочу дешевле",
-  COMPARE: "У конкурентов дешевле",
-  INSTALLMENT: "Есть рассрочка?",
-  WARRANTY: "Какая гарантия?",
-  DELIVERY: "Как доставка и самовывоз?",
-  HUMAN: "Дайте менеджера",
-  COMPLEX: "У меня нестандартный вопрос, не могу найти ответ",
-  CLOSE: "Готов купить, как оплатить?",
+const STRESS_SCENARIO_DEFS: Record<string, { userText: string; label: string; expectedBehavior: string; checkKeywords: string[] }> = {
+  PRICE_HIGH: {
+    userText: "Дорого",
+    label: "Возражение: Дорого",
+    expectedBehavior: "AI должен обосновать цену, предложить выгоду или альтернативу",
+    checkKeywords: ["цен", "стоимост", "скидк", "рассрочк", "выгод", "качеств", "предлаг"],
+  },
+  ASK_DISCOUNT: {
+    userText: "Есть скидка?",
+    label: "Запрос скидки",
+    expectedBehavior: "AI должен ответить про акции, скидки или предложить альтернативу",
+    checkKeywords: ["скидк", "акци", "промо", "предложен", "специальн", "бонус"],
+  },
+  WANT_CHEAPER: {
+    userText: "Хочу дешевле",
+    label: "Хочу дешевле",
+    expectedBehavior: "AI должен предложить бюджетный вариант или обосновать ценность",
+    checkKeywords: ["вариант", "бюджет", "дешев", "доступн", "предлаг", "альтернатив", "цен"],
+  },
+  COMPARE: {
+    userText: "У конкурентов дешевле",
+    label: "Сравнение с конкурентами",
+    expectedBehavior: "AI должен выделить преимущества и уникальные стороны",
+    checkKeywords: ["преимуществ", "качеств", "гарант", "сервис", "отличи", "наш"],
+  },
+  INSTALLMENT: {
+    userText: "Есть рассрочка?",
+    label: "Запрос рассрочки",
+    expectedBehavior: "AI должен объяснить условия рассрочки или оплаты",
+    checkKeywords: ["рассрочк", "оплат", "каспи", "kaspi", "месяц", "кредит", "условия"],
+  },
+  WARRANTY: {
+    userText: "Какая гарантия?",
+    label: "Вопрос о гарантии",
+    expectedBehavior: "AI должен рассказать о гарантии, возврате или обмене",
+    checkKeywords: ["гарант", "возврат", "обмен", "сервис", "ремонт"],
+  },
+  DELIVERY: {
+    userText: "Как доставка и самовывоз?",
+    label: "Вопрос о доставке",
+    expectedBehavior: "AI должен описать варианты доставки и самовывоза",
+    checkKeywords: ["доставк", "самовывоз", "получ", "курьер", "адрес", "срок"],
+  },
+  HUMAN: {
+    userText: "Дайте менеджера",
+    label: "Запрос менеджера",
+    expectedBehavior: "AI должен предложить переключить на живого менеджера",
+    checkKeywords: ["менеджер", "оператор", "передам", "позову", "свяж", "специалист"],
+  },
+  COMPLEX: {
+    userText: "У меня нестандартный вопрос, не могу найти ответ",
+    label: "Сложный/нестандартный вопрос",
+    expectedBehavior: "AI должен попытаться помочь или предложить контакт с менеджером",
+    checkKeywords: ["помочь", "помог", "менеджер", "свяж", "уточн", "вопрос", "предлаг", "рекоменд"],
+  },
+  CLOSE: {
+    userText: "Готов купить, как оплатить?",
+    label: "Готовность к покупке",
+    expectedBehavior: "AI должен направить к оплате/заказу/оформлению",
+    checkKeywords: ["оплат", "заказ", "купить", "ссылк", "оформ", "корзин"],
+  },
 };
+
+const DEFAULT_STRESS_SCENARIOS: Record<string, string> = Object.fromEntries(
+  Object.entries(STRESS_SCENARIO_DEFS).map(([k, v]) => [k, v.userText])
+);
 
 async function buildTenantContext(tenantId: string, pool: any, storage: any) {
   const tenant = await storage.getTenant(tenantId);
@@ -449,7 +503,7 @@ async function computeScore(tenantId: string, pool: any, storage: any) {
   if (goal === "CLOSE_DEAL") {
     let kaspiOk = false;
     try {
-      const kaspiRes = await pool.query(`SELECT * FROM kaspi_integrations WHERE tenant_id = $1 AND is_verified = true LIMIT 1`, [tenantId]);
+      const kaspiRes = await pool.query(`SELECT * FROM kaspi_integrations WHERE tenant_id = $1 AND (status = 'connected' OR kaspi_pay_link IS NOT NULL) LIMIT 1`, [tenantId]);
       kaspiOk = (kaspiRes.rows?.length || 0) > 0;
     } catch {}
     if (!kaspiOk && opsStatus !== "BLOCKED") opsStatus = "WARNING";
@@ -620,7 +674,7 @@ export function registerAiTestingRoutes(
       if (goal === "CLOSE_DEAL") {
         let kaspiOk = false;
         try {
-          const kaspiRes = await pool.query(`SELECT * FROM kaspi_integrations WHERE tenant_id = $1 AND is_verified = true LIMIT 1`, [tenantId]);
+          const kaspiRes = await pool.query(`SELECT * FROM kaspi_integrations WHERE tenant_id = $1 AND (status = 'connected' OR kaspi_pay_link IS NOT NULL) LIMIT 1`, [tenantId]);
           kaspiOk = (kaspiRes.rows?.length || 0) > 0;
         } catch {}
         reasons.push({ label: "Kaspi интеграция", passed: kaspiOk, detail: kaspiOk ? "Подключено" : "Не подключено", link: "/dashboard/payments" });
@@ -927,7 +981,8 @@ export function registerAiTestingRoutes(
         for (let i = 0; i < scenarioKeys.length; i++) {
           const key = scenarioKeys[i];
           const userText = DEFAULT_STRESS_SCENARIOS[key];
-          let scenarioResult: Record<string, unknown> = { key, userText, passed: false, reply: "", error: null };
+          const scenarioDef = STRESS_SCENARIO_DEFS[key];
+          let scenarioResult: Record<string, unknown> = { scenarioKey: key, label: scenarioDef?.label || key, userText, assistantText: "", pass: false, issues: [], suggestions: [], failureReason: null };
 
           try {
             const [stressSession] = await db.insert(aiTestingSessions).values({
@@ -954,26 +1009,56 @@ export function registerAiTestingRoutes(
               content: reply,
             });
 
-            let scenarioPassed = reply.length >= 20;
+            const def = STRESS_SCENARIO_DEFS[key];
             const replyLower = reply.toLowerCase();
+            const issues: string[] = [];
+            const suggestions: string[] = [];
 
-            if (key === "HUMAN") {
-              scenarioPassed = scenarioPassed && (replyLower.includes("менеджер") || replyLower.includes("оператор") || replyLower.includes("передам") || replyLower.includes("позову"));
-            } else if (key === "CLOSE") {
-              scenarioPassed = scenarioPassed && (replyLower.includes("оплат") || replyLower.includes("заказ") || replyLower.includes("купить") || replyLower.includes("ссылк"));
-            } else if (key === "WARRANTY") {
-              scenarioPassed = scenarioPassed && (replyLower.includes("гарант") || replyLower.includes("возврат") || replyLower.includes("обмен"));
-            } else if (key === "DELIVERY") {
-              scenarioPassed = scenarioPassed && (replyLower.includes("доставк") || replyLower.includes("самовывоз") || replyLower.includes("получ"));
-            } else {
-              const relevantWords = ["цен", "стоимост", "скидк", "рассрочк", "товар", "предлаг", "рекоменд", "помочь"];
-              scenarioPassed = scenarioPassed && relevantWords.some(w => replyLower.includes(w));
+            let scenarioPassed = reply.length >= 20;
+            if (!scenarioPassed) {
+              issues.push("Ответ слишком короткий (менее 20 символов)");
+              suggestions.push("Добавьте в базу знаний подробную информацию по этой теме");
             }
 
-            scenarioResult = { key, userText, passed: scenarioPassed, reply, error: null };
+            const matchedKeywords = def.checkKeywords.filter(w => replyLower.includes(w));
+            if (matchedKeywords.length === 0 && reply.length >= 20) {
+              scenarioPassed = false;
+              issues.push("Ответ не содержит ключевых слов по теме сценария");
+              suggestions.push(`Ожидаемое поведение: ${def.expectedBehavior}`);
+            }
+
+            if (!scenarioPassed && issues.length === 0) {
+              issues.push("AI не справился с данным сценарием");
+              suggestions.push(def.expectedBehavior);
+            }
+
+            const failureReason = scenarioPassed ? null : issues.join(". ");
+
+            scenarioResult = {
+              scenarioKey: key,
+              label: def.label,
+              userText,
+              assistantText: reply,
+              pass: scenarioPassed,
+              issues: scenarioPassed ? [] : issues,
+              suggestions: scenarioPassed ? [] : suggestions,
+              failureReason,
+              expectedBehavior: def.expectedBehavior,
+            };
             if (scenarioPassed) passed++;
           } catch (e: any) {
-            scenarioResult = { key, userText, passed: false, reply: "", error: e.message };
+            const def = STRESS_SCENARIO_DEFS[key];
+            scenarioResult = {
+              scenarioKey: key,
+              label: def?.label || key,
+              userText,
+              assistantText: "",
+              pass: false,
+              issues: [`Ошибка: ${e.message}`],
+              suggestions: ["Проверьте настройки AI и повторите тест"],
+              failureReason: `Ошибка выполнения: ${e.message}`,
+              expectedBehavior: def?.expectedBehavior || "",
+            };
           }
 
           results.push(scenarioResult);

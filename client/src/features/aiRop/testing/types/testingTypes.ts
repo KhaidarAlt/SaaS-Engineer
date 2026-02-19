@@ -126,6 +126,8 @@ export interface ScenarioResult {
   pass: boolean;
   issues: string[];
   suggestions: string[];
+  failureReason?: string | null;
+  expectedBehavior?: string;
 }
 
 export interface StressTestRun {
