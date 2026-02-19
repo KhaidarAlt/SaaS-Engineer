@@ -5,6 +5,7 @@ import {
   aiSettings, aiConversations, aiMessages, handoverRules, knowledgeItems,
   trainingItems, aiAuditReports, aiSettingsHistory, products,
   aiBusinessProfile, productAiTags, aiPromotionRules, categories,
+  bankProducts,
 } from "@shared/schema";
 import { generateAiResponse } from "./services/openai";
 
@@ -1426,7 +1427,125 @@ export function registerAiRopRoutes(
       res.status(500).json({ message: "Ошибка поиска" });
     }
   });
-}
+
+  // ========================
+  // BANK PRODUCTS
+  // ========================
+
+  const DEFAULT_BANK_PRODUCTS = [
+    { bankName: "Kaspi Bank", productName: "Kaspi Рассрочка", description: "Рассрочка от Kaspi Bank на товары и услуги", conditions: "До 24 месяцев, 0% для покупателя", sortOrder: 0 },
+    { bankName: "Kaspi Bank", productName: "Kaspi RED", description: "Кредитная карта Kaspi RED с бонусами и рассрочкой", conditions: "Рассрочка до 12 месяцев, кешбэк до 15%", sortOrder: 1 },
+    { bankName: "Halyk Bank", productName: "Рассрочка 0-0-24", description: "Рассрочка от Halyk Bank: 0% первоначальный взнос, 0% переплата, до 24 месяцев", conditions: "0% переплата, 0% первоначальный взнос, срок до 24 месяцев", sortOrder: 0 },
+    { bankName: "ForteBank", productName: "Forte Рассрочка", description: "Рассрочка от ForteBank", conditions: "До 12 месяцев", sortOrder: 0 },
+    { bankName: "Jusan Bank", productName: "Jusan Рассрочка", description: "Рассрочка от Jusan Bank", conditions: "До 12 месяцев", sortOrder: 0 },
+    { bankName: "Freedom Bank", productName: "Freedom Рассрочка", description: "Рассрочка от Freedom Bank", conditions: "До 12 месяцев", sortOrder: 0 },
+    { bankName: "Home Credit Bank", productName: "Home Credit Рассрочка", description: "Рассрочка и кредит от Home Credit Bank", conditions: "До 24 месяцев", sortOrder: 0 },
+    { bankName: "Bank CenterCredit (BCC)", productName: "BCC Рассрочка", description: "Рассрочка от Bank CenterCredit", conditions: "До 12 месяцев", sortOrder: 0 },
+  ];
+
+  async function seedBankProductsForTenant(tenantId: string, enabledBanks?: string[]) {
+    const existing = await db.select().from(bankProducts).where(eq(bankProducts.tenantId, tenantId));
+    if (existing.length > 0) return existing;
+
+    const toInsert = DEFAULT_BANK_PRODUCTS.map(bp => ({
+      tenantId,
+      bankName: bp.bankName,
+      productName: bp.productName,
+      description: bp.description,
+      conditions: bp.conditions,
+      sortOrder: bp.sortOrder,
+      isEnabled: enabledBanks ? enabledBanks.some(b => bp.bankName.toLowerCase().includes(b.toLowerCase()) || b.toLowerCase().includes(bp.bankName.toLowerCase())) : false,
+    }));
+
+    await db.insert(bankProducts).values(toInsert);
+    return db.select().from(bankProducts).where(eq(bankProducts.tenantId, tenantId)).orderBy(bankProducts.bankName, bankProducts.sortOrder);
+  }
+
+  app.get("/api/ai-rop/bank-products", requireAuth, requireAiAccess, async (req: Request, res: Response) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      let items = await db.select().from(bankProducts).where(eq(bankProducts.tenantId, tenantId)).orderBy(bankProducts.bankName, bankProducts.sortOrder);
+
+      if (items.length === 0) {
+        const bp = await db.select().from(aiBusinessProfile).where(eq(aiBusinessProfile.tenantId, tenantId));
+        const enabledBanks = bp[0]?.installmentBanks ?? [];
+        items = await seedBankProductsForTenant(tenantId, enabledBanks);
+      }
+
+      res.json(items);
+    } catch (error: any) {
+      console.error("Error fetching bank products:", error);
+      res.status(500).json({ message: "Ошибка получения банковских продуктов" });
+    }
+  });
+
+  app.put("/api/ai-rop/bank-products/:id", requireAuth, requireAiAccess, async (req: Request, res: Response) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const { id } = req.params;
+      const { isEnabled, description, conditions } = req.body;
+
+      const updates: any = {};
+      if (typeof isEnabled === "boolean") updates.isEnabled = isEnabled;
+      if (typeof description === "string") updates.description = description;
+      if (typeof conditions === "string") updates.conditions = conditions;
+
+      const [updated] = await db.update(bankProducts)
+        .set(updates)
+        .where(and(eq(bankProducts.id, id), eq(bankProducts.tenantId, tenantId)))
+        .returning();
+
+      if (!updated) {
+        return res.status(404).json({ message: "Продукт не найден" });
+      }
+
+      res.json(updated);
+    } catch (error: any) {
+      console.error("Error updating bank product:", error);
+      res.status(500).json({ message: "Ошибка обновления банковского продукта" });
+    }
+  });
+
+  app.post("/api/ai-rop/bank-products", requireAuth, requireAiAccess, async (req: Request, res: Response) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const { bankName, productName, description, conditions } = req.body;
+
+      if (!bankName || !productName) {
+        return res.status(400).json({ message: "Укажите название банка и продукта" });
+      }
+
+      const [created] = await db.insert(bankProducts).values({
+        tenantId,
+        bankName: bankName.trim(),
+        productName: productName.trim(),
+        description: description?.trim() || null,
+        conditions: conditions?.trim() || null,
+        isEnabled: true,
+        sortOrder: 99,
+      }).returning();
+
+      res.json(created);
+    } catch (error: any) {
+      console.error("Error creating bank product:", error);
+      res.status(500).json({ message: "Ошибка создания банковского продукта" });
+    }
+  });
+
+  app.delete("/api/ai-rop/bank-products/:id", requireAuth, requireAiAccess, async (req: Request, res: Response) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const { id } = req.params;
+
+      await db.delete(bankProducts).where(and(eq(bankProducts.id, id), eq(bankProducts.tenantId, tenantId)));
+      res.json({ ok: true });
+    } catch (error: any) {
+      console.error("Error deleting bank product:", error);
+      res.status(500).json({ message: "Ошибка удаления банковского продукта" });
+    }
+  });
+
+} // end registerAiRopRoutes
 
 function detectStageFromContent(userMessage: string, aiResponse: string): string | null {
   const lower = (userMessage + " " + aiResponse).toLowerCase();

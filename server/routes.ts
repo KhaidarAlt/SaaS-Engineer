@@ -4076,7 +4076,7 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
           }));
           
           // Get all context data in parallel
-          const [tenant, products, aiSettings, salesScripts, tagRules, faqItems, knowledge, policies, promotions, discounts, kaspiIntegration] = await Promise.all([
+          const [tenant, products, aiSettings, salesScripts, tagRules, faqItems, knowledge, policies, promotions, discounts, kaspiIntegration, enabledBankProducts] = await Promise.all([
             storage.getTenant(tenantId),
             storage.getProducts(tenantId),
             storage.getAiSettings(tenantId),
@@ -4088,6 +4088,7 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
             storage.getPromotions(tenantId),
             storage.getDiscounts(tenantId),
             storage.getKaspiIntegration(tenantId),
+            storage.getEnabledBankProducts(tenantId),
           ]);
           
           // Get active sales script
@@ -4163,6 +4164,12 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
               autoInvoice: kaspiIntegration.autoGenerateInvoice || false,
               kaspiPayLink: kaspiIntegration.kaspiPayLink || undefined,
             } : undefined,
+            bankProducts: enabledBankProducts.length > 0 ? enabledBankProducts.map((bp: any) => ({
+              bankName: bp.bankName,
+              productName: bp.productName,
+              description: bp.description,
+              conditions: bp.conditions,
+            })) : undefined,
           };
           
           try {
@@ -4957,6 +4964,7 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
     const faqItems = await storage.getAiFaqItems(tenantId);
     const knowledgeArticles = await storage.getAiKnowledgeArticles(tenantId);
     const kaspiIntegration = await storage.getKaspiIntegration(tenantId);
+    const enabledBankProducts = await storage.getEnabledBankProducts(tenantId);
     
     // Build category map
     const categoryMap = new Map<string, string>();
@@ -5020,6 +5028,12 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
         autoInvoice: kaspiIntegration.autoGenerateInvoice || false,
         kaspiPayLink: kaspiIntegration.kaspiPayLink || undefined,
       } : undefined,
+      bankProducts: enabledBankProducts.length > 0 ? enabledBankProducts.map((bp: any) => ({
+        bankName: bp.bankName,
+        productName: bp.productName,
+        description: bp.description,
+        conditions: bp.conditions,
+      })) : undefined,
     };
     
     try {

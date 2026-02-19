@@ -11,6 +11,7 @@ import ConnectionsPage from "./ConnectionsPage";
 import AnalyticsPage from "../analytics/pages/AnalyticsPage";
 import StrategyPage from "./StrategyPage";
 import { GrowthRouter } from "../growth/pages/GrowthRouter";
+import BankProductsPage from "./BankProductsPage";
 
 const TAB_COMPONENTS: Record<string, () => JSX.Element> = {
   overview: OverviewPage,
@@ -20,6 +21,7 @@ const TAB_COMPONENTS: Record<string, () => JSX.Element> = {
   analytics: AnalyticsPage,
   strategy: StrategyPage,
   growth: GrowthRouter,
+  "bank-products": BankProductsPage,
 };
 
 export default function AiRopEntryPage() {

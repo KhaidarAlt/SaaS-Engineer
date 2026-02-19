@@ -840,6 +840,29 @@ export const insertAiBusinessProfileSchema = createInsertSchema(aiBusinessProfil
 export type InsertAiBusinessProfile = z.infer<typeof insertAiBusinessProfileSchema>;
 export type AiBusinessProfile = typeof aiBusinessProfile.$inferSelect;
 
+// ============ BANK PRODUCTS ============
+export const bankProducts = pgTable("bank_products", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  bankName: text("bank_name").notNull(),
+  productName: text("product_name").notNull(),
+  description: text("description"),
+  conditions: text("conditions"),
+  isEnabled: boolean("is_enabled").notNull().default(false),
+  sortOrder: integer("sort_order").notNull().default(0),
+});
+
+export const bankProductsRelations = relations(bankProducts, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [bankProducts.tenantId],
+    references: [tenants.id],
+  }),
+}));
+
+export const insertBankProductSchema = createInsertSchema(bankProducts).omit({ id: true });
+export type InsertBankProduct = z.infer<typeof insertBankProductSchema>;
+export type BankProduct = typeof bankProducts.$inferSelect;
+
 // ============ PRODUCT AI TAGS ============
 export const productAiTags = pgTable("product_ai_tags", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

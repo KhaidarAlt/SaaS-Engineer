@@ -4,7 +4,7 @@ import { eq, and, desc, sql, count } from "drizzle-orm";
 import {
   aiTriggers, aiAntiPatterns, aiTrainingEvents,
   knowledgeItems, trainingItems, products, categories,
-  tenants, aiSettings, aiTestingMessages, discounts, promotions,
+  tenants, aiSettings, aiTestingMessages, discounts, promotions, bankProducts,
 } from "@shared/schema";
 import { generateAiResponse } from "./services/openai";
 import OpenAI from "openai";
@@ -571,6 +571,15 @@ export function registerAiTrainingRoutes(
         }
       } catch {}
 
+      const enabledBankProds = await db.select({
+        bankName: bankProducts.bankName,
+        productName: bankProducts.productName,
+        description: bankProducts.description,
+        conditions: bankProducts.conditions,
+      }).from(bankProducts)
+        .where(and(eq(bankProducts.tenantId, tenantId), eq(bankProducts.isEnabled, true)))
+        .orderBy(bankProducts.bankName, bankProducts.sortOrder);
+
       const context: any = {
         storeName: tenant.name,
         slug: tenant.slug,
@@ -591,6 +600,7 @@ export function registerAiTrainingRoutes(
         aiLanguages: tenant.aiLanguages || ["ru"],
         aiSystemPrompt: settings.systemPromptCustom || undefined,
         paymentOptions,
+        bankProducts: enabledBankProds.length > 0 ? enabledBankProds : undefined,
       };
 
       const aiResult = await generateAiResponse(userText.trim(), [], context);

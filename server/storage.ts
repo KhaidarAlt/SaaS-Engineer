@@ -58,10 +58,11 @@ import {
   type WidgetIntegration, type InsertWidgetIntegration,
   type WidgetConversation, type InsertWidgetConversation,
   type WidgetMessage, type InsertWidgetMessage,
-  aiRopChannels, aiRopChannelEvents, wahaDisclaimerAcceptance,
+  aiRopChannels, aiRopChannelEvents, wahaDisclaimerAcceptance, bankProducts,
   type AiRopChannel, type InsertAiRopChannel,
   type AiRopChannelEvent, type InsertAiRopChannelEvent,
   type WahaDisclaimerAcceptance,
+  type BankProduct,
 } from "@shared/schema";
 import bcrypt from "bcryptjs";
 
@@ -120,6 +121,8 @@ export interface IStorage {
   deleteDiscount(id: string, tenantId: string): Promise<boolean>;
   
   getPromotions(tenantId: string): Promise<Promotion[]>;
+
+  getEnabledBankProducts(tenantId: string): Promise<BankProduct[]>;
   
   // Promo Blocks
   getPromoBlocks(tenantId: string): Promise<PromoBlock[]>;
@@ -659,6 +662,12 @@ export class DatabaseStorage implements IStorage {
 
   async getPromotions(tenantId: string): Promise<Promotion[]> {
     return db.select().from(promotions).where(eq(promotions.tenantId, tenantId)).orderBy(desc(promotions.priority));
+  }
+
+  async getEnabledBankProducts(tenantId: string): Promise<BankProduct[]> {
+    return db.select().from(bankProducts)
+      .where(and(eq(bankProducts.tenantId, tenantId), eq(bankProducts.isEnabled, true)))
+      .orderBy(bankProducts.sortOrder);
   }
 
   // Promo Blocks

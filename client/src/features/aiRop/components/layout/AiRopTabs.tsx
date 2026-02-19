@@ -1,5 +1,5 @@
 import { useLocation } from "wouter";
-import { LayoutDashboard, GraduationCap, MessageSquare, Plug, BarChart3, Settings2, TrendingUp } from "lucide-react";
+import { LayoutDashboard, GraduationCap, MessageSquare, Plug, BarChart3, Settings2, TrendingUp, Landmark } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 interface TabDef {
@@ -17,6 +17,7 @@ const TABS: TabDef[] = [
   { key: "analytics", label: "Аналитика", icon: BarChart3, path: "/dashboard/ai/rop/analytics" },
   { key: "strategy", label: "Стратегия", icon: Settings2, path: "/dashboard/ai/rop/strategy" },
   { key: "growth", label: "Рост", icon: TrendingUp, path: "/dashboard/ai/rop/growth" },
+  { key: "bank-products", label: "Банковские продукты", icon: Landmark, path: "/dashboard/ai/rop/bank-products" },
 ];
 
 export function AiRopTabs() {

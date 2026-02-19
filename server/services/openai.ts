@@ -262,6 +262,23 @@ function buildSystemPrompt(context: TenantContext, catalogUrl: string, matchedTa
     prompt += `\n\nПредлагай товары со скидками! Клиенты любят выгодные предложения.`;
   }
 
+  if (context.bankProducts && context.bankProducts.length > 0) {
+    const grouped: Record<string, Array<{productName: string; description?: string; conditions?: string}>> = {};
+    context.bankProducts.forEach((bp: any) => {
+      if (!grouped[bp.bankName]) grouped[bp.bankName] = [];
+      grouped[bp.bankName].push(bp);
+    });
+    prompt += `\n\n## ДОСТУПНЫЕ РАССРОЧКИ И КРЕДИТНЫЕ ПРОДУКТЫ`;
+    for (const [bank, prods] of Object.entries(grouped)) {
+      prompt += `\n\n**${bank}**:`;
+      prods.forEach(p => {
+        prompt += `\n- ${p.productName}`;
+        if (p.conditions) prompt += ` — ${p.conditions}`;
+      });
+    }
+    prompt += `\n\nПри вопросах клиента о рассрочке, кредите или способах оплаты — предлагай эти варианты. НЕ выдумывай другие варианты рассрочек, которых нет в списке.`;
+  }
+
   if (context.salesScript?.stages && context.salesScript.stages.length > 0) {
     prompt += `\n\n## СКРИПТ ПРОДАЖ - СЛЕДУЙ ЭТИМ ЭТАПАМ`;
     context.salesScript.stages.forEach((stage, index) => {

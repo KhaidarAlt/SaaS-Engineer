@@ -5,7 +5,7 @@ import {
   aiSettings, aiTestingSessions, aiTestingMessages, aiScoreSnapshots,
   aiStressTestRuns, handoverRules, knowledgeItems, trainingItems,
   products, aiBusinessProfile, aiPromotionRules, categories,
-  aiTriggers, aiAntiPatterns, aiTrainingEvents,
+  aiTriggers, aiAntiPatterns, aiTrainingEvents, bankProducts,
 } from "@shared/schema";
 import { generateAiResponse } from "./services/openai";
 
@@ -148,6 +148,15 @@ async function buildTenantContext(tenantId: string, pool: any, storage: any) {
     }
   } catch {}
 
+  const enabledBankProducts = await db.select({
+    bankName: bankProducts.bankName,
+    productName: bankProducts.productName,
+    description: bankProducts.description,
+    conditions: bankProducts.conditions,
+  }).from(bankProducts)
+    .where(and(eq(bankProducts.tenantId, tenantId), eq(bankProducts.isEnabled, true)))
+    .orderBy(bankProducts.bankName, bankProducts.sortOrder);
+
   const context: any = {
     storeName: tenant.name,
     slug: tenant.slug,
@@ -168,6 +177,7 @@ async function buildTenantContext(tenantId: string, pool: any, storage: any) {
     aiLanguages: tenant.aiLanguages || ["ru"],
     aiSystemPrompt: settings.systemPromptCustom || undefined,
     paymentOptions,
+    bankProducts: enabledBankProducts.length > 0 ? enabledBankProducts : undefined,
   };
 
   return context;
