@@ -2792,3 +2792,57 @@ export const wahaDisclaimerAcceptanceRelations = relations(wahaDisclaimerAccepta
 export const insertWahaDisclaimerSchema = createInsertSchema(wahaDisclaimerAcceptance).omit({ id: true, createdAt: true });
 export type InsertWahaDisclaimer = z.infer<typeof insertWahaDisclaimerSchema>;
 export type WahaDisclaimerAcceptance = typeof wahaDisclaimerAcceptance.$inferSelect;
+
+// ============ CANONICAL MESSAGING: MESSAGES ============
+export const messagingMessages = pgTable("messaging_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  dialogId: varchar("dialog_id").references(() => aiDialogs.id, { onDelete: "set null" }),
+  direction: text("direction").notNull(), // inbound | outbound
+  channel: text("channel").notNull(), // whatsapp_cloud | whatsapp_waha | telegram | instagram
+  provider: text("provider").notNull(), // meta | waha | telegram | instagram
+  fromAddress: text("from_address").notNull(),
+  toAddress: text("to_address").notNull(),
+  messageType: text("message_type").notNull().default("text"), // text | image | video | audio | document | location | contacts | interactive | reaction | sticker
+  content: jsonb("content").$type<Record<string, unknown>>().notNull(),
+  providerMessageId: text("provider_message_id"),
+  providerTimestamp: timestamp("provider_timestamp"),
+  status: text("status").notNull().default("received"), // received | processing | processed | failed
+  meta: jsonb("meta").$type<Record<string, unknown>>(),
+  receivedAt: timestamp("received_at").notNull().defaultNow(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const messagingMessagesRelations = relations(messagingMessages, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [messagingMessages.tenantId],
+    references: [tenants.id],
+  }),
+  dialog: one(aiDialogs, {
+    fields: [messagingMessages.dialogId],
+    references: [aiDialogs.id],
+  }),
+}));
+
+export const insertMessagingMessageSchema = createInsertSchema(messagingMessages).omit({ id: true, createdAt: true });
+export type InsertMessagingMessage = z.infer<typeof insertMessagingMessageSchema>;
+export type MessagingMessage = typeof messagingMessages.$inferSelect;
+
+// ============ CANONICAL MESSAGING: DEDUPLICATION ============
+export const messagingDedup = pgTable("messaging_dedup", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  dedupKey: varchar("dedup_key").notNull().unique(),
+  messageId: varchar("message_id").notNull().references(() => messagingMessages.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const messagingDedupRelations = relations(messagingDedup, ({ one }) => ({
+  message: one(messagingMessages, {
+    fields: [messagingDedup.messageId],
+    references: [messagingMessages.id],
+  }),
+}));
+
+export const insertMessagingDedupSchema = createInsertSchema(messagingDedup).omit({ id: true, createdAt: true });
+export type InsertMessagingDedup = z.infer<typeof insertMessagingDedupSchema>;
+export type MessagingDedup = typeof messagingDedup.$inferSelect;

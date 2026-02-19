@@ -54,6 +54,14 @@ Key architectural decisions include:
   - Frontend: Feature module at client/src/features/aiRop/growth/
   - Note: "Умный контакт" (Smart Contact) was merged into this Growth tab; old route redirects to growth
 
+## Canonical Messaging Layer
+- **Purpose**: Channel-agnostic inbound message normalization, deduplication, dialog resolution, and persistent storage
+- **Schema**: messaging_messages (uuid PK, tenantId, dialogId FK→ai_dialogs, direction, channel, provider, fromAddress, toAddress, messageType, content jsonb, providerMessageId, status, meta jsonb), messaging_dedup (sha256 dedupKey unique, messageId FK)
+- **Adapter**: server/messaging/providers/metaWhatsAppAdapter.ts — normalizes Meta WhatsApp Cloud webhook payloads (entries→changes→value→messages/statuses) into NormalizedInboundMessage structs; supports text, image, video, audio, document, location, contacts, interactive, reaction, sticker, button types
+- **Core**: server/messaging/core.ts — resolveDialog() finds/creates ai_dialogs by externalThreadId="{channel}:{fromAddress}", dedup via sha256(provider:providerMessageId), stores to messaging_messages + messaging_dedup, updates dialog activity
+- **Integration**: meta.service.ts handleWebhookEvent() calls acceptInboundMetaWebhook() with try/catch fallback to log-only mode
+- **Thread key convention**: externalThreadId = "whatsapp_cloud:{fromPhone}" for WhatsApp Cloud conversations
+
 ## External Dependencies
 - **Database**: PostgreSQL
 - **Messaging Integrations**:

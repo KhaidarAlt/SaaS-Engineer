@@ -879,19 +879,32 @@ class MetaCloudService {
 
   async handleWebhookEvent(tenantId: string, event: MetaWebhookEvent): Promise<void> {
     if (!event.entry?.length) return;
-    
-    for (const entry of event.entry) {
-      for (const change of entry.changes || []) {
-        if (change.field === "messages") {
-          const messages = change.value.messages || [];
-          const statuses = change.value.statuses || [];
-          
-          for (const message of messages) {
-            console.log(`[WA Cloud] Incoming message from ${message.from}: ${message.text?.body}`);
-          }
-          
-          for (const status of statuses) {
-            console.log(`[WA Cloud] Message ${status.id} status: ${status.status}`);
+
+    try {
+      const { acceptInboundMetaWebhook } = await import("../../messaging/core");
+      const result = await acceptInboundMetaWebhook(tenantId, event as any);
+
+      if (result.stored.length > 0) {
+        console.log(
+          `[WA Cloud] Processed ${result.stored.length} message(s) for tenant ${tenantId}`
+        );
+      }
+      if (result.duplicates.length > 0) {
+        console.log(
+          `[WA Cloud] Skipped ${result.duplicates.length} duplicate(s) for tenant ${tenantId}`
+        );
+      }
+    } catch (err) {
+      console.error("[WA Cloud] Messaging core error, falling back to log-only:", err);
+      for (const entry of event.entry) {
+        for (const change of entry.changes || []) {
+          if (change.field === "messages") {
+            for (const message of change.value.messages || []) {
+              console.log(`[WA Cloud] Incoming message from ${message.from}: ${message.text?.body}`);
+            }
+            for (const status of change.value.statuses || []) {
+              console.log(`[WA Cloud] Message ${status.id} status: ${status.status}`);
+            }
           }
         }
       }
