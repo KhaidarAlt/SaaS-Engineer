@@ -10,7 +10,7 @@ import { z } from "zod";
 import path from "path";
 import fs from "fs";
 import { storage } from "./storage";
-import { loginSchema, registerSchema, checkoutSchema, categoryAiPriority, productCrossSell } from "@shared/schema";
+import { loginSchema, registerSchema, checkoutSchema, categoryAiPriority, productCrossSell, productUpsell } from "@shared/schema";
 import type { User, Tenant, Subscription, Plan } from "@shared/schema";
 import { ObjectStorageService, registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import { sendPasswordResetEmail } from "./services/gmail";
@@ -1732,6 +1732,60 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Set cross-sell error:", error);
       res.status(500).json({ message: "Ошибка сохранения сопутствующих товаров" });
+    }
+  });
+
+  // ============ PRODUCT UPSELL ============
+
+  app.get("/api/products/:productId/upsell", requireAuth, async (req, res) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const items = await db.select().from(productUpsell)
+        .where(and(eq(productUpsell.tenantId, tenantId), eq(productUpsell.productId, req.params.productId)));
+      res.json(items[0] || null);
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка получения апселл-товара" });
+    }
+  });
+
+  app.put("/api/products/:productId/upsell", requireAuth, async (req, res) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const productId = req.params.productId;
+      const { upsellProductId } = req.body;
+
+      if (!upsellProductId || typeof upsellProductId !== "string") {
+        return res.status(400).json({ message: "Укажите апселл-товар" });
+      }
+
+      if (upsellProductId === productId) {
+        return res.status(400).json({ message: "Нельзя указать тот же товар как апселл" });
+      }
+
+      await db.delete(productUpsell)
+        .where(and(eq(productUpsell.tenantId, tenantId), eq(productUpsell.productId, productId)));
+
+      const [item] = await db.insert(productUpsell).values({
+        tenantId,
+        productId,
+        upsellProductId,
+      }).returning();
+
+      res.json(item);
+    } catch (error) {
+      console.error("Set upsell error:", error);
+      res.status(500).json({ message: "Ошибка сохранения апселл-товара" });
+    }
+  });
+
+  app.delete("/api/products/:productId/upsell", requireAuth, async (req, res) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      await db.delete(productUpsell)
+        .where(and(eq(productUpsell.tenantId, tenantId), eq(productUpsell.productId, req.params.productId)));
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка удаления апселл-товара" });
     }
   });
 
@@ -4177,7 +4231,7 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
           }));
           
           // Get all context data in parallel
-          const [tenant, products, aiSettings, salesScripts, tagRules, faqItems, knowledge, policies, promotions, discounts, kaspiIntegration, enabledBankProducts, aiPriorities, crossSellItems] = await Promise.all([
+          const [tenant, products, aiSettings, salesScripts, tagRules, faqItems, knowledge, policies, promotions, discounts, kaspiIntegration, enabledBankProducts, aiPriorities, crossSellItems, upsellItems] = await Promise.all([
             storage.getTenant(tenantId),
             storage.getProducts(tenantId),
             storage.getAiSettings(tenantId),
@@ -4192,6 +4246,7 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
             storage.getEnabledBankProducts(tenantId),
             db.select().from(categoryAiPriority).where(eq(categoryAiPriority.tenantId, tenantId)),
             db.select().from(productCrossSell).where(eq(productCrossSell.tenantId, tenantId)).orderBy(productCrossSell.sortOrder),
+            db.select().from(productUpsell).where(eq(productUpsell.tenantId, tenantId)),
           ]);
           
           // Get active sales script
@@ -4292,6 +4347,11 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
                 relatedProducts: relatedProducts.slice(0, 3),
               }));
             })() : undefined,
+            upsellMap: upsellItems.length > 0 ? upsellItems.map((u: any) => {
+              const prodName = products.find((p: any) => p.id === u.productId)?.name;
+              const upsellName = products.find((p: any) => p.id === u.upsellProductId)?.name;
+              return prodName && upsellName ? { productName: prodName, upsellProductName: upsellName } : null;
+            }).filter(Boolean) : undefined,
           };
           
           try {
@@ -5089,6 +5149,7 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
     const enabledBankProducts = await storage.getEnabledBankProducts(tenantId);
     const aiPriorities = await db.select().from(categoryAiPriority).where(eq(categoryAiPriority.tenantId, tenantId));
     const crossSellItems = await db.select().from(productCrossSell).where(eq(productCrossSell.tenantId, tenantId)).orderBy(productCrossSell.sortOrder);
+    const upsellItems = await db.select().from(productUpsell).where(eq(productUpsell.tenantId, tenantId));
     
     // Build category map
     const categoryMap = new Map<string, string>();
@@ -5177,6 +5238,11 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
           relatedProducts: relatedProducts.slice(0, 3),
         }));
       })() : undefined,
+      upsellMap: upsellItems.length > 0 ? upsellItems.map((u: any) => {
+        const prodName = products.find((p: any) => p.id === u.productId)?.name;
+        const upsellName = products.find((p: any) => p.id === u.upsellProductId)?.name;
+        return prodName && upsellName ? { productName: prodName, upsellProductName: upsellName } : null;
+      }).filter(Boolean) : undefined,
     };
     
     try {

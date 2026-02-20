@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -10,7 +11,7 @@ import { Slider } from "@/components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Target, Users, Search, ShoppingCart, Plus, Trash2, Save,
-  ChevronDown, ChevronUp, Settings2, Award, Star, CreditCard, Check, X, Loader2
+  ChevronDown, ChevronUp, Settings2, Award, Star, CreditCard, Check, X, Loader2, Info
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
@@ -638,28 +639,40 @@ export function StrategyPanel({ settings, onSettingsSaved }: Props) {
           <CardTitle className="text-base">Продажные бустеры</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-3">
-            {([
-              { key: "upsell" as const, label: "Апселл" },
-              { key: "cheaperAlternative" as const, label: "Предложить дешевле" },
-              { key: "scarcity" as const, label: "Ограниченное предложение" },
-              { key: "autoPromo" as const, label: "Авто промо-зона" },
-            ]).map((item) => (
-              <div
-                key={item.key}
-                className="flex items-center justify-between gap-2"
-              >
-                <span className="text-sm">{item.label}</span>
-                <Switch
-                  data-testid={`switch-${item.key}`}
-                  checked={boosters[item.key]}
-                  onCheckedChange={(checked) =>
-                    setBoosters((prev) => ({ ...prev, [item.key]: checked }))
-                  }
-                />
-              </div>
-            ))}
-          </div>
+          <TooltipProvider delayDuration={300}>
+            <div className="space-y-3">
+              {([
+                { key: "upsell" as const, label: "Апселл", hint: "AI предлагает более дорогую альтернативу товару. Настройте апселл-товары в меню «AI продажи» каждого товара." },
+                { key: "cheaperAlternative" as const, label: "Предложить дешевле", hint: "Если клиент говорит «дорого» — AI предложит более доступный товар из каталога, чтобы не потерять продажу." },
+                { key: "scarcity" as const, label: "Ограниченное предложение", hint: "AI использует тактику срочности: «Осталось мало», «Акция заканчивается» — мотивирует клиента быстрее принять решение." },
+                { key: "autoPromo" as const, label: "Авто промо-зона", hint: "AI автоматически упоминает текущие акции и скидки в подходящие моменты диалога с клиентом." },
+              ]).map((item) => (
+                <div
+                  key={item.key}
+                  className="flex items-center justify-between gap-2"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-sm">{item.label}</span>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help shrink-0" data-testid={`tooltip-${item.key}`} />
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-[260px]">
+                        <p className="text-xs">{item.hint}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                  <Switch
+                    data-testid={`switch-${item.key}`}
+                    checked={boosters[item.key]}
+                    onCheckedChange={(checked) =>
+                      setBoosters((prev) => ({ ...prev, [item.key]: checked }))
+                    }
+                  />
+                </div>
+              ))}
+            </div>
+          </TooltipProvider>
         </CardContent>
       </Card>
 

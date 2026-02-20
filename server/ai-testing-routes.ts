@@ -6,7 +6,7 @@ import {
   aiStressTestRuns, handoverRules, knowledgeItems, trainingItems,
   products, aiBusinessProfile, aiPromotionRules, categories,
   aiTriggers, aiAntiPatterns, aiTrainingEvents, bankProducts,
-  categoryAiPriority, productCrossSell,
+  categoryAiPriority, productCrossSell, productUpsell,
 } from "@shared/schema";
 import { generateAiResponse } from "./services/openai";
 
@@ -209,6 +209,16 @@ async function buildTenantContext(tenantId: string, pool: any, storage: any) {
       productName,
       relatedProducts: relatedProducts.slice(0, 3),
     }));
+  }
+
+  const upsellItemsRaw = await db.select().from(productUpsell).where(eq(productUpsell.tenantId, tenantId));
+  if (upsellItemsRaw.length > 0) {
+    const allProducts = await db.select().from(products).where(eq(products.tenantId, tenantId));
+    context.upsellMap = upsellItemsRaw.map((u: any) => {
+      const prodName = allProducts.find((p: any) => p.id === u.productId)?.name;
+      const upsellName = allProducts.find((p: any) => p.id === u.upsellProductId)?.name;
+      return prodName && upsellName ? { productName: prodName, upsellProductName: upsellName } : null;
+    }).filter(Boolean);
   }
 
   return context;

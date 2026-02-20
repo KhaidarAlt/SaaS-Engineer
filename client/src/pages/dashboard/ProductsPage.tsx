@@ -18,6 +18,7 @@ import {
   ShoppingCart,
   X,
   Bot,
+  TrendingUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -177,6 +178,9 @@ export default function ProductsPage() {
   const [crossSellDialog, setCrossSellDialog] = useState<Product | null>(null);
   const [crossSellSearch, setCrossSellSearch] = useState("");
   const [selectedCrossSell, setSelectedCrossSell] = useState<string[]>([]);
+  const [upsellDialog, setUpsellDialog] = useState<Product | null>(null);
+  const [upsellSearch, setUpsellSearch] = useState("");
+  const [selectedUpsell, setSelectedUpsell] = useState<string | null>(null);
   const { toast } = useToast();
 
   const { data: products, isLoading } = useQuery<Product[]>({
@@ -348,6 +352,41 @@ export default function ProductsPage() {
       if (prev.length >= 3) return prev;
       return [...prev, relatedId];
     });
+  };
+
+  const saveUpsellMutation = useMutation({
+    mutationFn: async ({ productId, upsellProductId }: { productId: string; upsellProductId: string }) => {
+      await apiRequest("PUT", `/api/products/${productId}/upsell`, { upsellProductId });
+    },
+    onSuccess: () => {
+      toast({ title: "Апселл-товар сохранён" });
+      setUpsellDialog(null);
+    },
+    onError: () => {
+      toast({ title: "Ошибка сохранения", variant: "destructive" });
+    },
+  });
+
+  const removeUpsellMutation = useMutation({
+    mutationFn: async (productId: string) => {
+      await apiRequest("DELETE", `/api/products/${productId}/upsell`);
+    },
+    onSuccess: () => {
+      toast({ title: "Апселл-товар убран" });
+      setUpsellDialog(null);
+    },
+  });
+
+  const openUpsellDialog = async (product: Product) => {
+    try {
+      const res = await fetch(`/api/products/${product.id}/upsell`, { credentials: "include" });
+      const item = await res.json();
+      setSelectedUpsell(item?.upsellProductId || null);
+    } catch {
+      setSelectedUpsell(null);
+    }
+    setUpsellSearch("");
+    setUpsellDialog(product);
   };
 
   const isPriorityProduct = (product: Product) => {
@@ -632,6 +671,16 @@ export default function ProductsPage() {
                                   <ShoppingCart className="h-4 w-4 mr-2" />
                                   Сопутствующие товары
                                 </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    openUpsellDialog(product);
+                                  }}
+                                  data-testid={`set-upsell-${product.id}`}
+                                >
+                                  <TrendingUp className="h-4 w-4 mr-2" />
+                                  Апселл-товар
+                                </DropdownMenuItem>
                               </DropdownMenuSubContent>
                             </DropdownMenuSub>
                             <DropdownMenuSeparator />
@@ -775,6 +824,105 @@ export default function ProductsPage() {
               onClick={() => crossSellDialog && saveCrossSellMutation.mutate({ productId: crossSellDialog.id, relatedProductIds: selectedCrossSell })}
               disabled={saveCrossSellMutation.isPending}
               data-testid="button-save-cross-sell"
+            >
+              Сохранить
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!upsellDialog} onOpenChange={(open) => !open && setUpsellDialog(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Апселл-товар</DialogTitle>
+            <DialogDescription>
+              Выберите более дорогой/премиальный товар, который AI предложит клиенту как альтернативу.
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedUpsell && (
+            <div className="flex items-center gap-2">
+              <Badge variant="secondary" className="gap-1 pr-1">
+                <span className="max-w-[200px] truncate">
+                  {products?.find(p => p.id === selectedUpsell)?.name || selectedUpsell}
+                </span>
+                <button
+                  onClick={() => setSelectedUpsell(null)}
+                  className="ml-1 rounded-full p-0.5"
+                  data-testid="remove-upsell-selection"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            </div>
+          )}
+
+          <div className="space-y-3">
+            <Input
+              placeholder="Поиск товаров..."
+              value={upsellSearch}
+              onChange={(e) => setUpsellSearch(e.target.value)}
+              data-testid="input-upsell-search"
+            />
+            <div className="max-h-60 overflow-y-auto space-y-1">
+              {products
+                ?.filter(p =>
+                  p.id !== upsellDialog?.id &&
+                  p.name.toLowerCase().includes(upsellSearch.toLowerCase())
+                )
+                .slice(0, 20)
+                .map(p => {
+                  const isSelected = selectedUpsell === p.id;
+                  return (
+                    <div
+                      key={p.id}
+                      className={`flex items-center gap-3 p-2 rounded-md cursor-pointer transition-colors ${isSelected ? "bg-accent" : "hover-elevate"}`}
+                      onClick={() => setSelectedUpsell(isSelected ? null : p.id)}
+                      data-testid={`upsell-item-${p.id}`}
+                    >
+                      <div className="w-4 h-4 rounded-full border flex items-center justify-center shrink-0">
+                        {isSelected && <div className="w-2 h-2 rounded-full bg-primary" />}
+                      </div>
+                      <div className="w-8 h-8 rounded bg-muted overflow-hidden shrink-0">
+                        {p.mainImageUrl ? (
+                          <img src={resolveImageUrl(p.mainImageUrl)} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <Package className="h-3 w-3 text-muted-foreground" />
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium truncate">{p.name}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {new Intl.NumberFormat("ru-KZ").format(parseFloat(p.price))} ₸
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            {selectedUpsell && (
+              <Button
+                variant="ghost"
+                className="text-destructive"
+                onClick={() => upsellDialog && removeUpsellMutation.mutate(upsellDialog.id)}
+                disabled={removeUpsellMutation.isPending}
+                data-testid="button-remove-upsell"
+              >
+                Убрать
+              </Button>
+            )}
+            <Button variant="outline" onClick={() => setUpsellDialog(null)} data-testid="button-cancel-upsell">
+              Отмена
+            </Button>
+            <Button
+              onClick={() => upsellDialog && selectedUpsell && saveUpsellMutation.mutate({ productId: upsellDialog.id, upsellProductId: selectedUpsell })}
+              disabled={!selectedUpsell || saveUpsellMutation.isPending}
+              data-testid="button-save-upsell"
             >
               Сохранить
             </Button>

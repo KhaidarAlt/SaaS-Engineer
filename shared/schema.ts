@@ -902,6 +902,25 @@ export const productCrossSellRelations = relations(productCrossSell, ({ one }) =
 
 export type ProductCrossSell = typeof productCrossSell.$inferSelect;
 
+// ============ PRODUCT UPSELL ============
+export const productUpsell = pgTable("product_upsell", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  productId: varchar("product_id").notNull().references(() => products.id),
+  upsellProductId: varchar("upsell_product_id").notNull().references(() => products.id),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("product_upsell_unique_idx").on(table.tenantId, table.productId),
+]);
+
+export const productUpsellRelations = relations(productUpsell, ({ one }) => ({
+  tenant: one(tenants, { fields: [productUpsell.tenantId], references: [tenants.id] }),
+  product: one(products, { fields: [productUpsell.productId], references: [products.id] }),
+  upsellProduct: one(products, { fields: [productUpsell.upsellProductId], references: [products.id] }),
+}));
+
+export type ProductUpsell = typeof productUpsell.$inferSelect;
+
 // ============ PRODUCT AI TAGS ============
 export const productAiTags = pgTable("product_ai_tags", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

@@ -77,6 +77,7 @@ interface TenantContext {
   };
   categoryPriorities?: Array<{ categoryName: string; productName: string }>;
   crossSellMap?: Array<{ productName: string; relatedProducts: string[] }>;
+  upsellMap?: Array<{ productName: string; upsellProductName: string }>;
 }
 
 interface AiResponseResult {
@@ -435,6 +436,15 @@ ${context.paymentOptions.kaspiPayLink}
     });
     prompt += `\n\nКогда клиент выбрал/подтвердил основной товар — предложи ему сопутствующие товары из списка выше (максимум 2). Пример: "Часто берут вместе: 1) ... 2) ... Хотите добавить к заказу?"
 Предлагай сопутствующие товары ОДИН раз. Если клиент отказался — не настаивай.`;
+  }
+
+  if (context.upsellMap && context.upsellMap.length > 0) {
+    prompt += `\n\n## АПСЕЛЛ-ТОВАРЫ (более дорогая альтернатива)`;
+    context.upsellMap.forEach(u => {
+      prompt += `\n- К товару "${u.productName}" → апселл: "${u.upsellProductName}"`;
+    });
+    prompt += `\n\nКогда клиент интересуется товаром, у которого настроен апселл — мягко упомяни более дорогую альтернативу. Пример: "Кстати, у нас есть [апселл-товар] — он дороже, но [кратко преимущество]. Хотите узнать подробнее?"
+Предлагай апселл ОДИН раз в начале диалога. Если клиент отказался или уже выбрал — не возвращайся к этому. Используй ТОЛЬКО настроенные апселл-товары, никогда не придумывай свои.`;
   }
 
   const hasPromosOrDiscounts = (context.promotions && context.promotions.length > 0) || (context.discounts && context.discounts.length > 0);

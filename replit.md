@@ -15,6 +15,7 @@ Key architectural decisions include:
 - **AI Integration**: AI-powered business consultant with five modes (Analyst, Marketer, ROP, Finance, Support) for insights. A dedicated AI-РОП (Sales Control Center) manages goal-oriented AI assistants, including goal selection, KPI dashboards, handover rules, knowledge base management, and a comprehensive AI testing suite with readiness scores, simulation personas, and stress tests. AI analytics provide KPI dashboards, sales funnel analysis, bottleneck detection, objection tracking, and an auto-audit system.
 - **Custom Domains & Subdomains**: A flexible system allowing tenants to use branded subdomains (`*.botfactory.kz`) and self-service custom domains with automated DNS verification and SSL provisioning via Caddy.
 - **CRM System**: An internal CRM dashboard featuring Kanban and table views for deals, integrated with AI for analysis and message generation, and enhanced order detail pages.
+- **AI Sales Optimization**: Per-product sales tools accessible via "AI продажи" menu in Products table: priority products per category (AI recommends first for generic queries), cross-sell recommendations (up to 3 related products suggested after selection), and upsell mapping (more expensive alternative suggested by AI). Sales boosters (Апселл, Предложить дешевле, Ограниченное предложение, Авто промо-зона) with tooltip descriptions in Strategy panel. Schema: category_ai_priority, product_cross_sell, product_upsell.
 
 ## AI-РОП Module Structure
 - **Overview Tab** (executive dashboard at /dashboard/ai/rop/overview):
