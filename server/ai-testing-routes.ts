@@ -162,6 +162,7 @@ async function buildTenantContext(tenantId: string, pool: any, storage: any) {
     storeName: tenant.name,
     slug: tenant.slug,
     customDomain: tenant.customDomain || undefined,
+    domainVerified: (tenant as any).domainVerified || false,
     storeDescription: tenant.description || undefined,
     contactPhone: tenant.contactPhone || undefined,
     products: productRows.map((p: any) => ({

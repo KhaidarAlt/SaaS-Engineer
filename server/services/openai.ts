@@ -47,6 +47,7 @@ interface TenantContext {
   storeName: string;
   slug: string;
   customDomain?: string;
+  domainVerified?: boolean;
   storeDescription?: string;
   contactPhone?: string;
   products?: Array<{ name: string; price: number; description?: string; category?: string }>;
@@ -99,7 +100,7 @@ export async function generateAiResponse(
   context: TenantContext
 ): Promise<AiResponseResult> {
   const platformDomain = process.env.PLATFORM_DOMAIN || "botfactory.kz";
-  const catalogUrl = context.customDomain 
+  const catalogUrl = (context.customDomain && context.domainVerified)
     ? `https://${context.customDomain}`
     : `https://${context.slug}.${platformDomain}`;
   

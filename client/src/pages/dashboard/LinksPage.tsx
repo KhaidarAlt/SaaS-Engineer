@@ -79,7 +79,14 @@ export default function LinksPage() {
     createMutation.mutate({ title: newTitle.trim(), url });
   };
 
-  const publicUrl = tenant?.slug ? `${window.location.origin}/l/${tenant.slug}` : "";
+  const getCatalogUrl = () => {
+    if (!tenant?.slug) return "";
+    const t = tenant as any;
+    if (t.customDomain && t.domainVerified) return `https://${t.customDomain}`;
+    return `https://${tenant.slug}.botfactory.kz`;
+  };
+
+  const publicUrl = tenant?.slug ? `https://${tenant.slug}.botfactory.kz/l/${tenant.slug}` : "";
 
   const copyToClipboard = async () => {
     try {
@@ -94,10 +101,7 @@ export default function LinksPage() {
 
   const addCatalogLink = () => {
     if (!tenant?.slug) return;
-    const t = tenant as any;
-    const catalogUrl = t.customDomain
-      ? `https://${t.customDomain}`
-      : `https://${tenant.slug}.botfactory.kz`;
+    const catalogUrl = getCatalogUrl();
     createMutation.mutate({ title: `Каталог ${tenant.name}`, url: catalogUrl });
   };
 
@@ -197,7 +201,7 @@ export default function LinksPage() {
                   <Label htmlFor="title">Название кнопки</Label>
                   <Input
                     id="title"
-                    placeholder="Каталог магазина ESSEN"
+                    placeholder={`Каталог ${tenant?.name || "магазина"}`}
                     value={newTitle}
                     onChange={(e) => setNewTitle(e.target.value)}
                     data-testid="input-link-title"
@@ -207,7 +211,7 @@ export default function LinksPage() {
                   <Label htmlFor="url">URL</Label>
                   <Input
                     id="url"
-                    placeholder="https://botfactory.kz/c/essen-almaty"
+                    placeholder={`https://${tenant?.slug || "mystore"}.botfactory.kz`}
                     value={newUrl}
                     onChange={(e) => setNewUrl(e.target.value)}
                     data-testid="input-link-url"

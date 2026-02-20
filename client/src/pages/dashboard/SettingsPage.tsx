@@ -597,7 +597,7 @@ export default function SettingsPage() {
 
   const getCatalogBaseUrl = (slug: string, updatedAt?: string | Date) => {
     const t = tenant as any;
-    if (t?.customDomain) {
+    if (t?.customDomain && t?.domainVerified) {
       return `https://${t.customDomain}`;
     }
     return `https://${slug}.botfactory.kz`;

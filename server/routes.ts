@@ -3113,6 +3113,7 @@ export async function registerRoutes(
         storeName: tenant.name,
         slug: tenant.slug,
         customDomain: (tenant as any)?.customDomain || undefined,
+        domainVerified: (tenant as any)?.domainVerified || false,
         storeDescription: tenant.description || undefined,
         contactPhone: tenant.contactPhone || undefined,
         products: [{
@@ -4264,6 +4265,7 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
             storeName: tenant?.name || "Магазин",
             slug: tenant?.slug || "catalog",
             customDomain: (tenant as any)?.customDomain || undefined,
+            domainVerified: (tenant as any)?.domainVerified || false,
             storeDescription: tenant?.description || undefined,
             tone: aiSettings?.tone || "friendly",
             products: products.slice(0, 20).map(p => ({
@@ -5159,6 +5161,7 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
       storeName: tenant.name,
       slug: tenant.slug,
       customDomain: (tenant as any)?.customDomain || undefined,
+      domainVerified: (tenant as any)?.domainVerified || false,
       storeDescription: tenant.description || undefined,
       contactPhone: tenant.contactPhone || undefined,
       products: products.slice(0, 50).map(p => ({
