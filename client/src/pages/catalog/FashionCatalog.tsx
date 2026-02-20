@@ -13,6 +13,11 @@ import {
   ArrowLeft,
   Package,
   Flame,
+  LayoutGrid,
+  Rows3,
+  Share2,
+  Star,
+  Eye,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -43,7 +48,6 @@ const TAG_CONFIG: Record<string, { label: string; color: string }> = {
   best_price: { label: "Лучшая цена", color: "bg-green-500" },
   sale: { label: "Распродажа", color: "bg-red-500" },
 };
-
 
 function useFavorites(tenantSlug: string) {
   const storageKey = `favorites_${tenantSlug}`;
@@ -81,9 +85,281 @@ function getViewerCount(productId: string): number {
   return 5 + (hash % 26);
 }
 
+function getRating(productId: string): string {
+  let hash = 0;
+  for (let i = 0; i < productId.length; i++) {
+    hash = (hash * 17 + productId.charCodeAt(i)) % 100;
+  }
+  return (4.3 + (hash % 8) * 0.1).toFixed(1);
+}
+
 const HEADER_HEIGHT = 56;
 const CATEGORIES_HEIGHT = 48;
 const TOTAL_TOP = HEADER_HEIGHT + CATEGORIES_HEIGHT;
+
+function GridProductCard({
+  product,
+  basePath,
+  isFavorite,
+  onToggleFavorite,
+  onQuickAddToCart,
+  onOpenSizes,
+}: {
+  product: any;
+  basePath: string;
+  isFavorite: boolean;
+  onToggleFavorite: (id: string) => void;
+  onQuickAddToCart: (product: any) => void;
+  onOpenSizes: (product: any) => void;
+}) {
+  const [imgLoaded, setImgLoaded] = useState(false);
+  const [heartAnim, setHeartAnim] = useState(false);
+  const imageUrl = resolveImageUrl(product.mainImageUrl);
+  const viewers = getViewerCount(product.id);
+  const rating = getRating(product.id);
+
+  const handleFavorite = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onToggleFavorite(product.id);
+    if (!isFavorite) {
+      setHeartAnim(true);
+      setTimeout(() => setHeartAnim(false), 600);
+    }
+  };
+
+  const handleShare = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: product.name,
+          url: `${window.location.origin}${basePath}/product/${product.id}`,
+        });
+      } else {
+        await navigator.clipboard.writeText(
+          `${window.location.origin}${basePath}/product/${product.id}`
+        );
+      }
+    } catch {}
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35 }}
+      data-testid={`card-product-${product.id}`}
+    >
+      <div className="rounded-2xl overflow-hidden bg-neutral-900/80 backdrop-blur-md border border-white/[0.08] shadow-lg shadow-black/20">
+        <Link href={`${basePath}/product/${product.id}`}>
+          <div className="aspect-[3/4] relative overflow-hidden cursor-pointer group">
+            {(product as any).videoUrl && (product as any).videoPrimary ? (
+              <video
+                src={resolveImageUrl((product as any).videoUrl)}
+                poster={resolveImageUrl((product as any).videoPosterUrl || product.mainImageUrl)}
+                autoPlay
+                muted
+                loop
+                playsInline
+                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                data-testid={`video-product-${product.id}`}
+              />
+            ) : imageUrl ? (
+              <img
+                src={imageUrl}
+                alt={product.name}
+                className={`w-full h-full object-cover transition-all duration-500 group-hover:scale-105 ${imgLoaded ? "opacity-100" : "opacity-0"}`}
+                loading="lazy"
+                onLoad={() => setImgLoaded(true)}
+                data-testid={`img-product-${product.id}`}
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center bg-neutral-800">
+                <Package className="h-12 w-12 text-neutral-600" />
+              </div>
+            )}
+
+            {!imgLoaded && !((product as any).videoUrl && (product as any).videoPrimary) && imageUrl && (
+              <div className="absolute inset-0 bg-neutral-800 animate-pulse" />
+            )}
+
+            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none" />
+
+            <button
+              onClick={handleFavorite}
+              className="absolute top-3 right-3 z-10"
+              data-testid={`button-favorite-${product.id}`}
+            >
+              <Heart
+                className={`h-6 w-6 drop-shadow-lg transition-all duration-300 ${
+                  isFavorite
+                    ? "text-red-500 fill-red-500 scale-110"
+                    : "text-white/90"
+                } ${heartAnim ? "animate-[heartBeat_0.6s_ease-in-out]" : ""}`}
+              />
+            </button>
+
+            {product.tags && product.tags.length > 0 && (
+              <div className="absolute top-3 left-3 flex flex-col gap-1 z-10">
+                {product.tags.slice(0, 2).map((tag: string) => {
+                  const config = TAG_CONFIG[tag];
+                  if (!config) return null;
+                  return (
+                    <span
+                      key={tag}
+                      className={`${config.color} text-white text-[10px] font-bold px-2 py-0.5 rounded-md`}
+                      data-testid={`badge-tag-${tag}-${product.id}`}
+                    >
+                      {config.label}
+                    </span>
+                  );
+                })}
+              </div>
+            )}
+
+            {product.hasDiscount && product.discountPercent && (
+              <div className="absolute bottom-3 left-3 z-10">
+                <span
+                  className="bg-gradient-to-r from-rose-500 to-pink-600 text-white text-xs font-bold px-2.5 py-1 rounded-lg"
+                  data-testid={`badge-discount-${product.id}`}
+                >
+                  -{Math.round(product.discountPercent)}%
+                </span>
+              </div>
+            )}
+          </div>
+        </Link>
+
+        <div className="p-3 space-y-2">
+          {product.colors && product.colors.length > 0 && (
+            <div className="flex items-center gap-1.5">
+              {product.colors.slice(0, 5).map((c: { name: string; hex: string }) => (
+                <span
+                  key={c.hex}
+                  className="w-4 h-4 rounded-full border border-white/20 shrink-0"
+                  style={{ backgroundColor: c.hex }}
+                  title={c.name}
+                />
+              ))}
+              {product.colors.length > 5 && (
+                <span className="text-[10px] text-white/40">+{product.colors.length - 5}</span>
+              )}
+            </div>
+          )}
+
+          <Link href={`${basePath}/product/${product.id}`}>
+            <h3
+              className="text-white font-semibold text-sm line-clamp-2 cursor-pointer leading-tight"
+              data-testid={`text-product-name-${product.id}`}
+            >
+              {product.name}
+            </h3>
+          </Link>
+
+          {product.brand && (
+            <span className="text-white/40 text-xs" data-testid={`badge-brand-${product.id}`}>
+              {product.brand}
+            </span>
+          )}
+
+          <div className="flex items-baseline gap-2">
+            {product.hasDiscount ? (
+              <>
+                <span
+                  className="text-white font-bold text-base bg-gradient-to-r from-rose-400 to-pink-400 bg-clip-text text-transparent"
+                  data-testid={`text-price-${product.id}`}
+                >
+                  {formatPrice(product.computedPrice)}
+                </span>
+                <span
+                  className="text-white/30 text-xs line-through"
+                  data-testid={`text-original-price-${product.id}`}
+                >
+                  {formatPrice(product.originalPrice)}
+                </span>
+              </>
+            ) : (
+              <span
+                className="text-white font-bold text-base"
+                data-testid={`text-price-${product.id}`}
+              >
+                {formatPrice(product.computedPrice || product.price)}
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-3 text-[11px] text-white/40">
+            <span className="flex items-center gap-1">
+              <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
+              {rating}
+            </span>
+            <span className="flex items-center gap-1" data-testid={`text-viewers-${product.id}`}>
+              <Flame className="h-3 w-3" />
+              {viewers} смотрят
+            </span>
+          </div>
+
+          <div className="flex items-center justify-between pt-1 border-t border-white/[0.06]">
+            <div className="flex items-center gap-1">
+              <button
+                onClick={handleFavorite}
+                className="p-1.5 rounded-full hover:bg-white/10 transition-colors"
+                data-testid={`button-favorite-grid-${product.id}`}
+              >
+                <Heart
+                  className={`h-4 w-4 transition-colors ${
+                    isFavorite ? "text-red-500 fill-red-500" : "text-white/60"
+                  }`}
+                />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onQuickAddToCart(product);
+                }}
+                className="p-1.5 rounded-full hover:bg-white/10 transition-colors"
+                data-testid={`button-cart-${product.id}`}
+              >
+                <ShoppingCart className="h-4 w-4 text-white/60" />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }}
+                className="p-1.5 rounded-full hover:bg-white/10 transition-colors"
+                data-testid={`button-stylist-grid-${product.id}`}
+              >
+                <Sparkles className="h-4 w-4 text-white/60" />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onOpenSizes(product);
+                }}
+                className="p-1.5 rounded-full hover:bg-white/10 transition-colors"
+                data-testid={`button-sizes-grid-${product.id}`}
+              >
+                <Ruler className="h-4 w-4 text-white/60" />
+              </button>
+            </div>
+            <button
+              onClick={handleShare}
+              className="p-1.5 rounded-full hover:bg-white/10 transition-colors"
+              data-testid={`button-share-${product.id}`}
+            >
+              <Share2 className="h-4 w-4 text-white/60" />
+            </button>
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
 
 export default function FashionCatalog({
   slug,
@@ -102,6 +378,12 @@ export default function FashionCatalog({
   const [selectedSize, setSelectedSize] = useState<string | null>(null);
   const [selectedColor, setSelectedColor] = useState<string | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [viewMode, setViewMode] = useState<'feed' | 'grid'>(() => {
+    try {
+      const saved = localStorage.getItem(`fashion_view_${slug}`);
+      return saved === 'grid' ? 'grid' : 'feed';
+    } catch { return 'feed'; }
+  });
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const categoryScrollRef = useRef<HTMLDivElement>(null);
@@ -109,6 +391,14 @@ export default function FashionCatalog({
   useEffect(() => {
     setTenantSlug(slug);
   }, [slug, setTenantSlug]);
+
+  const toggleViewMode = useCallback(() => {
+    setViewMode((prev) => {
+      const next = prev === 'feed' ? 'grid' : 'feed';
+      try { localStorage.setItem(`fashion_view_${slug}`, next); } catch {}
+      return next;
+    });
+  }, [slug]);
 
   const filteredProducts = useMemo(() => {
     let result = products.filter((p: any) => p.isActive);
@@ -279,8 +569,8 @@ export default function FashionCatalog({
     );
   }
 
-  return (
-    <div className="max-w-md mx-auto bg-black min-h-screen relative">
+  const headerContent = (
+    <>
       <header
         className="sticky top-0 z-50 flex items-center justify-between gap-2 px-4 bg-black/80 backdrop-blur-md"
         style={{ height: HEADER_HEIGHT }}
@@ -302,6 +592,18 @@ export default function FashionCatalog({
           </span>
         </div>
         <div className="flex items-center gap-1">
+          <button
+            onClick={toggleViewMode}
+            className="p-2 rounded-lg hover:bg-white/10 transition-colors"
+            data-testid="button-toggle-view"
+            title={viewMode === 'feed' ? 'Сетка' : 'Лента'}
+          >
+            {viewMode === 'feed' ? (
+              <LayoutGrid className="h-5 w-5 text-white/80" />
+            ) : (
+              <Rows3 className="h-5 w-5 text-white/80" />
+            )}
+          </button>
           <ThemeToggle />
           <Link href={`${basePath}/cart`}>
             <Button
@@ -313,7 +615,7 @@ export default function FashionCatalog({
               <ShoppingCart className="h-5 w-5" />
               {totalItems > 0 && (
                 <span
-                  className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-xs rounded-full h-5 w-5 flex items-center justify-center"
+                  className="absolute -top-1 -right-1 bg-gradient-to-r from-rose-500 to-pink-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center"
                   data-testid="badge-cart-count"
                 >
                   {totalItems}
@@ -331,10 +633,10 @@ export default function FashionCatalog({
       >
         <button
           onClick={() => setSelectedCategory(null)}
-          className={`shrink-0 px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+          className={`shrink-0 px-4 py-1.5 rounded-full text-sm font-medium transition-all ${
             selectedCategory === null
-              ? "bg-white text-black"
-              : "bg-white/20 text-white/80"
+              ? "bg-gradient-to-r from-rose-500 to-pink-500 text-white shadow-lg shadow-pink-500/25"
+              : "bg-white/10 text-white/70 hover:bg-white/20"
           }`}
           data-testid="button-category-all"
         >
@@ -348,10 +650,10 @@ export default function FashionCatalog({
                 selectedCategory === cat.id ? null : cat.id,
               )
             }
-            className={`shrink-0 px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+            className={`shrink-0 px-4 py-1.5 rounded-full text-sm font-medium transition-all ${
               selectedCategory === cat.id
-                ? "bg-white text-black"
-                : "bg-white/20 text-white/80"
+                ? "bg-gradient-to-r from-rose-500 to-pink-500 text-white shadow-lg shadow-pink-500/25"
+                : "bg-white/10 text-white/70 hover:bg-white/20"
             }`}
             data-testid={`button-category-${cat.id}`}
           >
@@ -359,6 +661,196 @@ export default function FashionCatalog({
           </button>
         ))}
       </div>
+    </>
+  );
+
+  const sizeSheet = (
+    <Sheet open={sizeSheetOpen} onOpenChange={setSizeSheetOpen}>
+      <SheetContent side="bottom" className="rounded-t-2xl max-w-md mx-auto">
+        <SheetHeader>
+          <SheetTitle>
+            {activeProduct?.name || "Выберите размер"}
+          </SheetTitle>
+          <SheetDescription>
+            Выберите размер и цвет для добавления в корзину
+          </SheetDescription>
+        </SheetHeader>
+
+        {activeProduct && (
+          <div className="mt-4 space-y-6">
+            <div className="flex items-center gap-3">
+              {activeProduct.mainImageUrl && (
+                <img
+                  src={resolveImageUrl(activeProduct.mainImageUrl)}
+                  alt={activeProduct.name}
+                  className="w-16 h-16 rounded-md object-cover"
+                />
+              )}
+              <div>
+                <p className="font-semibold text-foreground">
+                  {activeProduct.name}
+                </p>
+                <div className="flex items-center gap-2">
+                  {activeProduct.hasDiscount ? (
+                    <>
+                      <span className="text-lg font-bold text-red-500">
+                        {formatPrice(activeProduct.computedPrice)}
+                      </span>
+                      <span className="text-sm text-muted-foreground line-through">
+                        {formatPrice(activeProduct.originalPrice)}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="text-lg font-bold">
+                      {formatPrice(
+                        activeProduct.computedPrice || activeProduct.price,
+                      )}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {activeProduct.sizes && activeProduct.sizes.length > 0 && (
+              <div>
+                <p className="text-sm font-medium text-foreground mb-2">
+                  Размер
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {activeProduct.sizes.map(
+                    (s: { size: string; qty: number }) => {
+                      const isAvailable =
+                        activeProduct.alwaysInStock || s.qty > 0;
+                      const isSelected = selectedSize === s.size;
+                      return (
+                        <button
+                          key={s.size}
+                          disabled={!isAvailable}
+                          onClick={() => {
+                            setSelectedSize(
+                              isSelected ? null : s.size,
+                            );
+                            setSelectedColor(null);
+                          }}
+                          className={`min-w-[48px] px-3 py-2 rounded-md text-sm font-medium transition-colors border ${
+                            isSelected
+                              ? "bg-primary text-primary-foreground border-primary"
+                              : isAvailable
+                                ? "bg-secondary text-secondary-foreground border-transparent"
+                                : "bg-muted text-muted-foreground/40 border-transparent cursor-not-allowed line-through"
+                          }`}
+                          data-testid={`button-size-${s.size}`}
+                        >
+                          {s.size}
+                        </button>
+                      );
+                    },
+                  )}
+                </div>
+              </div>
+            )}
+
+            {activeProduct.colors && activeProduct.colors.length > 0 && (
+              <div>
+                <p className="text-sm font-medium text-foreground mb-2">
+                  Цвет
+                  {selectedColor && (
+                    <span className="ml-2 text-muted-foreground font-normal">
+                      — {selectedColor}
+                    </span>
+                  )}
+                </p>
+                <div className="flex flex-wrap gap-3">
+                  {getAvailableColors().map(
+                    (c: { name: string; hex: string }) => {
+                      const isSelected = selectedColor === c.name;
+                      return (
+                        <button
+                          key={c.hex}
+                          onClick={() =>
+                            setSelectedColor(
+                              isSelected ? null : c.name,
+                            )
+                          }
+                          className={`w-9 h-9 rounded-full border-2 transition-all flex items-center justify-center ${
+                            isSelected
+                              ? "border-primary scale-110"
+                              : "border-transparent"
+                          }`}
+                          title={c.name}
+                          data-testid={`button-color-${c.name}`}
+                        >
+                          <span
+                            className="w-7 h-7 rounded-full block border border-black/10"
+                            style={{ backgroundColor: c.hex }}
+                          />
+                        </button>
+                      );
+                    },
+                  )}
+                </div>
+              </div>
+            )}
+
+            <Button
+              className="w-full"
+              size="lg"
+              onClick={handleAddToCart}
+              disabled={
+                activeProduct.sizes &&
+                activeProduct.sizes.length > 0 &&
+                !selectedSize
+              }
+              data-testid="button-add-to-cart"
+            >
+              <ShoppingCart className="h-4 w-4 mr-2" />
+              В корзину
+            </Button>
+          </div>
+        )}
+      </SheetContent>
+    </Sheet>
+  );
+
+  if (viewMode === 'grid') {
+    return (
+      <div className="max-w-4xl mx-auto bg-black min-h-screen relative">
+        <style>{`
+          @keyframes heartBeat {
+            0% { transform: scale(1); }
+            15% { transform: scale(1.3); }
+            30% { transform: scale(0.95); }
+            45% { transform: scale(1.15); }
+            60% { transform: scale(1); }
+          }
+        `}</style>
+
+        {headerContent}
+
+        <div className="px-2 py-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3">
+            {filteredProducts.map((product: any) => (
+              <GridProductCard
+                key={product.id}
+                product={product}
+                basePath={basePath}
+                isFavorite={isFavorite(product.id)}
+                onToggleFavorite={toggleFavorite}
+                onQuickAddToCart={handleQuickAddToCart}
+                onOpenSizes={openSizeSheet}
+              />
+            ))}
+          </div>
+        </div>
+
+        {sizeSheet}
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-md mx-auto bg-black min-h-screen relative">
+      {headerContent}
 
       <div
         ref={scrollContainerRef}
@@ -424,7 +916,7 @@ export default function FashionCatalog({
                   })}
                   {product.hasDiscount && product.discountPercent && (
                     <span
-                      className="bg-red-500 text-white text-xs font-semibold px-2.5 py-0.5 rounded-md"
+                      className="bg-gradient-to-r from-rose-500 to-pink-600 text-white text-xs font-semibold px-2.5 py-0.5 rounded-md"
                       data-testid={`badge-discount-${product.id}`}
                     >
                       -{Math.round(product.discountPercent)}%
@@ -444,7 +936,7 @@ export default function FashionCatalog({
                   </div>
                   {totalItems > 0 && (
                     <span
-                      className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-xs rounded-full h-5 w-5 flex items-center justify-center"
+                      className="absolute -top-1 -right-1 bg-gradient-to-r from-rose-500 to-pink-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center"
                       data-testid="badge-cart-count-overlay"
                     >
                       {totalItems}
@@ -459,7 +951,7 @@ export default function FashionCatalog({
                 >
                   <div className="w-12 h-12 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center">
                     <Heart
-                      className={`h-5 w-5 ${favorite ? "text-red-500 fill-red-500" : "text-white"}`}
+                      className={`h-5 w-5 transition-all ${favorite ? "text-red-500 fill-red-500 scale-110" : "text-white"}`}
                     />
                   </div>
                 </button>
@@ -556,151 +1048,7 @@ export default function FashionCatalog({
         })}
       </div>
 
-      <Sheet open={sizeSheetOpen} onOpenChange={setSizeSheetOpen}>
-        <SheetContent side="bottom" className="rounded-t-2xl max-w-md mx-auto">
-          <SheetHeader>
-            <SheetTitle>
-              {activeProduct?.name || "Выберите размер"}
-            </SheetTitle>
-            <SheetDescription>
-              Выберите размер и цвет для добавления в корзину
-            </SheetDescription>
-          </SheetHeader>
-
-          {activeProduct && (
-            <div className="mt-4 space-y-6">
-              <div className="flex items-center gap-3">
-                {activeProduct.mainImageUrl && (
-                  <img
-                    src={resolveImageUrl(activeProduct.mainImageUrl)}
-                    alt={activeProduct.name}
-                    className="w-16 h-16 rounded-md object-cover"
-                  />
-                )}
-                <div>
-                  <p className="font-semibold text-foreground">
-                    {activeProduct.name}
-                  </p>
-                  <div className="flex items-center gap-2">
-                    {activeProduct.hasDiscount ? (
-                      <>
-                        <span className="text-lg font-bold text-red-500">
-                          {formatPrice(activeProduct.computedPrice)}
-                        </span>
-                        <span className="text-sm text-muted-foreground line-through">
-                          {formatPrice(activeProduct.originalPrice)}
-                        </span>
-                      </>
-                    ) : (
-                      <span className="text-lg font-bold">
-                        {formatPrice(
-                          activeProduct.computedPrice || activeProduct.price,
-                        )}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {activeProduct.sizes && activeProduct.sizes.length > 0 && (
-                <div>
-                  <p className="text-sm font-medium text-foreground mb-2">
-                    Размер
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {activeProduct.sizes.map(
-                      (s: { size: string; qty: number }) => {
-                        const isAvailable =
-                          activeProduct.alwaysInStock || s.qty > 0;
-                        const isSelected = selectedSize === s.size;
-                        return (
-                          <button
-                            key={s.size}
-                            disabled={!isAvailable}
-                            onClick={() => {
-                              setSelectedSize(
-                                isSelected ? null : s.size,
-                              );
-                              setSelectedColor(null);
-                            }}
-                            className={`min-w-[48px] px-3 py-2 rounded-md text-sm font-medium transition-colors border ${
-                              isSelected
-                                ? "bg-primary text-primary-foreground border-primary"
-                                : isAvailable
-                                  ? "bg-secondary text-secondary-foreground border-transparent"
-                                  : "bg-muted text-muted-foreground/40 border-transparent cursor-not-allowed line-through"
-                            }`}
-                            data-testid={`button-size-${s.size}`}
-                          >
-                            {s.size}
-                          </button>
-                        );
-                      },
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {activeProduct.colors && activeProduct.colors.length > 0 && (
-                <div>
-                  <p className="text-sm font-medium text-foreground mb-2">
-                    Цвет
-                    {selectedColor && (
-                      <span className="ml-2 text-muted-foreground font-normal">
-                        — {selectedColor}
-                      </span>
-                    )}
-                  </p>
-                  <div className="flex flex-wrap gap-3">
-                    {getAvailableColors().map(
-                      (c: { name: string; hex: string }) => {
-                        const isSelected = selectedColor === c.name;
-                        return (
-                          <button
-                            key={c.hex}
-                            onClick={() =>
-                              setSelectedColor(
-                                isSelected ? null : c.name,
-                              )
-                            }
-                            className={`w-9 h-9 rounded-full border-2 transition-all flex items-center justify-center ${
-                              isSelected
-                                ? "border-primary scale-110"
-                                : "border-transparent"
-                            }`}
-                            title={c.name}
-                            data-testid={`button-color-${c.name}`}
-                          >
-                            <span
-                              className="w-7 h-7 rounded-full block border border-black/10"
-                              style={{ backgroundColor: c.hex }}
-                            />
-                          </button>
-                        );
-                      },
-                    )}
-                  </div>
-                </div>
-              )}
-
-              <Button
-                className="w-full"
-                size="lg"
-                onClick={handleAddToCart}
-                disabled={
-                  activeProduct.sizes &&
-                  activeProduct.sizes.length > 0 &&
-                  !selectedSize
-                }
-                data-testid="button-add-to-cart"
-              >
-                <ShoppingCart className="h-4 w-4 mr-2" />
-                В корзину
-              </Button>
-            </div>
-          )}
-        </SheetContent>
-      </Sheet>
+      {sizeSheet}
     </div>
   );
 }
