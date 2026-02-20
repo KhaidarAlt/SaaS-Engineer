@@ -1,5 +1,5 @@
 import { sql, relations } from "drizzle-orm";
-import { pgTable, text, varchar, integer, boolean, timestamp, decimal, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, boolean, timestamp, decimal, jsonb, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -862,6 +862,45 @@ export const bankProductsRelations = relations(bankProducts, ({ one }) => ({
 export const insertBankProductSchema = createInsertSchema(bankProducts).omit({ id: true });
 export type InsertBankProduct = z.infer<typeof insertBankProductSchema>;
 export type BankProduct = typeof bankProducts.$inferSelect;
+
+// ============ CATEGORY AI PRIORITY ============
+export const categoryAiPriority = pgTable("category_ai_priority", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  categoryId: varchar("category_id").notNull().references(() => categories.id),
+  productId: varchar("product_id").notNull().references(() => products.id),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("category_ai_priority_tenant_category_idx").on(table.tenantId, table.categoryId),
+]);
+
+export const categoryAiPriorityRelations = relations(categoryAiPriority, ({ one }) => ({
+  tenant: one(tenants, { fields: [categoryAiPriority.tenantId], references: [tenants.id] }),
+  category: one(categories, { fields: [categoryAiPriority.categoryId], references: [categories.id] }),
+  product: one(products, { fields: [categoryAiPriority.productId], references: [products.id] }),
+}));
+
+export type CategoryAiPriority = typeof categoryAiPriority.$inferSelect;
+
+// ============ PRODUCT CROSS-SELL ============
+export const productCrossSell = pgTable("product_cross_sell", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  productId: varchar("product_id").notNull().references(() => products.id),
+  relatedProductId: varchar("related_product_id").notNull().references(() => products.id),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("product_cross_sell_unique_idx").on(table.tenantId, table.productId, table.relatedProductId),
+]);
+
+export const productCrossSellRelations = relations(productCrossSell, ({ one }) => ({
+  tenant: one(tenants, { fields: [productCrossSell.tenantId], references: [tenants.id] }),
+  product: one(products, { fields: [productCrossSell.productId], references: [products.id] }),
+  relatedProduct: one(products, { fields: [productCrossSell.relatedProductId], references: [products.id] }),
+}));
+
+export type ProductCrossSell = typeof productCrossSell.$inferSelect;
 
 // ============ PRODUCT AI TAGS ============
 export const productAiTags = pgTable("product_ai_tags", {

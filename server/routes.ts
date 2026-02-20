@@ -10,13 +10,14 @@ import { z } from "zod";
 import path from "path";
 import fs from "fs";
 import { storage } from "./storage";
-import { loginSchema, registerSchema, checkoutSchema } from "@shared/schema";
+import { loginSchema, registerSchema, checkoutSchema, categoryAiPriority, productCrossSell } from "@shared/schema";
 import type { User, Tenant, Subscription, Plan } from "@shared/schema";
 import { ObjectStorageService, registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import { sendPasswordResetEmail } from "./services/gmail";
 import { randomBytes, timingSafeEqual } from "crypto";
 import net from "node:net";
-import { pool } from "./db";
+import { pool, db } from "./db";
+import { eq, and, sql as dsql } from "drizzle-orm";
 import domainRoutes from "./domains/routes.js";
 import { startDomainWorker } from "./domains/worker.js";
 import { startGrowthWorker } from "./services/growthWorker.js";
@@ -1631,6 +1632,106 @@ export async function registerRoutes(
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ message: "Ошибка удаления товара" });
+    }
+  });
+
+  // ============ CATEGORY AI PRIORITY ============
+
+  app.get("/api/category-priority", requireAuth, async (req, res) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const priorities = await db.select().from(categoryAiPriority)
+        .where(eq(categoryAiPriority.tenantId, tenantId));
+      res.json(priorities);
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка получения приоритетов" });
+    }
+  });
+
+  app.put("/api/category-priority", requireAuth, async (req, res) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const { categoryId, productId } = req.body;
+      if (!categoryId || !productId) {
+        return res.status(400).json({ message: "categoryId и productId обязательны" });
+      }
+      const existing = await db.select().from(categoryAiPriority)
+        .where(and(eq(categoryAiPriority.tenantId, tenantId), eq(categoryAiPriority.categoryId, categoryId)));
+      
+      let result;
+      if (existing.length > 0) {
+        [result] = await db.update(categoryAiPriority)
+          .set({ productId, updatedAt: new Date() })
+          .where(and(eq(categoryAiPriority.tenantId, tenantId), eq(categoryAiPriority.categoryId, categoryId)))
+          .returning();
+      } else {
+        [result] = await db.insert(categoryAiPriority)
+          .values({ tenantId, categoryId, productId })
+          .returning();
+      }
+      res.json(result);
+    } catch (error) {
+      console.error("Set priority error:", error);
+      res.status(500).json({ message: "Ошибка установки приоритета" });
+    }
+  });
+
+  app.delete("/api/category-priority/:categoryId", requireAuth, async (req, res) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      await db.delete(categoryAiPriority)
+        .where(and(eq(categoryAiPriority.tenantId, tenantId), eq(categoryAiPriority.categoryId, req.params.categoryId)));
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка удаления приоритета" });
+    }
+  });
+
+  // ============ PRODUCT CROSS-SELL ============
+
+  app.get("/api/products/:productId/cross-sell", requireAuth, async (req, res) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const items = await db.select().from(productCrossSell)
+        .where(and(eq(productCrossSell.tenantId, tenantId), eq(productCrossSell.productId, req.params.productId)))
+        .orderBy(productCrossSell.sortOrder);
+      res.json(items);
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка получения сопутствующих товаров" });
+    }
+  });
+
+  app.put("/api/products/:productId/cross-sell", requireAuth, async (req, res) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const productId = req.params.productId;
+      const { relatedProductIds } = req.body;
+      
+      if (!Array.isArray(relatedProductIds) || relatedProductIds.length > 3) {
+        return res.status(400).json({ message: "Можно выбрать максимум 3 сопутствующих товара" });
+      }
+
+      await db.delete(productCrossSell)
+        .where(and(eq(productCrossSell.tenantId, tenantId), eq(productCrossSell.productId, productId)));
+
+      if (relatedProductIds.length > 0) {
+        await db.insert(productCrossSell).values(
+          relatedProductIds.map((relatedProductId: string, index: number) => ({
+            tenantId,
+            productId,
+            relatedProductId,
+            sortOrder: index,
+          }))
+        );
+      }
+
+      const items = await db.select().from(productCrossSell)
+        .where(and(eq(productCrossSell.tenantId, tenantId), eq(productCrossSell.productId, productId)))
+        .orderBy(productCrossSell.sortOrder);
+      res.json(items);
+    } catch (error) {
+      console.error("Set cross-sell error:", error);
+      res.status(500).json({ message: "Ошибка сохранения сопутствующих товаров" });
     }
   });
 
@@ -4076,7 +4177,7 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
           }));
           
           // Get all context data in parallel
-          const [tenant, products, aiSettings, salesScripts, tagRules, faqItems, knowledge, policies, promotions, discounts, kaspiIntegration, enabledBankProducts] = await Promise.all([
+          const [tenant, products, aiSettings, salesScripts, tagRules, faqItems, knowledge, policies, promotions, discounts, kaspiIntegration, enabledBankProducts, aiPriorities, crossSellItems] = await Promise.all([
             storage.getTenant(tenantId),
             storage.getProducts(tenantId),
             storage.getAiSettings(tenantId),
@@ -4089,6 +4190,8 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
             storage.getDiscounts(tenantId),
             storage.getKaspiIntegration(tenantId),
             storage.getEnabledBankProducts(tenantId),
+            db.select().from(categoryAiPriority).where(eq(categoryAiPriority.tenantId, tenantId)),
+            db.select().from(productCrossSell).where(eq(productCrossSell.tenantId, tenantId)).orderBy(productCrossSell.sortOrder),
           ]);
           
           // Get active sales script
@@ -4170,6 +4273,25 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
               description: bp.description,
               conditions: bp.conditions,
             })) : undefined,
+            categoryPriorities: aiPriorities.length > 0 ? aiPriorities.map((p: any) => ({
+              categoryName: categoryMap.get(p.categoryId) || "Неизвестная",
+              productName: products.find((pr: any) => pr.id === p.productId)?.name || "Неизвестный",
+            })) : undefined,
+            crossSellMap: crossSellItems.length > 0 ? (() => {
+              const grouped = new Map<string, string[]>();
+              crossSellItems.forEach((cs: any) => {
+                const prodName = products.find((p: any) => p.id === cs.productId)?.name;
+                const relName = products.find((p: any) => p.id === cs.relatedProductId)?.name;
+                if (prodName && relName) {
+                  if (!grouped.has(prodName)) grouped.set(prodName, []);
+                  grouped.get(prodName)!.push(relName);
+                }
+              });
+              return Array.from(grouped.entries()).map(([productName, relatedProducts]) => ({
+                productName,
+                relatedProducts: relatedProducts.slice(0, 3),
+              }));
+            })() : undefined,
           };
           
           try {
@@ -4965,6 +5087,8 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
     const knowledgeArticles = await storage.getAiKnowledgeArticles(tenantId);
     const kaspiIntegration = await storage.getKaspiIntegration(tenantId);
     const enabledBankProducts = await storage.getEnabledBankProducts(tenantId);
+    const aiPriorities = await db.select().from(categoryAiPriority).where(eq(categoryAiPriority.tenantId, tenantId));
+    const crossSellItems = await db.select().from(productCrossSell).where(eq(productCrossSell.tenantId, tenantId)).orderBy(productCrossSell.sortOrder);
     
     // Build category map
     const categoryMap = new Map<string, string>();
@@ -5034,6 +5158,25 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
         description: bp.description,
         conditions: bp.conditions,
       })) : undefined,
+      categoryPriorities: aiPriorities.length > 0 ? aiPriorities.map((p: any) => ({
+        categoryName: categoryMap.get(p.categoryId) || "Неизвестная",
+        productName: products.find((pr: any) => pr.id === p.productId)?.name || "Неизвестный",
+      })) : undefined,
+      crossSellMap: crossSellItems.length > 0 ? (() => {
+        const grouped = new Map<string, string[]>();
+        crossSellItems.forEach((cs: any) => {
+          const prodName = products.find((p: any) => p.id === cs.productId)?.name;
+          const relName = products.find((p: any) => p.id === cs.relatedProductId)?.name;
+          if (prodName && relName) {
+            if (!grouped.has(prodName)) grouped.set(prodName, []);
+            grouped.get(prodName)!.push(relName);
+          }
+        });
+        return Array.from(grouped.entries()).map(([productName, relatedProducts]) => ({
+          productName,
+          relatedProducts: relatedProducts.slice(0, 3),
+        }));
+      })() : undefined,
     };
     
     try {

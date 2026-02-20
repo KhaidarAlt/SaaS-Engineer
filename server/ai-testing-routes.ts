@@ -6,6 +6,7 @@ import {
   aiStressTestRuns, handoverRules, knowledgeItems, trainingItems,
   products, aiBusinessProfile, aiPromotionRules, categories,
   aiTriggers, aiAntiPatterns, aiTrainingEvents, bankProducts,
+  categoryAiPriority, productCrossSell,
 } from "@shared/schema";
 import { generateAiResponse } from "./services/openai";
 
@@ -179,6 +180,36 @@ async function buildTenantContext(tenantId: string, pool: any, storage: any) {
     paymentOptions,
     bankProducts: enabledBankProducts.length > 0 ? enabledBankProducts : undefined,
   };
+
+  const aiPriorities = await db.select().from(categoryAiPriority).where(eq(categoryAiPriority.tenantId, tenantId));
+  const crossSellItemsRaw = await db.select().from(productCrossSell).where(eq(productCrossSell.tenantId, tenantId)).orderBy(productCrossSell.sortOrder);
+
+  if (aiPriorities.length > 0) {
+    const catMap = new Map<string, string>();
+    const catRows = await db.select().from(categories).where(eq(categories.tenantId, tenantId));
+    catRows.forEach(c => catMap.set(c.id, c.name));
+    context.categoryPriorities = aiPriorities.map((p: any) => ({
+      categoryName: catMap.get(p.categoryId) || "Неизвестная",
+      productName: productRows.find((pr: any) => pr.id === p.productId)?.name || "Неизвестный",
+    }));
+  }
+
+  if (crossSellItemsRaw.length > 0) {
+    const allProducts = await db.select().from(products).where(eq(products.tenantId, tenantId));
+    const grouped = new Map<string, string[]>();
+    crossSellItemsRaw.forEach((cs: any) => {
+      const prodName = allProducts.find((p: any) => p.id === cs.productId)?.name;
+      const relName = allProducts.find((p: any) => p.id === cs.relatedProductId)?.name;
+      if (prodName && relName) {
+        if (!grouped.has(prodName)) grouped.set(prodName, []);
+        grouped.get(prodName)!.push(relName);
+      }
+    });
+    context.crossSellMap = Array.from(grouped.entries()).map(([productName, relatedProducts]) => ({
+      productName,
+      relatedProducts: relatedProducts.slice(0, 3),
+    }));
+  }
 
   return context;
 }

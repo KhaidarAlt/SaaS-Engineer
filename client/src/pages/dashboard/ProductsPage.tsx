@@ -14,6 +14,10 @@ import {
   Package,
   Tag,
   Check,
+  Star,
+  ShoppingCart,
+  X,
+  Bot,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -44,12 +48,30 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Switch } from "@/components/ui/switch";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { TableRowSkeleton } from "@/components/LoadingSpinner";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import type { Product, Category } from "@shared/schema";
+import type { Product, Category, CategoryAiPriority } from "@shared/schema";
 
 const AVAILABLE_TAGS = [
   { value: "hit", label: "Хит продаж" },
@@ -151,6 +173,10 @@ export default function ProductsPage() {
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [stockFilter, setStockFilter] = useState<string>("all");
+  const [confirmReplace, setConfirmReplace] = useState<{ product: Product; existingProductName: string } | null>(null);
+  const [crossSellDialog, setCrossSellDialog] = useState<Product | null>(null);
+  const [crossSellSearch, setCrossSellSearch] = useState("");
+  const [selectedCrossSell, setSelectedCrossSell] = useState<string[]>([]);
   const { toast } = useToast();
 
   const { data: products, isLoading } = useQuery<Product[]>({
@@ -159,6 +185,10 @@ export default function ProductsPage() {
 
   const { data: categories } = useQuery<Category[]>({
     queryKey: ["/api/categories"],
+  });
+
+  const { data: priorities } = useQuery<CategoryAiPriority[]>({
+    queryKey: ["/api/category-priority"],
   });
 
   const deleteMutation = useMutation({
@@ -237,6 +267,91 @@ export default function ProductsPage() {
       ? currentTags.filter((t) => t !== tag)
       : [...currentTags, tag];
     updateFieldMutation.mutate({ id: product.id, data: { tags: newTags } });
+  };
+
+  const setPriorityMutation = useMutation({
+    mutationFn: async ({ categoryId, productId }: { categoryId: string; productId: string }) => {
+      await apiRequest("PUT", "/api/category-priority", { categoryId, productId });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/category-priority"] });
+      toast({ title: "Приоритетный товар установлен" });
+    },
+    onError: () => {
+      toast({ title: "Ошибка установки приоритета", variant: "destructive" });
+    },
+  });
+
+  const removePriorityMutation = useMutation({
+    mutationFn: async (categoryId: string) => {
+      await apiRequest("DELETE", `/api/category-priority/${categoryId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/category-priority"] });
+      toast({ title: "Приоритет снят" });
+    },
+  });
+
+  const saveCrossSellMutation = useMutation({
+    mutationFn: async ({ productId, relatedProductIds }: { productId: string; relatedProductIds: string[] }) => {
+      await apiRequest("PUT", `/api/products/${productId}/cross-sell`, { relatedProductIds });
+    },
+    onSuccess: () => {
+      toast({ title: "Сопутствующие товары сохранены" });
+      setCrossSellDialog(null);
+    },
+    onError: () => {
+      toast({ title: "Ошибка сохранения", variant: "destructive" });
+    },
+  });
+
+  const handleSetPriority = (product: Product) => {
+    if (!product.categoryId) {
+      toast({ title: "Сначала назначьте категорию товару", variant: "destructive" });
+      return;
+    }
+    const existingPriority = priorities?.find(p => p.categoryId === product.categoryId);
+    if (existingPriority && existingPriority.productId !== product.id) {
+      const existingProduct = products?.find(p => p.id === existingPriority.productId);
+      setConfirmReplace({ product, existingProductName: existingProduct?.name || "Другой товар" });
+    } else if (existingPriority && existingPriority.productId === product.id) {
+      removePriorityMutation.mutate(product.categoryId);
+    } else {
+      setPriorityMutation.mutate({ categoryId: product.categoryId, productId: product.id });
+      openCrossSellDialog(product);
+    }
+  };
+
+  const confirmSetPriority = () => {
+    if (!confirmReplace) return;
+    const { product } = confirmReplace;
+    setPriorityMutation.mutate({ categoryId: product.categoryId!, productId: product.id });
+    setConfirmReplace(null);
+    openCrossSellDialog(product);
+  };
+
+  const openCrossSellDialog = async (product: Product) => {
+    try {
+      const res = await fetch(`/api/products/${product.id}/cross-sell`, { credentials: "include" });
+      const items = await res.json();
+      setSelectedCrossSell(items.map((i: any) => i.relatedProductId));
+    } catch {
+      setSelectedCrossSell([]);
+    }
+    setCrossSellSearch("");
+    setCrossSellDialog(product);
+  };
+
+  const handleToggleCrossSell = (relatedId: string) => {
+    setSelectedCrossSell(prev => {
+      if (prev.includes(relatedId)) return prev.filter(id => id !== relatedId);
+      if (prev.length >= 3) return prev;
+      return [...prev, relatedId];
+    });
+  };
+
+  const isPriorityProduct = (product: Product) => {
+    return priorities?.some(p => p.productId === product.id && p.categoryId === product.categoryId) || false;
   };
 
   return (
@@ -341,7 +456,12 @@ export default function ProductsPage() {
                       </TableCell>
                       <TableCell className="font-medium">
                         <div className="flex flex-col gap-1">
-                          <span>{product.name}</span>
+                          <div className="flex items-center gap-1.5">
+                            <span>{product.name}</span>
+                            {isPriorityProduct(product) && (
+                              <Star className="h-3.5 w-3.5 text-amber-500 fill-amber-500 shrink-0" />
+                            )}
+                          </div>
                           {product.tags && product.tags.length > 0 && (
                             <div className="flex flex-wrap gap-1">
                               {product.tags.map((tag) => {
@@ -484,6 +604,37 @@ export default function ProductsPage() {
                               </DropdownMenuSubContent>
                             </DropdownMenuSub>
                             <DropdownMenuSeparator />
+                            <DropdownMenuSub>
+                              <DropdownMenuSubTrigger data-testid={`ai-sales-menu-${product.id}`}>
+                                <Bot className="h-4 w-4 mr-2" />
+                                AI продажи
+                              </DropdownMenuSubTrigger>
+                              <DropdownMenuSubContent>
+                                <DropdownMenuItem
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    handleSetPriority(product);
+                                  }}
+                                  data-testid={`set-priority-${product.id}`}
+                                >
+                                  <div className="flex items-center gap-2 w-full">
+                                    <Star className={`h-4 w-4 ${isPriorityProduct(product) ? "text-amber-500 fill-amber-500" : ""}`} />
+                                    <span>{isPriorityProduct(product) ? "Снять приоритет" : "Приоритетный товар"}</span>
+                                  </div>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    openCrossSellDialog(product);
+                                  }}
+                                  data-testid={`set-cross-sell-${product.id}`}
+                                >
+                                  <ShoppingCart className="h-4 w-4 mr-2" />
+                                  Сопутствующие товары
+                                </DropdownMenuItem>
+                              </DropdownMenuSubContent>
+                            </DropdownMenuSub>
+                            <DropdownMenuSeparator />
                             <DropdownMenuItem
                               className="text-destructive"
                               onClick={() => deleteMutation.mutate(product.id)}
@@ -520,6 +671,116 @@ export default function ProductsPage() {
           </div>
         </Card>
       </div>
+
+      <AlertDialog open={!!confirmReplace} onOpenChange={(open) => !open && setConfirmReplace(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Заменить приоритетный товар?</AlertDialogTitle>
+            <AlertDialogDescription>
+              В этой категории уже выбран приоритетный товар: <strong>{confirmReplace?.existingProductName}</strong>. Заменить его на <strong>{confirmReplace?.product.name}</strong>?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-replace">Отмена</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmSetPriority} data-testid="button-confirm-replace">Заменить</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <Dialog open={!!crossSellDialog} onOpenChange={(open) => !open && setCrossSellDialog(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Сопутствующие товары</DialogTitle>
+            <DialogDescription>
+              AI предложит клиенту эти товары после выбора основного. Выберите до 3 товаров.
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedCrossSell.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {selectedCrossSell.map(id => {
+                const p = products?.find(pr => pr.id === id);
+                return (
+                  <Badge key={id} variant="secondary" className="gap-1 pr-1">
+                    <span className="max-w-[150px] truncate">{p?.name || id}</span>
+                    <button
+                      onClick={() => handleToggleCrossSell(id)}
+                      className="ml-1 rounded-full p-0.5"
+                      data-testid={`remove-cross-sell-${id}`}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="space-y-3">
+            <Input
+              placeholder="Поиск товаров..."
+              value={crossSellSearch}
+              onChange={(e) => setCrossSellSearch(e.target.value)}
+              data-testid="input-cross-sell-search"
+            />
+            <div className="max-h-60 overflow-y-auto space-y-1">
+              {products
+                ?.filter(p =>
+                  p.id !== crossSellDialog?.id &&
+                  p.name.toLowerCase().includes(crossSellSearch.toLowerCase())
+                )
+                .slice(0, 20)
+                .map(p => {
+                  const isSelected = selectedCrossSell.includes(p.id);
+                  const isDisabled = !isSelected && selectedCrossSell.length >= 3;
+                  return (
+                    <div
+                      key={p.id}
+                      className={`flex items-center gap-3 p-2 rounded-md cursor-pointer transition-colors ${isSelected ? "bg-accent" : isDisabled ? "opacity-50" : "hover-elevate"}`}
+                      onClick={() => !isDisabled && handleToggleCrossSell(p.id)}
+                      data-testid={`cross-sell-item-${p.id}`}
+                    >
+                      <div className="w-4 h-4 rounded-sm border flex items-center justify-center shrink-0">
+                        {isSelected && <Check className="h-3 w-3" />}
+                      </div>
+                      <div className="w-8 h-8 rounded bg-muted overflow-hidden shrink-0">
+                        {p.mainImageUrl ? (
+                          <img src={resolveImageUrl(p.mainImageUrl)} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <Package className="h-3 w-3 text-muted-foreground" />
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium truncate">{p.name}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {new Intl.NumberFormat("ru-KZ").format(parseFloat(p.price))} ₸
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+            {selectedCrossSell.length >= 3 && (
+              <p className="text-xs text-muted-foreground">Можно выбрать максимум 3 товара.</p>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCrossSellDialog(null)} data-testid="button-cancel-cross-sell">
+              Отмена
+            </Button>
+            <Button
+              onClick={() => crossSellDialog && saveCrossSellMutation.mutate({ productId: crossSellDialog.id, relatedProductIds: selectedCrossSell })}
+              disabled={saveCrossSellMutation.isPending}
+              data-testid="button-save-cross-sell"
+            >
+              Сохранить
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 }

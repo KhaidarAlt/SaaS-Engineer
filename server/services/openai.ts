@@ -75,6 +75,8 @@ interface TenantContext {
     autoInvoice: boolean;
     kaspiPayLink?: string;
   };
+  categoryPriorities?: Array<{ categoryName: string; productName: string }>;
+  crossSellMap?: Array<{ productName: string; relatedProducts: string[] }>;
 }
 
 interface AiResponseResult {
@@ -418,6 +420,23 @@ ${context.paymentOptions.kaspiPayLink}
     });
   }
   
+  if (context.categoryPriorities && context.categoryPriorities.length > 0) {
+    prompt += `\n\n## ПРИОРИТЕТНЫЕ ТОВАРЫ ПО КАТЕГОРИЯМ`;
+    context.categoryPriorities.forEach(cp => {
+      prompt += `\n- Категория "${cp.categoryName}": приоритетный товар — "${cp.productName}"`;
+    });
+    prompt += `\n\nКогда клиент спрашивает общее (например "посоветуйте худи", "что есть из обуви?") — в первую очередь предлагай приоритетный товар этой категории. Но если клиент спрашивает конкретный товар — показывай именно его.`;
+  }
+
+  if (context.crossSellMap && context.crossSellMap.length > 0) {
+    prompt += `\n\n## СОПУТСТВУЮЩИЕ ТОВАРЫ (допродажа)`;
+    context.crossSellMap.forEach(cs => {
+      prompt += `\n- К товару "${cs.productName}": ${cs.relatedProducts.map(r => `"${r}"`).join(", ")}`;
+    });
+    prompt += `\n\nКогда клиент выбрал/подтвердил основной товар — предложи ему сопутствующие товары из списка выше (максимум 2). Пример: "Часто берут вместе: 1) ... 2) ... Хотите добавить к заказу?"
+Предлагай сопутствующие товары ОДИН раз. Если клиент отказался — не настаивай.`;
+  }
+
   const hasPromosOrDiscounts = (context.promotions && context.promotions.length > 0) || (context.discounts && context.discounts.length > 0);
 
   prompt += `\n\n## ВАЖНЫЕ ПРАВИЛА
