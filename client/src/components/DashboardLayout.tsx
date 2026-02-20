@@ -210,7 +210,7 @@ export function DashboardLayout({ children, isSuperAdmin = false }: DashboardLay
   const tenantVersion = user?.tenant?.updatedAt ? new Date(user.tenant.updatedAt).getTime() : Date.now();
   const t = user?.tenant as any;
   const catalogUrl = t ? (
-    t.customDomain
+    t.customDomain && t.domainVerified
       ? `https://${t.customDomain}`
       : `https://${t.slug}.botfactory.kz`
   ) : null;
