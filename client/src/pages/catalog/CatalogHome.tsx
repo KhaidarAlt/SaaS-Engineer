@@ -24,6 +24,8 @@ import {
   List as ListIcon,
   Table2,
   ArrowUpDown,
+  Grid2x2,
+  Square,
 } from "lucide-react";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
@@ -128,7 +130,8 @@ function ProductCard({
   onToggleFavorite,
   onQuickView,
   showFavorites,
-  showQuickView
+  showQuickView,
+  compact = false,
 }: { 
   product: ProductWithPrice; 
   tenantSlug: string;
@@ -138,6 +141,7 @@ function ProductCard({
   onQuickView: (product: ProductWithPrice) => void;
   showFavorites: boolean;
   showQuickView: boolean;
+  compact?: boolean;
 }) {
   const { addItem } = useCart();
   const { toast } = useToast();
@@ -270,34 +274,37 @@ function ProductCard({
             )}
           </div>
         </Link>
-        <CardContent className="p-4">
+        <CardContent className={compact ? "p-2.5" : "p-4"}>
           <Link href={`${basePath}/product/${product.id}`}>
-            <h3 className="font-medium line-clamp-2 mb-2 cursor-pointer text-foreground">
+            <h3 className={`font-medium cursor-pointer text-foreground ${compact ? "text-xs line-clamp-2 mb-1" : "line-clamp-2 mb-2"}`}>
               {product.name}
             </h3>
           </Link>
-          <div className="flex items-center justify-between mt-auto gap-2">
-            <div className="flex flex-col">
+          <div className={`flex items-center justify-between mt-auto ${compact ? "gap-1" : "gap-2"}`}>
+            <div className="flex flex-col min-w-0">
               {product.hasDiscount ? (
                 <>
-                  <p className="text-lg font-bold text-red-500">
+                  <p className={`font-bold text-red-500 ${compact ? "text-sm" : "text-lg"}`}>
                     {formatPrice(product.computedPrice)}
                   </p>
-                  <p className="text-sm text-muted-foreground line-through">
-                    {formatPrice(product.originalPrice)}
-                  </p>
+                  {!compact && (
+                    <p className="text-sm text-muted-foreground line-through">
+                      {formatPrice(product.originalPrice)}
+                    </p>
+                  )}
                 </>
               ) : (
-                <p className="text-lg font-bold">{formatPrice(product.computedPrice)}</p>
+                <p className={`font-bold ${compact ? "text-sm" : "text-lg"}`}>{formatPrice(product.computedPrice)}</p>
               )}
             </div>
             <Button
-              size="sm"
+              size={compact ? "icon" : "sm"}
+              className={compact ? "h-7 w-7 shrink-0" : ""}
               disabled={!isInStock}
               onClick={handleAddToCart}
               data-testid={`button-add-cart-${product.id}`}
             >
-              <ShoppingCart className="h-4 w-4" />
+              <ShoppingCart className={compact ? "h-3.5 w-3.5" : "h-4 w-4"} />
             </Button>
           </div>
         </CardContent>
@@ -677,6 +684,12 @@ export default function CatalogHome({ basePath: parentBasePath }: { basePath?: s
   const [colorFilter, setColorFilter] = useState<string>("all");
   const [sortOrder, setSortOrder] = useState("default");
   const [viewMode, setViewMode] = useState<'grid' | 'list' | 'table'>('grid');
+  const [mobileColumns, setMobileColumns] = useState<1 | 2>(() => {
+    try {
+      const saved = localStorage.getItem(`catalog_mobile_cols_${slug}`);
+      return saved === '2' ? 2 : 1;
+    } catch { return 1; }
+  });
   const [brandFilter, setBrandFilter] = useState("all");
   const { items, totalItems, lastAddedAt, addItem } = useCart();
   const { toast } = useToast();
@@ -684,6 +697,12 @@ export default function CatalogHome({ basePath: parentBasePath }: { basePath?: s
   const [isCartPulsing, setIsCartPulsing] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<ProductWithPrice | null>(null);
   const isMobile = useIsMobile();
+
+  const toggleMobileColumns = () => {
+    const next = mobileColumns === 1 ? 2 : 1;
+    setMobileColumns(next);
+    try { localStorage.setItem(`catalog_mobile_cols_${slug}`, String(next)); } catch {}
+  };
   
   useEffect(() => {
     if (lastAddedAt > 0) {
@@ -1230,6 +1249,17 @@ export default function CatalogHome({ basePath: parentBasePath }: { basePath?: s
               </SelectContent>
             </Select>
             <div className="flex items-center gap-1">
+              {viewMode === 'grid' && (
+                <Button
+                  size="icon"
+                  variant={mobileColumns === 2 ? "default" : "outline"}
+                  onClick={toggleMobileColumns}
+                  data-testid="button-mobile-columns-toggle"
+                  className="sm:hidden"
+                >
+                  {mobileColumns === 1 ? <Grid2x2 className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+                </Button>
+              )}
               <Button
                 size="icon"
                 variant={viewMode === 'grid' ? 'default' : 'outline'}
@@ -1259,7 +1289,7 @@ export default function CatalogHome({ basePath: parentBasePath }: { basePath?: s
         </div>
 
         {isLoading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          <div className={`grid ${mobileColumns === 2 ? 'grid-cols-2' : 'grid-cols-1'} sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4`}>
             {[...Array(8)].map((_, i) => (
               <CardSkeleton key={i} />
             ))}
@@ -1267,7 +1297,7 @@ export default function CatalogHome({ basePath: parentBasePath }: { basePath?: s
         ) : sortedProducts.length > 0 ? (
           <>
             {viewMode === 'grid' && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              <div className={`grid ${mobileColumns === 2 ? 'grid-cols-2 gap-2' : 'grid-cols-1 gap-4'} sm:grid-cols-2 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4`}>
                 {sortedProducts.map((product) => (
                   <ProductCard 
                     key={product.id} 
@@ -1279,6 +1309,7 @@ export default function CatalogHome({ basePath: parentBasePath }: { basePath?: s
                     onQuickView={setSelectedProduct}
                     showFavorites={(data?.tenant as any)?.showFavorites !== false}
                     showQuickView={(data?.tenant as any)?.showQuickView !== false}
+                    compact={isMobile && mobileColumns === 2}
                   />
                 ))}
               </div>
