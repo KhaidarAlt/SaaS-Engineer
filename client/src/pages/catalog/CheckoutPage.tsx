@@ -323,7 +323,7 @@ export default function CheckoutPage() {
               </Link>
               <h1 className="text-xl font-bold tracking-tight">Оформление заказа</h1>
             </div>
-            <ThemeToggle />
+            <ThemeToggle variant="catalog" />
           </div>
         </div>
       </header>

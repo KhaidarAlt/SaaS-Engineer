@@ -57,7 +57,7 @@ export default function CartPage() {
               </Link>
               <h1 className="text-xl font-bold tracking-tight">Корзина</h1>
             </div>
-            <ThemeToggle />
+            <ThemeToggle variant="catalog" />
           </div>
         </div>
       </header>

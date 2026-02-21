@@ -306,7 +306,7 @@ export default function ProductDetailPage() {
                   Назад в каталог
                 </Button>
               </Link>
-              <ThemeToggle />
+              <ThemeToggle variant="catalog" />
             </div>
           </div>
         </header>
@@ -365,7 +365,7 @@ export default function ProductDetailPage() {
               </h1>
             </Link>
             <div className="flex items-center gap-3">
-              <ThemeToggle />
+              <ThemeToggle variant="catalog" />
               <Link href={`${basePath}/cart`}>
                 <Button variant="outline" className="relative" data-testid="button-cart">
                   <ShoppingCart className="h-5 w-5" />

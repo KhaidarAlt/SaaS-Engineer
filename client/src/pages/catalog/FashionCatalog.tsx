@@ -15,6 +15,8 @@ import {
   ChevronRight,
   Phone,
   MapPin,
+  Clock,
+  ExternalLink,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useCart } from "@/contexts/CartContext";
@@ -353,6 +355,13 @@ function GridProductCard({
 
             <div className="absolute bottom-3 right-3 z-10 flex flex-col gap-1.5">
               <button
+                onClick={handleShare}
+                className="w-9 h-9 rounded-full bg-white/15 backdrop-blur-md flex items-center justify-center hover:bg-white/25 transition-all border border-white/10"
+                data-testid={`button-share-card-${product.id}`}
+              >
+                <Share2 className="h-4 w-4 text-white" />
+              </button>
+              <button
                 onClick={handleAddCart}
                 className="w-9 h-9 rounded-full bg-white/15 backdrop-blur-md flex items-center justify-center hover:bg-white/25 transition-all border border-white/10"
                 data-testid={`button-cart-${product.id}`}
@@ -421,9 +430,6 @@ function GridProductCard({
               <Flame className="h-3 w-3 text-rose-400/60" />
               {viewers}
             </span>
-            <button onClick={handleShare} className="ml-auto p-0.5 hover:text-white/60 transition-colors" data-testid={`button-share-${product.id}`}>
-              <Share2 className="h-3 w-3" />
-            </button>
           </div>
         </div>
       </div>
@@ -609,7 +615,7 @@ export default function FashionCatalog({
             <span className="font-semibold text-white truncate" data-testid="text-tenant-name">{tenant?.name || slug}</span>
           </div>
           <div className="flex items-center gap-1">
-            <ThemeToggle />
+            <ThemeToggle variant="catalog" />
           </div>
         </header>
         <div className="flex flex-col items-center justify-center h-[60vh] text-white/40 gap-4 p-8">
@@ -636,10 +642,10 @@ export default function FashionCatalog({
             <button onClick={toggleViewMode} className="p-2 rounded-xl hover:bg-white/10 transition-colors" data-testid="button-toggle-view" title={viewMode === 'feed' ? 'Сетка' : 'Лента'}>
               {viewMode === 'feed' ? <LayoutGrid className="h-5 w-5 text-white/70" /> : <Rows3 className="h-5 w-5 text-white/70" />}
             </button>
-            <ThemeToggle />
+            <ThemeToggle variant="catalog" />
           </div>
         </div>
-        {(tenant?.contactPhone || tenant?.address) && (
+        {(tenant?.contactPhone || tenant?.address || tenant?.workingHours) && (
           <div className="flex items-center gap-3 px-4 pb-2 text-[11px] text-white/50 overflow-x-auto">
             {tenant.contactPhone && (
               <a href={`tel:${tenant.contactPhone}`} className="flex items-center gap-1 shrink-0 hover:text-white/70 transition-colors" data-testid="link-header-phone">
@@ -648,9 +654,23 @@ export default function FashionCatalog({
               </a>
             )}
             {tenant.address && (
-              <span className="flex items-center gap-1 shrink-0" data-testid="text-header-address">
-                <MapPin className="h-3 w-3" />
-                <span className="truncate max-w-[200px]">{tenant.address}</span>
+              tenant.gisLink ? (
+                <a href={tenant.gisLink} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 shrink-0 hover:text-white/70 transition-colors" data-testid="link-header-address">
+                  <MapPin className="h-3 w-3" />
+                  <span className="truncate max-w-[200px]">{tenant.address}</span>
+                  <ExternalLink className="h-2.5 w-2.5 opacity-60" />
+                </a>
+              ) : (
+                <span className="flex items-center gap-1 shrink-0" data-testid="text-header-address">
+                  <MapPin className="h-3 w-3" />
+                  <span className="truncate max-w-[200px]">{tenant.address}</span>
+                </span>
+              )
+            )}
+            {tenant.workingHours && (
+              <span className="flex items-center gap-1 shrink-0" data-testid="text-header-hours">
+                <Clock className="h-3 w-3" />
+                <span>{tenant.workingHours}</span>
               </span>
             )}
           </div>
@@ -878,6 +898,24 @@ export default function FashionCatalog({
                 )}
 
                 <div className="absolute right-3 bottom-1/3 flex flex-col items-center gap-4 z-10">
+                  <button
+                    onClick={async (e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      try {
+                        const url = `${window.location.origin}${basePath}/product/${product.id}`;
+                        if (navigator.share) { await navigator.share({ title: product.name, url }); }
+                        else { await navigator.clipboard.writeText(url); }
+                      } catch {}
+                    }}
+                    className="flex flex-col items-center gap-1"
+                    data-testid={`button-share-feed-${product.id}`}
+                  >
+                    <div className="w-12 h-12 rounded-full bg-white/10 backdrop-blur-xl flex items-center justify-center border border-white/[0.08]">
+                      <Share2 className="h-5 w-5 text-white" />
+                    </div>
+                  </button>
+
                   <button
                     onClick={() => handleQuickAddToCart(product)}
                     className="relative flex flex-col items-center gap-1"
