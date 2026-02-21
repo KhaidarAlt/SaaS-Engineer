@@ -631,6 +631,47 @@ export async function registerRoutes(
     res.type("text/plain").status(200).send("pong");
   });
 
+  app.get("/robots.txt", (_req: Request, res: Response) => {
+    const robotsTxt = [
+      "User-agent: facebookexternalhit",
+      "Allow: /",
+      "",
+      "User-agent: WhatsApp",
+      "Allow: /",
+      "",
+      "User-agent: TelegramBot",
+      "Allow: /",
+      "",
+      "User-agent: Twitterbot",
+      "Allow: /",
+      "",
+      "User-agent: LinkedInBot",
+      "Allow: /",
+      "",
+      "User-agent: Slackbot",
+      "Allow: /",
+      "",
+      "User-agent: vkShare",
+      "Allow: /",
+      "",
+      "User-agent: Googlebot",
+      "Allow: /",
+      "",
+      "User-agent: Yandex",
+      "Allow: /",
+      "",
+      "User-agent: *",
+      "Allow: /c/",
+      "Allow: /api/og-test/",
+      "Disallow: /api/",
+      "Disallow: /dashboard/",
+      "Disallow: /login",
+      "Disallow: /register",
+      "",
+    ].join("\n");
+    res.type("text/plain").status(200).send(robotsTxt);
+  });
+
   // ── Anti-fraud: Caddy on_demand TLS allow endpoint ──────────────────
 
   const BLOCKED_ZONES = [
@@ -1217,6 +1258,7 @@ export async function registerRoutes(
       req.path.startsWith("/node_modules") ||
       req.path.startsWith("/src") ||
       req.path === "/favicon.ico" ||
+      req.path === "/robots.txt" ||
       req.path.startsWith("/objects")
     ) {
       return next();
