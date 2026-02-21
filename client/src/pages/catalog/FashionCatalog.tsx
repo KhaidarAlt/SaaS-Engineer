@@ -135,8 +135,8 @@ function CarouselSection({
   return (
     <div className="mb-5">
       <div className="flex items-center justify-between px-3 mb-2.5">
-        <h2 className="text-white font-bold text-base">{title}</h2>
-        <span className="text-white/40 text-xs flex items-center gap-0.5">
+        <h2 className="text-gray-900 dark:text-white font-bold text-base">{title}</h2>
+        <span className="text-gray-400 dark:text-white/40 text-xs flex items-center gap-0.5">
           {products.length} товаров <ChevronRight className="h-3 w-3" />
         </span>
       </div>
@@ -154,7 +154,7 @@ function CarouselSection({
               className="snap-start shrink-0 w-[44vw] max-w-[200px]"
               data-testid={`carousel-card-${product.id}`}
             >
-              <div className="rounded-2xl overflow-hidden bg-neutral-900/70 backdrop-blur border border-white/[0.06]">
+              <div className="rounded-2xl overflow-hidden bg-gray-100 dark:bg-neutral-900/70 backdrop-blur border border-gray-200 dark:border-white/[0.06]">
                 <Link href={`${basePath}/product/${product.id}`}>
                   <div className="aspect-[4/5] relative overflow-hidden group cursor-pointer">
                     {imageUrl ? (
@@ -165,8 +165,8 @@ function CarouselSection({
                         loading="lazy"
                       />
                     ) : (
-                      <div className="w-full h-full bg-neutral-800 flex items-center justify-center">
-                        <Package className="h-8 w-8 text-neutral-600" />
+                      <div className="w-full h-full bg-gray-200 dark:bg-neutral-800 flex items-center justify-center">
+                        <Package className="h-8 w-8 text-gray-400 dark:text-neutral-600" />
                       </div>
                     )}
                     <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent pointer-events-none" />
@@ -184,18 +184,18 @@ function CarouselSection({
                   </div>
                 </Link>
                 <div className="p-2.5 space-y-1">
-                  <p className="text-white/90 text-xs font-medium line-clamp-1">{product.name}</p>
+                  <p className="text-gray-800 dark:text-white/90 text-xs font-medium line-clamp-1">{product.name}</p>
                   <div className="flex items-baseline gap-1.5">
-                    <span className={`text-sm font-bold ${product.hasDiscount ? "bg-gradient-to-r from-rose-400 to-fuchsia-400 bg-clip-text text-transparent" : "text-white"}`}>
+                    <span className={`text-sm font-bold ${product.hasDiscount ? "bg-gradient-to-r from-rose-400 to-fuchsia-400 bg-clip-text text-transparent" : "text-gray-900 dark:text-white"}`}>
                       {formatPrice(product.computedPrice || product.price)}
                     </span>
                     {product.hasDiscount && (
-                      <span className="text-white/30 text-[10px] line-through">{formatPrice(product.originalPrice)}</span>
+                      <span className="text-gray-300 dark:text-white/30 text-[10px] line-through">{formatPrice(product.originalPrice)}</span>
                     )}
                   </div>
                   <button
                     onClick={() => onQuickAddToCart(product)}
-                    className="w-full mt-1 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white/80 text-[11px] font-medium flex items-center justify-center gap-1 transition-colors"
+                    className="w-full mt-1 py-1.5 rounded-lg bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-gray-700 dark:text-white/80 text-[11px] font-medium flex items-center justify-center gap-1 transition-colors"
                     data-testid={`carousel-cart-${product.id}`}
                   >
                     <ShoppingBag className="h-3 w-3" /> В корзину
@@ -273,7 +273,7 @@ function GridProductCard({
       style={{ animation: `fadeInUp 0.4s ease-out ${index * 0.06}s forwards` }}
       data-testid={`card-product-${product.id}`}
     >
-      <div className="rounded-2xl overflow-hidden bg-neutral-900/70 backdrop-blur-xl border border-white/[0.06] shadow-xl shadow-black/30 transition-transform duration-300 hover:scale-[1.02] hover:shadow-2xl hover:shadow-rose-500/10">
+      <div className="rounded-2xl overflow-hidden bg-gray-100 dark:bg-neutral-900/70 backdrop-blur-xl border border-gray-200 dark:border-white/[0.06] shadow-xl shadow-gray-300/30 dark:shadow-black/30 transition-transform duration-300 hover:scale-[1.02] hover:shadow-2xl hover:shadow-rose-500/10">
         <Link href={`${basePath}/product/${product.id}`}>
           <div className="aspect-[4/5] relative overflow-hidden cursor-pointer group">
             {(product as any).videoUrl && (product as any).videoPrimary ? (
@@ -295,16 +295,12 @@ function GridProductCard({
                   data-testid={`img-product-${product.id}`}
                 />
                 {!imgLoaded && (
-                  <div className="absolute inset-0 bg-neutral-800" style={{
-                    background: "linear-gradient(90deg, #1a1a1a 25%, #2a2a2a 50%, #1a1a1a 75%)",
-                    backgroundSize: "200% 100%",
-                    animation: "shimmer 1.5s infinite"
-                  }} />
+                  <div className="absolute inset-0 bg-gray-200 dark:bg-neutral-800 animate-pulse" />
                 )}
               </>
             ) : (
-              <div className="w-full h-full flex items-center justify-center bg-neutral-800">
-                <Package className="h-12 w-12 text-neutral-600" />
+              <div className="w-full h-full flex items-center justify-center bg-gray-200 dark:bg-neutral-800">
+                <Package className="h-12 w-12 text-gray-400 dark:text-neutral-600" />
               </div>
             )}
 
@@ -381,25 +377,25 @@ function GridProductCard({
               {product.colors.slice(0, 5).map((c: { name: string; hex: string }) => (
                 <span
                   key={c.hex}
-                  className="w-3.5 h-3.5 rounded-full border border-white/15 shrink-0 ring-1 ring-black/30"
+                  className="w-3.5 h-3.5 rounded-full border border-gray-200 dark:border-white/15 shrink-0 ring-1 ring-black/30"
                   style={{ backgroundColor: c.hex }}
                   title={c.name}
                 />
               ))}
               {product.colors.length > 5 && (
-                <span className="text-[10px] text-white/30 ml-0.5">+{product.colors.length - 5}</span>
+                <span className="text-[10px] text-gray-300 dark:text-white/30 ml-0.5">+{product.colors.length - 5}</span>
               )}
             </div>
           )}
 
           <Link href={`${basePath}/product/${product.id}`}>
-            <h3 className="text-white font-semibold text-sm line-clamp-2 cursor-pointer leading-snug hover:text-rose-200 transition-colors" data-testid={`text-product-name-${product.id}`}>
+            <h3 className="text-gray-900 dark:text-white font-semibold text-sm line-clamp-2 cursor-pointer leading-snug hover:text-rose-200 transition-colors" data-testid={`text-product-name-${product.id}`}>
               {product.name}
             </h3>
           </Link>
 
           {product.brand && (
-            <span className="text-white/35 text-[11px] block" data-testid={`badge-brand-${product.id}`}>
+            <span className="text-gray-400 dark:text-white/35 text-[11px] block" data-testid={`badge-brand-${product.id}`}>
               {product.brand}
             </span>
           )}
@@ -410,18 +406,18 @@ function GridProductCard({
                 <span className="font-extrabold text-[15px] bg-gradient-to-r from-rose-400 via-fuchsia-400 to-violet-400 bg-clip-text text-transparent" data-testid={`text-price-${product.id}`}>
                   {formatPrice(product.computedPrice)}
                 </span>
-                <span className="text-white/25 text-xs line-through" data-testid={`text-original-price-${product.id}`}>
+                <span className="text-gray-300 dark:text-white/25 text-xs line-through" data-testid={`text-original-price-${product.id}`}>
                   {formatPrice(product.originalPrice)}
                 </span>
               </>
             ) : (
-              <span className="text-white font-bold text-[15px]" data-testid={`text-price-${product.id}`}>
+              <span className="text-gray-900 dark:text-white font-bold text-[15px]" data-testid={`text-price-${product.id}`}>
                 {formatPrice(product.computedPrice || product.price)}
               </span>
             )}
           </div>
 
-          <div className="flex items-center gap-2.5 text-[11px] text-white/35">
+          <div className="flex items-center gap-2.5 text-[11px] text-gray-400 dark:text-white/35">
             <span className="flex items-center gap-0.5" data-testid={`text-purchases-${product.id}`}>
               <ShoppingBag className="h-3 w-3 text-emerald-400/60" />
               Купили {purchaseCount} раз
@@ -456,13 +452,13 @@ function BottomNavBar({
 }) {
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-50 bg-black/70 backdrop-blur-xl border-t border-white/[0.06]"
+      className="fixed bottom-0 left-0 right-0 z-50 bg-white/70 dark:bg-black/70 backdrop-blur-xl border-t border-gray-200 dark:border-white/[0.06]"
       style={{ height: BOTTOM_NAV_HEIGHT }}
       data-testid="nav-bottom-bar"
     >
       <div className="max-w-4xl mx-auto flex items-center justify-around h-full px-4">
         <Link href={basePath}>
-          <button className="flex flex-col items-center gap-0.5 text-white/60 hover:text-white transition-colors" data-testid="nav-home">
+          <button className="flex flex-col items-center gap-0.5 text-gray-500 dark:text-white/60 hover:text-gray-900 dark:hover:text-white transition-colors" data-testid="nav-home">
             <Home className="h-5 w-5" />
             <span className="text-[10px] font-medium">Главная</span>
           </button>
@@ -470,7 +466,7 @@ function BottomNavBar({
 
         <button
           onClick={onToggleSearch}
-          className={`flex flex-col items-center gap-0.5 transition-colors ${searchOpen ? "text-rose-400" : "text-white/60 hover:text-white"}`}
+          className={`flex flex-col items-center gap-0.5 transition-colors ${searchOpen ? "text-rose-400" : "text-gray-500 dark:text-white/60 hover:text-gray-900 dark:hover:text-white"}`}
           data-testid="nav-search"
         >
           <Search className="h-5 w-5" />
@@ -479,7 +475,7 @@ function BottomNavBar({
 
         <button
           onClick={onToggleFavorites}
-          className={`flex flex-col items-center gap-0.5 transition-colors relative ${showFavoritesOnly ? "text-rose-400" : "text-white/60 hover:text-white"}`}
+          className={`flex flex-col items-center gap-0.5 transition-colors relative ${showFavoritesOnly ? "text-rose-400" : "text-gray-500 dark:text-white/60 hover:text-gray-900 dark:hover:text-white"}`}
           data-testid="nav-favorites"
         >
           <Heart className={`h-5 w-5 ${showFavoritesOnly ? "fill-rose-400" : ""}`} />
@@ -492,7 +488,7 @@ function BottomNavBar({
         </button>
 
         <Link href={`${basePath}/cart`}>
-          <button className="flex flex-col items-center gap-0.5 text-white/60 hover:text-white transition-colors relative" data-testid="nav-cart">
+          <button className="flex flex-col items-center gap-0.5 text-gray-500 dark:text-white/60 hover:text-gray-900 dark:hover:text-white transition-colors relative" data-testid="nav-cart">
             <ShoppingBag className="h-5 w-5" />
             {totalItems > 0 && (
               <span className="absolute -top-1 right-0 bg-gradient-to-r from-rose-500 to-fuchsia-500 text-white text-[9px] font-bold rounded-full h-4 min-w-[16px] flex items-center justify-center px-1">
@@ -608,17 +604,17 @@ export default function FashionCatalog({
 
   if (filteredProducts.length === 0 && !searchQuery && !selectedCategory) {
     return (
-      <div className="max-w-md mx-auto bg-black min-h-screen">
-        <header className="sticky top-0 z-50 flex items-center justify-between gap-2 px-4 bg-black/80 backdrop-blur-md" style={{ height: HEADER_HEIGHT }}>
+      <div className="max-w-md mx-auto bg-white dark:bg-black min-h-screen">
+        <header className="sticky top-0 z-50 flex items-center justify-between gap-2 px-4 bg-white/80 dark:bg-black/80 backdrop-blur-md" style={{ height: HEADER_HEIGHT }}>
           <div className="flex items-center gap-2">
-            {tenant?.logoUrl && <img src={resolveImageUrl(tenant.logoUrl)} alt={tenant.name} className="h-8 w-8 rounded-full object-cover border border-white/20" data-testid="img-tenant-logo" />}
-            <span className="font-semibold text-white truncate" data-testid="text-tenant-name">{tenant?.name || slug}</span>
+            {tenant?.logoUrl && <img src={resolveImageUrl(tenant.logoUrl)} alt={tenant.name} className="h-8 w-8 rounded-full object-cover border border-gray-300 dark:border-white/20" data-testid="img-tenant-logo" />}
+            <span className="font-semibold text-gray-900 dark:text-white truncate" data-testid="text-tenant-name">{tenant?.name || slug}</span>
           </div>
           <div className="flex items-center gap-1">
             <ThemeToggle variant="catalog" />
           </div>
         </header>
-        <div className="flex flex-col items-center justify-center h-[60vh] text-white/40 gap-4 p-8">
+        <div className="flex flex-col items-center justify-center h-[60vh] text-gray-400 dark:text-white/40 gap-4 p-8">
           <Package className="h-16 w-16" />
           <p className="text-lg font-medium">Товары не найдены</p>
         </div>
@@ -628,34 +624,34 @@ export default function FashionCatalog({
 
   const headerContent = (
     <>
-      <header className="sticky top-0 z-50 bg-black/80 backdrop-blur-xl border-b border-white/[0.04]">
+      <header className="sticky top-0 z-50 bg-white/80 dark:bg-black/80 backdrop-blur-xl border-b border-gray-200 dark:border-white/[0.04]">
         <div className="flex items-center justify-between gap-2 px-4" style={{ height: HEADER_HEIGHT }}>
           <div className="flex items-center gap-2.5">
             {tenant?.logoUrl && (
-              <img src={resolveImageUrl(tenant.logoUrl)} alt={tenant.name} className="h-8 w-8 rounded-full object-cover border border-white/20 shadow-lg shadow-rose-500/10" data-testid="img-tenant-logo" />
+              <img src={resolveImageUrl(tenant.logoUrl)} alt={tenant.name} className="h-8 w-8 rounded-full object-cover border border-gray-300 dark:border-white/20 shadow-lg shadow-rose-500/10" data-testid="img-tenant-logo" />
             )}
-            <span className="font-bold text-white truncate text-[15px]" data-testid="text-tenant-name">
+            <span className="font-bold text-gray-900 dark:text-white truncate text-[15px]" data-testid="text-tenant-name">
               {tenant?.name || slug}
             </span>
           </div>
           <div className="flex items-center gap-0.5">
-            <button onClick={toggleViewMode} className="p-2 rounded-xl hover:bg-white/10 transition-colors" data-testid="button-toggle-view" title={viewMode === 'feed' ? 'Сетка' : 'Лента'}>
-              {viewMode === 'feed' ? <LayoutGrid className="h-5 w-5 text-white/70" /> : <Rows3 className="h-5 w-5 text-white/70" />}
+            <button onClick={toggleViewMode} className="p-2 rounded-xl hover:bg-black/5 dark:hover:bg-white/10 transition-colors" data-testid="button-toggle-view" title={viewMode === 'feed' ? 'Сетка' : 'Лента'}>
+              {viewMode === 'feed' ? <LayoutGrid className="h-5 w-5 text-gray-600 dark:text-white/70" /> : <Rows3 className="h-5 w-5 text-gray-600 dark:text-white/70" />}
             </button>
             <ThemeToggle variant="catalog" />
           </div>
         </div>
         {(tenant?.contactPhone || tenant?.address || tenant?.workingHours) && (
-          <div className="flex items-center gap-3 px-4 pb-2 text-[11px] text-white/50 overflow-x-auto">
+          <div className="flex items-center gap-3 px-4 pb-2 text-[11px] text-gray-400 dark:text-white/50 overflow-x-auto">
             {tenant.contactPhone && (
-              <a href={`tel:${tenant.contactPhone}`} className="flex items-center gap-1 shrink-0 hover:text-white/70 transition-colors" data-testid="link-header-phone">
+              <a href={`tel:${tenant.contactPhone}`} className="flex items-center gap-1 shrink-0 hover:text-gray-600 dark:hover:text-white/70 transition-colors" data-testid="link-header-phone">
                 <Phone className="h-3 w-3" />
                 <span>{tenant.contactPhone}</span>
               </a>
             )}
             {tenant.address && (
               tenant.gisLink ? (
-                <a href={tenant.gisLink} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 shrink-0 hover:text-white/70 transition-colors" data-testid="link-header-address">
+                <a href={tenant.gisLink} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 shrink-0 hover:text-gray-600 dark:hover:text-white/70 transition-colors" data-testid="link-header-address">
                   <MapPin className="h-3 w-3" />
                   <span className="truncate max-w-[200px]">{tenant.address}</span>
                   <ExternalLink className="h-2.5 w-2.5 opacity-60" />
@@ -684,24 +680,24 @@ export default function FashionCatalog({
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="sticky z-45 bg-black/80 backdrop-blur-xl overflow-hidden"
+            className="sticky z-45 bg-white/80 dark:bg-black/80 backdrop-blur-xl overflow-hidden"
             style={{ top: HEADER_HEIGHT }}
           >
             <div className="px-3 py-2">
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/40" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-white/40" />
                 <input
                   ref={searchInputRef}
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Поиск товаров..."
-                  className="w-full pl-9 pr-9 py-2.5 rounded-xl bg-white/10 border border-white/[0.08] text-white text-sm placeholder:text-white/30 focus:outline-none focus:border-rose-500/50 focus:ring-1 focus:ring-rose-500/30 transition-all"
+                  className="w-full pl-9 pr-9 py-2.5 rounded-xl bg-black/5 dark:bg-white/10 border border-gray-200 dark:border-white/[0.08] text-gray-900 dark:text-white text-sm placeholder:text-gray-400 dark:placeholder:text-white/30 focus:outline-none focus:border-rose-500/50 focus:ring-1 focus:ring-rose-500/30 transition-all"
                   data-testid="input-search"
                 />
                 {searchQuery && (
                   <button onClick={() => setSearchQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2" data-testid="button-clear-search">
-                    <X className="h-4 w-4 text-white/40 hover:text-white/70" />
+                    <X className="h-4 w-4 text-gray-400 dark:text-white/40 hover:text-gray-600 dark:hover:text-white/70" />
                   </button>
                 )}
               </div>
@@ -712,7 +708,7 @@ export default function FashionCatalog({
 
       <div
         ref={categoryScrollRef}
-        className="sticky z-40 flex items-center gap-2 px-3 overflow-x-auto scrollbar-hide bg-black/60 backdrop-blur-md"
+        className="sticky z-40 flex items-center gap-2 px-3 overflow-x-auto scrollbar-hide bg-white/60 dark:bg-black/60 backdrop-blur-md"
         style={{ top: searchOpen ? HEADER_HEIGHT + 52 : HEADER_HEIGHT, height: CATEGORIES_HEIGHT, transition: "top 0.2s ease" }}
       >
         <button
@@ -720,7 +716,7 @@ export default function FashionCatalog({
           className={`shrink-0 px-4 py-1.5 rounded-full text-sm font-medium transition-all ${
             selectedCategory === null
               ? "bg-gradient-to-r from-rose-500 to-fuchsia-500 text-white shadow-lg shadow-rose-500/25"
-              : "bg-white/8 text-white/60 hover:bg-white/15 hover:text-white/80"
+              : "bg-black/5 dark:bg-white/8 text-gray-500 dark:text-white/60 hover:bg-black/10 dark:hover:bg-white/15 hover:text-gray-700 dark:hover:text-white/80"
           }`}
           data-testid="button-category-all"
         >
@@ -733,7 +729,7 @@ export default function FashionCatalog({
             className={`shrink-0 px-4 py-1.5 rounded-full text-sm font-medium transition-all ${
               selectedCategory === cat.id
                 ? "bg-gradient-to-r from-rose-500 to-fuchsia-500 text-white shadow-lg shadow-rose-500/25"
-                : "bg-white/8 text-white/60 hover:bg-white/15 hover:text-white/80"
+                : "bg-black/5 dark:bg-white/8 text-gray-500 dark:text-white/60 hover:bg-black/10 dark:hover:bg-white/15 hover:text-gray-700 dark:hover:text-white/80"
             }`}
             data-testid={`button-category-${cat.id}`}
           >
@@ -747,7 +743,7 @@ export default function FashionCatalog({
   if (viewMode === 'grid') {
     const showCarousels = !selectedCategory && !searchQuery;
     return (
-      <div className="max-w-4xl mx-auto bg-black min-h-screen relative">
+      <div className="max-w-4xl mx-auto bg-white dark:bg-black min-h-screen relative">
         <style>{CSS_ANIMATIONS}</style>
         {headerContent}
 
@@ -777,19 +773,19 @@ export default function FashionCatalog({
           )}
 
           {showFavoritesOnly && filteredProducts.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 text-white/40 gap-3">
+            <div className="flex flex-col items-center justify-center py-20 text-gray-400 dark:text-white/40 gap-3">
               <Heart className="h-12 w-12" />
               <p className="text-sm">У вас пока нет избранных товаров</p>
               <button onClick={() => setShowFavoritesOnly(false)} className="text-rose-400 text-sm hover:underline">Показать все товары</button>
             </div>
           ) : searchQuery && filteredProducts.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 text-white/40 gap-3">
+            <div className="flex flex-col items-center justify-center py-20 text-gray-400 dark:text-white/40 gap-3">
               <Search className="h-12 w-12" />
               <p className="text-sm">Ничего не найдено по «{searchQuery}»</p>
               <button onClick={() => setSearchQuery("")} className="text-rose-400 text-sm hover:underline">Очистить поиск</button>
             </div>
           ) : selectedCategory && filteredProducts.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 text-white/40 gap-3">
+            <div className="flex flex-col items-center justify-center py-20 text-gray-400 dark:text-white/40 gap-3">
               <Package className="h-12 w-12" />
               <p className="text-sm">В этой категории пока нет товаров</p>
               <button onClick={() => setSelectedCategory(null)} className="text-rose-400 text-sm hover:underline">Показать все</button>
@@ -797,7 +793,7 @@ export default function FashionCatalog({
           ) : (
             <div className="px-2 py-3">
               {searchQuery && (
-                <p className="text-white/40 text-xs px-1 mb-2">Найдено: {filteredProducts.length}</p>
+                <p className="text-gray-400 dark:text-white/40 text-xs px-1 mb-2">Найдено: {filteredProducts.length}</p>
               )}
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3">
                 {filteredProducts.map((product: any, index: number) => (
@@ -830,7 +826,7 @@ export default function FashionCatalog({
   }
 
   return (
-    <div className="max-w-md mx-auto bg-black min-h-screen relative">
+    <div className="max-w-md mx-auto bg-white dark:bg-black min-h-screen relative">
       <style>{CSS_ANIMATIONS}</style>
       {headerContent}
 
@@ -841,7 +837,7 @@ export default function FashionCatalog({
         style={{ height: `calc(100vh - ${TOTAL_TOP + BOTTOM_NAV_HEIGHT}px)` }}
       >
         {filteredProducts.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-white/40 gap-3">
+          <div className="flex flex-col items-center justify-center h-full text-gray-400 dark:text-white/40 gap-3">
             <Search className="h-12 w-12" />
             <p className="text-sm">{searchQuery ? `Ничего не найдено по «${searchQuery}»` : "Товары не найдены"}</p>
           </div>
@@ -858,20 +854,20 @@ export default function FashionCatalog({
                 style={{ height: `calc(100vh - ${TOTAL_TOP + BOTTOM_NAV_HEIGHT}px)` }}
                 data-testid={`card-product-${product.id}`}
               >
-                <div className="absolute inset-0 bg-black">
+                <div className="absolute inset-0 bg-white dark:bg-black">
                   {(product as any).videoUrl && (product as any).videoPrimary ? (
                     <video
                       src={resolveImageUrl((product as any).videoUrl)}
                       poster={resolveImageUrl((product as any).videoPosterUrl || product.mainImageUrl)}
                       autoPlay muted loop playsInline
-                      className="w-full h-full object-contain bg-black"
+                      className="w-full h-full object-contain bg-white dark:bg-black"
                       data-testid={`video-product-${product.id}`}
                     />
                   ) : imageUrl ? (
                     <img src={imageUrl} alt={product.name} className="w-full h-full object-cover" loading={index < 2 ? "eager" : "lazy"} data-testid={`img-product-${product.id}`} />
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center bg-neutral-900">
-                      <Package className="h-20 w-20 text-neutral-700" />
+                    <div className="w-full h-full flex items-center justify-center bg-gray-100 dark:bg-neutral-900">
+                      <Package className="h-20 w-20 text-gray-400 dark:text-neutral-700" />
                     </div>
                   )}
                 </div>

@@ -9,13 +9,13 @@ export function ThemeToggle({ variant = "default" }: { variant?: "default" | "ca
     return (
       <button
         onClick={toggleTheme}
-        className="p-2 rounded-xl hover:bg-white/10 transition-colors"
+        className="p-2 rounded-xl hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
         data-testid="button-theme-toggle"
       >
         {theme === "light" ? (
-          <Moon className="h-5 w-5 text-white/70" />
+          <Moon className="h-5 w-5 text-gray-600 dark:text-white/70" />
         ) : (
-          <Sun className="h-5 w-5 text-white/70" />
+          <Sun className="h-5 w-5 text-gray-600 dark:text-white/70" />
         )}
         <span className="sr-only">Переключить тему</span>
       </button>
