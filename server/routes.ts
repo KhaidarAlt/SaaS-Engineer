@@ -1046,35 +1046,107 @@ export async function registerRoutes(
     }
   });
 
-  function serveOgHtml(req: Request, res: Response, tenant: any, slug: string): boolean {
-    if (process.env.NODE_ENV !== "production") return false;
-    try {
-      const indexPath = path.resolve(process.cwd(), "dist", "public", "index.html");
-      if (!fs.existsSync(indexPath)) return false;
-      let html = fs.readFileSync(indexPath, "utf-8");
-      const ogTitle = tenant.ogTitle || tenant.name || "SmartCatalog";
-      const ogDescription = tenant.ogDescription || tenant.description || "Онлайн-каталог товаров";
-      const ogImageRaw = tenant.ogImageUrl || tenant.logoUrl || "";
-      const protocol = req.get("x-forwarded-proto") || req.protocol;
-      const baseUrl = `${protocol}://${req.get("host")}`;
-      const platformDomain = process.env.PLATFORM_DOMAIN || "botfactory.kz";
-      const canonicalUrl = (tenant as any).customDomain
-        ? `https://${(tenant as any).customDomain}`
-        : `https://${encodeURIComponent(slug)}.${platformDomain}`;
-      let ogImage = "";
-      if (ogImageRaw) {
-        if (ogImageRaw.startsWith("http")) {
-          ogImage = ogImageRaw;
-        } else if (ogImageRaw.startsWith("/")) {
-          ogImage = `${baseUrl}${ogImageRaw}`;
-        } else {
-          ogImage = `${baseUrl}/${ogImageRaw}`;
-        }
+  function buildOgData(req: Request, tenant: any, slug: string) {
+    const ogTitle = tenant.ogTitle || tenant.name || "SmartCatalog";
+    const ogDescription = tenant.ogDescription || tenant.description || "Онлайн-каталог товаров";
+    const ogImageRaw = tenant.ogImageUrl || tenant.logoUrl || "";
+    const platformDomain = process.env.PLATFORM_DOMAIN || "botfactory.kz";
+    const canonicalUrl = tenant.customDomain
+      ? `https://${tenant.customDomain}`
+      : `https://${encodeURIComponent(slug)}.${platformDomain}`;
+    let ogImage = "";
+    if (ogImageRaw) {
+      if (ogImageRaw.startsWith("http")) {
+        ogImage = ogImageRaw;
+      } else {
+        ogImage = `https://${encodeURIComponent(slug)}.${platformDomain}${ogImageRaw.startsWith("/") ? "" : "/"}${ogImageRaw}`;
       }
-      console.log(`[OG] Serving catalog for ${slug} - Title: ${ogTitle}, Desc: ${ogDescription?.substring(0, 50)}, Image: ${ogImage || "none"}`);
-      html = html.replace(/<title>[^<]*<\/title>/, `<title>${escapeHtml(ogTitle)}</title>`);
-      html = html.replace(/<meta\s+name="description"\s+content="[^"]*"\s*\/?>/, `<meta name="description" content="${escapeHtml(ogDescription)}" />`);
-      const ogMetaTags = `
+    }
+    return { ogTitle, ogDescription, ogImage, canonicalUrl };
+  }
+
+  function generateOgHtml(ogTitle: string, ogDescription: string, ogImage: string, canonicalUrl: string): string {
+    return `<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>${escapeHtml(ogTitle)}</title>
+  <meta name="description" content="${escapeHtml(ogDescription)}" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="${escapeHtml(ogTitle)}" />
+  <meta property="og:description" content="${escapeHtml(ogDescription)}" />
+  <meta property="og:url" content="${escapeHtml(canonicalUrl)}" />
+  ${ogImage ? `<meta property="og:image" content="${escapeHtml(ogImage)}" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />` : ""}
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="${escapeHtml(ogTitle)}" />
+  <meta name="twitter:description" content="${escapeHtml(ogDescription)}" />
+  ${ogImage ? `<meta name="twitter:image" content="${escapeHtml(ogImage)}" />` : ""}
+</head>
+<body>
+  <p>${escapeHtml(ogTitle)} — ${escapeHtml(ogDescription)}</p>
+</body>
+</html>`;
+  }
+
+  function isBotUserAgent(ua: string): boolean {
+    if (!ua) return false;
+    const botPatterns = [
+      "whatsapp", "facebookexternalhit", "facebot", "twitterbot",
+      "telegrambot", "linkedinbot", "slackbot", "discordbot",
+      "googlebot", "bingbot", "yandexbot", "baiduspider",
+      "applebot", "pinterestbot", "embedly", "quora link preview",
+      "outbrain", "vkshare", "w3c_validator", "redditbot",
+      "rogerbot", "showyoubot", "skypeuripreview", "developers.google.com"
+    ];
+    const lcUa = ua.toLowerCase();
+    return botPatterns.some(p => lcUa.includes(p));
+  }
+
+  function serveOgHtml(req: Request, res: Response, tenant: any, slug: string): boolean {
+    try {
+      const ua = req.get("user-agent") || "";
+      const isBot = isBotUserAgent(ua);
+      console.log(`[OG-Check] slug=${slug}, path=${req.path}, method=${req.method}, isBot=${isBot}, ua=${ua.substring(0, 80)}`);
+
+      if (!isBot && process.env.NODE_ENV !== "production") return false;
+
+      const { ogTitle, ogDescription, ogImage, canonicalUrl } = buildOgData(req, tenant, slug);
+
+      if (isBot) {
+        console.log(`[OG-Bot] Serving bot OG for ${slug} - Title: ${ogTitle}, Image: ${ogImage || "none"}`);
+        const html = generateOgHtml(ogTitle, ogDescription, ogImage, canonicalUrl);
+        res.set("Content-Type", "text/html; charset=utf-8");
+        res.set("Cache-Control", "no-cache, no-store, must-revalidate");
+        res.send(html);
+        return true;
+      }
+
+      if (process.env.NODE_ENV === "production") {
+        const possiblePaths = [
+          path.resolve(__dirname, "public", "index.html"),
+          path.resolve(process.cwd(), "dist", "public", "index.html"),
+          path.resolve(process.cwd(), "dist", "index.html"),
+        ];
+        let html = "";
+        let foundPath = "";
+        for (const p of possiblePaths) {
+          if (fs.existsSync(p)) {
+            html = fs.readFileSync(p, "utf-8");
+            foundPath = p;
+            break;
+          }
+        }
+        if (!html) {
+          console.log(`[OG] index.html not found at: ${possiblePaths.join(", ")}`);
+          return false;
+        }
+        console.log(`[OG] Serving production OG for ${slug} from ${foundPath}`);
+        html = html.replace(/<title>[^<]*<\/title>/, `<title>${escapeHtml(ogTitle)}</title>`);
+        html = html.replace(/<meta\s+name="description"\s+content="[^"]*"\s*\/?>/, `<meta name="description" content="${escapeHtml(ogDescription)}" />`);
+        const ogMetaTags = `
     <meta property="og:type" content="website" />
     <meta property="og:title" content="${escapeHtml(ogTitle)}" />
     <meta property="og:description" content="${escapeHtml(ogDescription)}" />
@@ -1086,15 +1158,48 @@ export async function registerRoutes(
     <meta name="twitter:title" content="${escapeHtml(ogTitle)}" />
     <meta name="twitter:description" content="${escapeHtml(ogDescription)}" />
     ${ogImage ? `<meta name="twitter:image" content="${escapeHtml(ogImage)}" />` : ""}`;
-      html = html.replace("</head>", `${ogMetaTags}\n  </head>`);
-      res.set("Content-Type", "text/html");
-      res.send(html);
-      return true;
+        html = html.replace("</head>", `${ogMetaTags}\n  </head>`);
+        res.set("Content-Type", "text/html; charset=utf-8");
+        res.send(html);
+        return true;
+      }
+      return false;
     } catch (err) {
       console.error("[OG] Error serving OG HTML:", err);
       return false;
     }
   }
+
+  app.get("/api/og-test/:slug", async (req, res) => {
+    try {
+      const slug = req.params.slug;
+      const tenant = await storage.getTenantBySlug(slug);
+      if (!tenant) {
+        return res.status(404).json({ error: "Tenant not found", slug });
+      }
+      const { ogTitle, ogDescription, ogImage, canonicalUrl } = buildOgData(req, tenant, slug);
+      const html = generateOgHtml(ogTitle, ogDescription, ogImage, canonicalUrl);
+      res.json({
+        slug,
+        tenantName: tenant.name,
+        ogTitle,
+        ogDescription: ogDescription?.substring(0, 200),
+        ogImage,
+        canonicalUrl,
+        rawFields: {
+          ogTitle: tenant.ogTitle,
+          ogDescription: tenant.ogDescription,
+          ogImageUrl: tenant.ogImageUrl,
+          logoUrl: tenant.logoUrl,
+          name: tenant.name,
+          description: tenant.description?.substring(0, 100),
+        },
+        generatedHtml: html,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
 
   // Subdomain + custom domain middleware: route to tenant catalog
   app.use(async (req: Request, res: Response, next: NextFunction) => {
@@ -1111,17 +1216,20 @@ export async function registerRoutes(
       req.path.startsWith("/@") ||
       req.path.startsWith("/node_modules") ||
       req.path.startsWith("/src") ||
-      req.path === "/favicon.ico"
+      req.path === "/favicon.ico" ||
+      req.path.startsWith("/objects")
     ) {
       return next();
     }
 
     try {
       const subdomain = extractSubdomain(host);
+      console.log(`[DomainMW] host=${host}, subdomain=${subdomain || "none"}, path=${req.path}, method=${req.method}, ua=${(req.get("user-agent") || "").substring(0, 60)}`);
       if (subdomain) {
         const tenant = await storage.getTenantBySlug(subdomain);
         if (tenant) {
           const isDocumentRequest = req.method === "GET" && (req.path === "/" || !req.path.includes("."));
+          console.log(`[DomainMW] tenant=${tenant.name}, isDocReq=${isDocumentRequest}`);
           if (isDocumentRequest && serveOgHtml(req, res, tenant, tenant.slug)) {
             return;
           }
@@ -7102,74 +7210,15 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
     }
   });
 
-  // Dynamic OG tags for catalog pages - serves HTML with proper meta tags for messengers
+  // Dynamic OG tags for catalog pages - serves HTML with proper meta tags for bots/messengers
   app.get("/c/:slug", async (req, res, next) => {
     try {
-      // In development mode, skip OG middleware and let Vite's catch-all handle HTML serving
-      // Vite must transform index.html to inject its client scripts for React to work
-      if (process.env.NODE_ENV !== "production") {
-        return next();
-      }
-      
       const slug = req.params.slug;
       const tenant = await storage.getTenantBySlug(slug);
-      
-      if (!tenant) {
-        return next();
-      }
-      
-      const indexPath = path.resolve(process.cwd(), "dist", "public", "index.html");
-      
-      if (!fs.existsSync(indexPath)) {
-        return next();
-      }
-      
-      let html = fs.readFileSync(indexPath, "utf-8");
-      
-      const ogTitle = tenant.ogTitle || tenant.name || "SmartCatalog";
-      const ogDescription = tenant.ogDescription || tenant.description || "Онлайн-каталог товаров";
-      const ogImageRaw = tenant.ogImageUrl || tenant.logoUrl || "";
-      
-      const protocol = req.get("x-forwarded-proto") || req.protocol;
-      const baseUrl = `${protocol}://${req.get("host")}`;
-      const platformDomain = process.env.PLATFORM_DOMAIN || "botfactory.kz";
-      const canonicalUrl = (tenant as any).customDomain 
-        ? `https://${(tenant as any).customDomain}`
-        : `https://${encodeURIComponent(slug)}.${platformDomain}`;
-      
-      let ogImage = "";
-      if (ogImageRaw) {
-        if (ogImageRaw.startsWith("http")) {
-          ogImage = ogImageRaw;
-        } else if (ogImageRaw.startsWith("/")) {
-          ogImage = `${baseUrl}${ogImageRaw}`;
-        } else {
-          ogImage = `${baseUrl}/${ogImageRaw}`;
-        }
-      }
-      
-      console.log(`[OG] Serving /c/${slug} - Title: ${ogTitle}, Desc: ${ogDescription?.substring(0, 50)}, Image: ${ogImage || "none"}`);
-      
-      html = html.replace(/<title>[^<]*<\/title>/, `<title>${escapeHtml(ogTitle)}</title>`);
-      html = html.replace(/<meta\s+name="description"\s+content="[^"]*"\s*\/?>/, `<meta name="description" content="${escapeHtml(ogDescription)}" />`);
-      
-      const ogMetaTags = `
-    <meta property="og:type" content="website" />
-    <meta property="og:title" content="${escapeHtml(ogTitle)}" />
-    <meta property="og:description" content="${escapeHtml(ogDescription)}" />
-    <meta property="og:url" content="${escapeHtml(canonicalUrl)}" />
-    ${ogImage ? `<meta property="og:image" content="${escapeHtml(ogImage)}" />
-    <meta property="og:image:width" content="1200" />
-    <meta property="og:image:height" content="630" />` : ""}
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="${escapeHtml(ogTitle)}" />
-    <meta name="twitter:description" content="${escapeHtml(ogDescription)}" />
-    ${ogImage ? `<meta name="twitter:image" content="${escapeHtml(ogImage)}" />` : ""}`;
-      
-      html = html.replace("</head>", `${ogMetaTags}\n  </head>`);
-      
-      res.set("Content-Type", "text/html");
-      res.send(html);
+      if (!tenant) return next();
+
+      if (serveOgHtml(req, res, tenant, slug)) return;
+      next();
     } catch (error) {
       console.error("Error serving catalog page with OG tags:", error);
       next();
