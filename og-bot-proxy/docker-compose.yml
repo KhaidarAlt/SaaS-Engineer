@@ -1,0 +1,23 @@
+services:
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      - CADDY_ASK_TOKEN=_Xj7-9Lp2Wa_R0skL98mNzA1Q6fGH4vB2eD-uI8kLmY
+
+  og-bot-proxy:
+    build: .
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      - PORT=3001
+      - REPLIT_HOST=saa-s-engineer--m528dpa.replit.app
+
+volumes:
+  caddy_data:
+  caddy_config:

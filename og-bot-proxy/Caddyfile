@@ -1,0 +1,44 @@
+{
+	email you@botfactory.kz
+	acme_ca https://acme-v02.api.letsencrypt.org/directory
+
+	on_demand_tls {
+		ask https://saa-s-engineer--m528dpa.replit.app/api/internal/caddy/allow?token={$CADDY_ASK_TOKEN}
+	}
+}
+
+botfactory.kz {
+	@bot header_regexp User-Agent (?i)(facebookexternalhit|Facebot|WhatsApp|TelegramBot|Twitterbot|LinkedInBot|Slackbot|vkShare|Googlebot|YandexBot|bingbot|Discordbot)
+	handle @bot {
+		reverse_proxy 127.0.0.1:3001
+	}
+	handle {
+		reverse_proxy https://saa-s-engineer--m528dpa.replit.app {
+			header_up Host saa-s-engineer--m528dpa.replit.app
+			header_up X-Forwarded-Host {host}
+		}
+	}
+}
+
+waha.botfactory.kz {
+	tls {
+		issuer acme
+	}
+	reverse_proxy 127.0.0.1:3000
+}
+
+*.botfactory.kz {
+	tls {
+		on_demand
+	}
+	@bot header_regexp User-Agent (?i)(facebookexternalhit|Facebot|WhatsApp|TelegramBot|Twitterbot|LinkedInBot|Slackbot|vkShare|Googlebot|YandexBot|bingbot|Discordbot)
+	handle @bot {
+		reverse_proxy 127.0.0.1:3001
+	}
+	handle {
+		reverse_proxy https://saa-s-engineer--m528dpa.replit.app {
+			header_up Host saa-s-engineer--m528dpa.replit.app
+			header_up X-Forwarded-Host {host}
+		}
+	}
+}
