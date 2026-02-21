@@ -7068,12 +7068,10 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
       
       let html = fs.readFileSync(indexPath, "utf-8");
       
-      // Prepare OG meta tags
       const ogTitle = tenant.ogTitle || tenant.name || "SmartCatalog";
       const ogDescription = tenant.ogDescription || tenant.description || "Онлайн-каталог товаров";
       const ogImageRaw = tenant.ogImageUrl || tenant.logoUrl || "";
       
-      // Use https for production (Replit proxy uses x-forwarded-proto)
       const protocol = req.get("x-forwarded-proto") || req.protocol;
       const baseUrl = `${protocol}://${req.get("host")}`;
       const platformDomain = process.env.PLATFORM_DOMAIN || "botfactory.kz";
@@ -7081,13 +7079,23 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
         ? `https://${(tenant as any).customDomain}`
         : `https://${encodeURIComponent(slug)}.${platformDomain}`;
       
-      // Ensure og:image is a full URL
-      const ogImage = ogImageRaw ? (ogImageRaw.startsWith("http") ? ogImageRaw : `${baseUrl}${ogImageRaw}`) : "";
+      let ogImage = "";
+      if (ogImageRaw) {
+        if (ogImageRaw.startsWith("http")) {
+          ogImage = ogImageRaw;
+        } else if (ogImageRaw.startsWith("/")) {
+          ogImage = `${baseUrl}${ogImageRaw}`;
+        } else {
+          ogImage = `${baseUrl}/${ogImageRaw}`;
+        }
+      }
       
-      console.log(`[OG] Serving /c/${slug} - Title: ${ogTitle}, Image: ${ogImage || "none"}`);
+      console.log(`[OG] Serving /c/${slug} - Title: ${ogTitle}, Desc: ${ogDescription?.substring(0, 50)}, Image: ${ogImage || "none"}`);
       
-      // Build meta tags string
-      const metaTags = `
+      html = html.replace(/<title>[^<]*<\/title>/, `<title>${escapeHtml(ogTitle)}</title>`);
+      html = html.replace(/<meta\s+name="description"\s+content="[^"]*"\s*\/?>/, `<meta name="description" content="${escapeHtml(ogDescription)}" />`);
+      
+      const ogMetaTags = `
     <meta property="og:type" content="website" />
     <meta property="og:title" content="${escapeHtml(ogTitle)}" />
     <meta property="og:description" content="${escapeHtml(ogDescription)}" />
@@ -7098,12 +7106,9 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="${escapeHtml(ogTitle)}" />
     <meta name="twitter:description" content="${escapeHtml(ogDescription)}" />
-    ${ogImage ? `<meta name="twitter:image" content="${escapeHtml(ogImage)}" />` : ""}
-    <meta name="description" content="${escapeHtml(ogDescription)}" />
-    <title>${escapeHtml(ogTitle)}</title>`;
+    ${ogImage ? `<meta name="twitter:image" content="${escapeHtml(ogImage)}" />` : ""}`;
       
-      // Insert meta tags before </head>
-      html = html.replace("</head>", `${metaTags}\n  </head>`);
+      html = html.replace("</head>", `${ogMetaTags}\n  </head>`);
       
       res.set("Content-Type", "text/html");
       res.send(html);
