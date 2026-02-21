@@ -2,22 +2,22 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Link } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  ShoppingCart,
   Heart,
   Sparkles,
   Ruler,
   X,
-  Check,
   Package,
   Flame,
   LayoutGrid,
   Rows3,
   Share2,
-  Star,
   Search,
   Home,
   ShoppingBag,
   ChevronRight,
+  Shirt,
+  Palette,
+  Wand2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,7 +31,6 @@ import { useCart } from "@/contexts/CartContext";
 import { useToast } from "@/hooks/use-toast";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { resolveImageUrl } from "@/lib/imageUrl";
-import type { Product } from "@shared/schema";
 
 interface FashionCatalogProps {
   slug: string;
@@ -83,12 +82,12 @@ function getViewerCount(productId: string): number {
   return 5 + (hash % 26);
 }
 
-function getRating(productId: string): string {
+function getPurchaseCount(productId: string): number {
   let hash = 0;
   for (let i = 0; i < productId.length; i++) {
-    hash = (hash * 17 + productId.charCodeAt(i)) % 100;
+    hash = (hash * 17 + productId.charCodeAt(i)) % 1000;
   }
-  return (4.3 + (hash % 8) * 0.1).toFixed(1);
+  return 10 + (hash % 990);
 }
 
 const HEADER_HEIGHT = 56;
@@ -226,6 +225,7 @@ function GridProductCard({
   onToggleFavorite,
   onQuickAddToCart,
   onOpenSizes,
+  onOpenStylist,
   index,
 }: {
   product: any;
@@ -234,6 +234,7 @@ function GridProductCard({
   onToggleFavorite: (id: string) => void;
   onQuickAddToCart: (product: any) => void;
   onOpenSizes: (product: any) => void;
+  onOpenStylist: (product: any) => void;
   index: number;
 }) {
   const [imgLoaded, setImgLoaded] = useState(false);
@@ -241,7 +242,7 @@ function GridProductCard({
   const [bagAnim, setBagAnim] = useState(false);
   const imageUrl = resolveImageUrl(product.mainImageUrl);
   const viewers = getViewerCount(product.id);
-  const rating = getRating(product.id);
+  const purchaseCount = getPurchaseCount(product.id);
 
   const handleFavorite = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -426,9 +427,9 @@ function GridProductCard({
           </div>
 
           <div className="flex items-center gap-2.5 text-[11px] text-white/35">
-            <span className="flex items-center gap-0.5">
-              <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
-              {rating}
+            <span className="flex items-center gap-0.5" data-testid={`text-purchases-${product.id}`}>
+              <ShoppingBag className="h-3 w-3 text-emerald-400/60" />
+              Купили {purchaseCount} раз
             </span>
             <span className="flex items-center gap-0.5" data-testid={`text-viewers-${product.id}`}>
               <Flame className="h-3 w-3 text-rose-400/60" />
@@ -444,7 +445,7 @@ function GridProductCard({
               <button onClick={handleAddCart} className="p-1.5 rounded-full hover:bg-white/10 transition-colors">
                 <ShoppingBag className={`h-4 w-4 text-white/50 hover:text-white/80 transition-all`} style={bagAnim ? { animation: "bagPulse 0.4s ease-in-out" } : undefined} />
               </button>
-              <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); }} className="p-1.5 rounded-full hover:bg-white/10 transition-colors" data-testid={`button-stylist-grid-${product.id}`}>
+              <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); onOpenStylist(product); }} className="p-1.5 rounded-full hover:bg-white/10 transition-colors" data-testid={`button-stylist-grid-${product.id}`}>
                 <Sparkles className="h-4 w-4 text-white/50 hover:text-violet-400 transition-colors" />
               </button>
               <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); onOpenSizes(product); }} className="p-1.5 rounded-full hover:bg-white/10 transition-colors" data-testid={`button-sizes-grid-${product.id}`}>
@@ -466,13 +467,17 @@ function BottomNavBar({
   totalItems,
   favCount,
   searchOpen,
+  showFavoritesOnly,
   onToggleSearch,
+  onToggleFavorites,
 }: {
   basePath: string;
   totalItems: number;
   favCount: number;
   searchOpen: boolean;
+  showFavoritesOnly: boolean;
   onToggleSearch: () => void;
+  onToggleFavorites: () => void;
 }) {
   return (
     <nav
@@ -497,8 +502,12 @@ function BottomNavBar({
           <span className="text-[10px] font-medium">Поиск</span>
         </button>
 
-        <button className="flex flex-col items-center gap-0.5 text-white/60 hover:text-white transition-colors relative" data-testid="nav-favorites">
-          <Heart className="h-5 w-5" />
+        <button
+          onClick={onToggleFavorites}
+          className={`flex flex-col items-center gap-0.5 transition-colors relative ${showFavoritesOnly ? "text-rose-400" : "text-white/60 hover:text-white"}`}
+          data-testid="nav-favorites"
+        >
+          <Heart className={`h-5 w-5 ${showFavoritesOnly ? "fill-rose-400" : ""}`} />
           {favCount > 0 && (
             <span className="absolute -top-1 right-0 bg-gradient-to-r from-rose-500 to-fuchsia-500 text-white text-[9px] font-bold rounded-full h-4 min-w-[16px] flex items-center justify-center px-1">
               {favCount}
@@ -542,6 +551,9 @@ export default function FashionCatalog({
   const [currentIndex, setCurrentIndex] = useState(0);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
+  const [stylistSheetOpen, setStylistSheetOpen] = useState(false);
+  const [stylistProduct, setStylistProduct] = useState<any | null>(null);
   const [viewMode, setViewMode] = useState<'feed' | 'grid'>(() => {
     try {
       const saved = localStorage.getItem(`fashion_view_${slug}`);
@@ -575,6 +587,9 @@ export default function FashionCatalog({
 
   const filteredProducts = useMemo(() => {
     let result = activeProducts;
+    if (showFavoritesOnly) {
+      result = result.filter((p: any) => isFavorite(p.id));
+    }
     if (selectedCategory) {
       result = result.filter((p: any) => p.categoryId === selectedCategory);
     }
@@ -587,7 +602,7 @@ export default function FashionCatalog({
       );
     }
     return result;
-  }, [activeProducts, selectedCategory, searchQuery]);
+  }, [activeProducts, selectedCategory, searchQuery, showFavoritesOnly, isFavorite]);
 
   const newProducts = useMemo(() =>
     activeProducts.filter((p: any) => p.tags && p.tags.includes("new")).slice(0, 10),
@@ -613,6 +628,11 @@ export default function FashionCatalog({
     setSelectedSize(null);
     setSelectedColor(null);
     setSizeSheetOpen(true);
+  }, []);
+
+  const openStylistSheet = useCallback((product: any) => {
+    setStylistProduct(product);
+    setStylistSheetOpen(true);
   }, []);
 
   const handleAddToCart = useCallback(() => {
@@ -678,11 +698,6 @@ export default function FashionCatalog({
           </div>
           <div className="flex items-center gap-1">
             <ThemeToggle />
-            <Link href={`${basePath}/cart`}>
-              <Button size="icon" variant="ghost" className="relative text-white" data-testid="button-cart">
-                <ShoppingCart className="h-5 w-5" />
-              </Button>
-            </Link>
           </div>
         </header>
         <div className="flex flex-col items-center justify-center h-[60vh] text-white/40 gap-4 p-8">
@@ -709,16 +724,6 @@ export default function FashionCatalog({
             {viewMode === 'feed' ? <LayoutGrid className="h-5 w-5 text-white/70" /> : <Rows3 className="h-5 w-5 text-white/70" />}
           </button>
           <ThemeToggle />
-          <Link href={`${basePath}/cart`}>
-            <Button size="icon" variant="ghost" className="relative text-white" data-testid="button-cart">
-              <ShoppingBag className="h-5 w-5" />
-              {totalItems > 0 && (
-                <span className="absolute -top-1 -right-1 bg-gradient-to-r from-rose-500 to-fuchsia-500 text-white text-[10px] font-bold rounded-full h-4.5 w-4.5 flex items-center justify-center shadow-lg shadow-rose-500/30" data-testid="badge-cart-count">
-                  {totalItems}
-                </span>
-              )}
-            </Button>
-          </Link>
         </div>
       </header>
 
@@ -886,6 +891,80 @@ export default function FashionCatalog({
     </Sheet>
   );
 
+  const getStylistTips = (product: any) => {
+    const tips: { icon: any; title: string; text: string }[] = [];
+    if (product.colors && product.colors.length > 0) {
+      const colorNames = product.colors.slice(0, 3).map((c: any) => c.name).join(", ");
+      tips.push({ icon: Palette, title: "Цветовые сочетания", text: `${colorNames} — отлично сочетаются с нейтральными тонами: белым, бежевым и серым.` });
+    }
+    if (product.tags?.includes("new")) {
+      tips.push({ icon: Sparkles, title: "Трендовая модель", text: "Эта модель в тренде! Сочетайте с минималистичными аксессуарами для актуального образа." });
+    }
+    if (product.tags?.includes("hit")) {
+      tips.push({ icon: Flame, title: "Выбор покупателей", text: "Бестселлер сезона. Универсальная модель, которая подходит для любого случая." });
+    }
+    tips.push({ icon: Shirt, title: "Совет стилиста", text: "Для создания стильного повседневного образа сочетайте с джинсами или брюками свободного кроя." });
+    tips.push({ icon: Wand2, title: "Как носить", text: "Дополните образ аксессуарами — сумкой в тон или контрастным шарфом для эффектного акцента." });
+    return tips;
+  };
+
+  const stylistSheet = (
+    <Sheet open={stylistSheetOpen} onOpenChange={setStylistSheetOpen}>
+      <SheetContent side="bottom" className="rounded-t-3xl max-w-md mx-auto bg-neutral-950 border-white/[0.06]">
+        <SheetHeader>
+          <SheetTitle className="text-white flex items-center gap-2">
+            <Sparkles className="h-5 w-5 text-violet-400" />
+            ИИ Стилист
+          </SheetTitle>
+          <SheetDescription className="text-white/50">Рекомендации по стилю для этого товара</SheetDescription>
+        </SheetHeader>
+        {stylistProduct && (
+          <div className="mt-4 space-y-5">
+            <div className="flex items-center gap-3">
+              {stylistProduct.mainImageUrl && (
+                <img src={resolveImageUrl(stylistProduct.mainImageUrl)} alt={stylistProduct.name} className="w-16 h-20 rounded-xl object-cover border border-white/10" />
+              )}
+              <div>
+                <p className="font-semibold text-white text-sm">{stylistProduct.name}</p>
+                {stylistProduct.brand && <p className="text-white/40 text-xs">{stylistProduct.brand}</p>}
+                <p className="text-sm font-bold mt-1 bg-gradient-to-r from-rose-400 to-fuchsia-400 bg-clip-text text-transparent">
+                  {formatPrice(stylistProduct.computedPrice || stylistProduct.price)}
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {getStylistTips(stylistProduct).map((tip, i) => {
+                const IconComp = tip.icon;
+                return (
+                  <div key={i} className="flex gap-3 p-3 rounded-xl bg-white/5 border border-white/[0.06]">
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-500/20 to-fuchsia-500/20 flex items-center justify-center shrink-0">
+                      <IconComp className="h-4 w-4 text-violet-400" />
+                    </div>
+                    <div>
+                      <p className="text-white text-xs font-semibold mb-0.5">{tip.title}</p>
+                      <p className="text-white/50 text-xs leading-relaxed">{tip.text}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <Button
+              className="w-full bg-gradient-to-r from-violet-500 to-fuchsia-500 hover:from-violet-600 hover:to-fuchsia-600 text-white font-semibold shadow-lg shadow-violet-500/25 border-0"
+              size="lg"
+              onClick={() => { handleQuickAddToCart(stylistProduct); setStylistSheetOpen(false); }}
+              data-testid="button-stylist-add-cart"
+            >
+              <ShoppingBag className="h-4 w-4 mr-2" />
+              Добавить в корзину
+            </Button>
+          </div>
+        )}
+      </SheetContent>
+    </Sheet>
+  );
+
   if (viewMode === 'grid') {
     const showCarousels = !selectedCategory && !searchQuery;
     return (
@@ -918,7 +997,13 @@ export default function FashionCatalog({
             />
           )}
 
-          {searchQuery && filteredProducts.length === 0 ? (
+          {showFavoritesOnly && filteredProducts.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 text-white/40 gap-3">
+              <Heart className="h-12 w-12" />
+              <p className="text-sm">У вас пока нет избранных товаров</p>
+              <button onClick={() => setShowFavoritesOnly(false)} className="text-rose-400 text-sm hover:underline">Показать все товары</button>
+            </div>
+          ) : searchQuery && filteredProducts.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-white/40 gap-3">
               <Search className="h-12 w-12" />
               <p className="text-sm">Ничего не найдено по «{searchQuery}»</p>
@@ -945,6 +1030,7 @@ export default function FashionCatalog({
                     onToggleFavorite={toggleFavorite}
                     onQuickAddToCart={handleQuickAddToCart}
                     onOpenSizes={openSizeSheet}
+                    onOpenStylist={openStylistSheet}
                     index={index}
                   />
                 ))}
@@ -954,13 +1040,16 @@ export default function FashionCatalog({
         </div>
 
         {sizeSheet}
+        {stylistSheet}
 
         <BottomNavBar
           basePath={basePath}
           totalItems={totalItems}
           favCount={favCount}
           searchOpen={searchOpen}
+          showFavoritesOnly={showFavoritesOnly}
           onToggleSearch={() => setSearchOpen(!searchOpen)}
+          onToggleFavorites={() => setShowFavoritesOnly(!showFavoritesOnly)}
         />
       </div>
     );
@@ -1056,7 +1145,7 @@ export default function FashionCatalog({
                     </div>
                   </button>
 
-                  <button onClick={() => {}} className="flex flex-col items-center gap-1" data-testid="button-ai-stylist">
+                  <button onClick={() => openStylistSheet(product)} className="flex flex-col items-center gap-1" data-testid="button-ai-stylist">
                     <div className="w-12 h-12 rounded-full bg-white/10 backdrop-blur-xl flex items-center justify-center border border-white/[0.08]">
                       <Sparkles className="h-5 w-5 text-white" />
                     </div>
@@ -1121,13 +1210,16 @@ export default function FashionCatalog({
       </div>
 
       {sizeSheet}
+      {stylistSheet}
 
       <BottomNavBar
         basePath={basePath}
         totalItems={totalItems}
         favCount={favCount}
         searchOpen={searchOpen}
+        showFavoritesOnly={showFavoritesOnly}
         onToggleSearch={() => setSearchOpen(!searchOpen)}
+        onToggleFavorites={() => setShowFavoritesOnly(!showFavoritesOnly)}
       />
     </div>
   );
