@@ -1046,6 +1046,56 @@ export async function registerRoutes(
     }
   });
 
+  function serveOgHtml(req: Request, res: Response, tenant: any, slug: string): boolean {
+    if (process.env.NODE_ENV !== "production") return false;
+    try {
+      const indexPath = path.resolve(process.cwd(), "dist", "public", "index.html");
+      if (!fs.existsSync(indexPath)) return false;
+      let html = fs.readFileSync(indexPath, "utf-8");
+      const ogTitle = tenant.ogTitle || tenant.name || "SmartCatalog";
+      const ogDescription = tenant.ogDescription || tenant.description || "Онлайн-каталог товаров";
+      const ogImageRaw = tenant.ogImageUrl || tenant.logoUrl || "";
+      const protocol = req.get("x-forwarded-proto") || req.protocol;
+      const baseUrl = `${protocol}://${req.get("host")}`;
+      const platformDomain = process.env.PLATFORM_DOMAIN || "botfactory.kz";
+      const canonicalUrl = (tenant as any).customDomain
+        ? `https://${(tenant as any).customDomain}`
+        : `https://${encodeURIComponent(slug)}.${platformDomain}`;
+      let ogImage = "";
+      if (ogImageRaw) {
+        if (ogImageRaw.startsWith("http")) {
+          ogImage = ogImageRaw;
+        } else if (ogImageRaw.startsWith("/")) {
+          ogImage = `${baseUrl}${ogImageRaw}`;
+        } else {
+          ogImage = `${baseUrl}/${ogImageRaw}`;
+        }
+      }
+      console.log(`[OG] Serving catalog for ${slug} - Title: ${ogTitle}, Desc: ${ogDescription?.substring(0, 50)}, Image: ${ogImage || "none"}`);
+      html = html.replace(/<title>[^<]*<\/title>/, `<title>${escapeHtml(ogTitle)}</title>`);
+      html = html.replace(/<meta\s+name="description"\s+content="[^"]*"\s*\/?>/, `<meta name="description" content="${escapeHtml(ogDescription)}" />`);
+      const ogMetaTags = `
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="${escapeHtml(ogTitle)}" />
+    <meta property="og:description" content="${escapeHtml(ogDescription)}" />
+    <meta property="og:url" content="${escapeHtml(canonicalUrl)}" />
+    ${ogImage ? `<meta property="og:image" content="${escapeHtml(ogImage)}" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />` : ""}
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="${escapeHtml(ogTitle)}" />
+    <meta name="twitter:description" content="${escapeHtml(ogDescription)}" />
+    ${ogImage ? `<meta name="twitter:image" content="${escapeHtml(ogImage)}" />` : ""}`;
+      html = html.replace("</head>", `${ogMetaTags}\n  </head>`);
+      res.set("Content-Type", "text/html");
+      res.send(html);
+      return true;
+    } catch (err) {
+      console.error("[OG] Error serving OG HTML:", err);
+      return false;
+    }
+  }
+
   // Subdomain + custom domain middleware: route to tenant catalog
   app.use(async (req: Request, res: Response, next: NextFunction) => {
     const host = getEffectiveHost(req);
@@ -1071,6 +1121,10 @@ export async function registerRoutes(
       if (subdomain) {
         const tenant = await storage.getTenantBySlug(subdomain);
         if (tenant) {
+          const isDocumentRequest = req.method === "GET" && (req.path === "/" || !req.path.includes("."));
+          if (isDocumentRequest && serveOgHtml(req, res, tenant, tenant.slug)) {
+            return;
+          }
           const originalQuery = req.originalUrl.includes("?") ? req.originalUrl.substring(req.originalUrl.indexOf("?")) : "";
           const subPath = req.path === "/" ? "" : req.path;
           const catalogUrl = `/c/${tenant.slug}${subPath}${originalQuery}`;
@@ -1103,6 +1157,10 @@ export async function registerRoutes(
       }
 
       if (tenant) {
+        const isDocumentRequest = req.method === "GET" && (req.path === "/" || !req.path.includes("."));
+        if (isDocumentRequest && serveOgHtml(req, res, tenant, tenant.slug)) {
+          return;
+        }
         const originalQuery = req.originalUrl.includes("?") ? req.originalUrl.substring(req.originalUrl.indexOf("?")) : "";
         const subPath = req.path === "/" ? "" : req.path;
         const catalogUrl = `/c/${tenant.slug}${subPath}${originalQuery}`;
