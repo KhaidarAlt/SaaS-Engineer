@@ -5,14 +5,24 @@
 	on_demand_tls {
 		ask https://saa-s-engineer--m528dpa.replit.app/api/internal/caddy/allow?token={$CADDY_ASK_TOKEN}
 	}
+
+	log default {
+		output stdout
+		format json
+		level INFO
+	}
 }
 
 botfactory.kz {
-	@bot header_regexp User-Agent (?i)(facebookexternalhit|Facebot|WhatsApp|TelegramBot|Twitterbot|LinkedInBot|Slackbot|vkShare|Googlebot|YandexBot|bingbot|Discordbot)
-	handle @bot {
-		reverse_proxy 127.0.0.1:3001
+	log {
+		output stdout
+		format json
 	}
-	handle {
+
+	route {
+		@bot header_regexp ua User-Agent "(?i).*(facebookexternalhit|Facebot|WhatsApp|TelegramBot|Twitterbot|LinkedInBot|Slackbot|vkShare|Googlebot|YandexBot|bingbot|Discordbot).*"
+		reverse_proxy @bot 127.0.0.1:3001
+
 		reverse_proxy https://saa-s-engineer--m528dpa.replit.app {
 			header_up Host saa-s-engineer--m528dpa.replit.app
 			header_up X-Forwarded-Host {host}
@@ -31,11 +41,16 @@ waha.botfactory.kz {
 	tls {
 		on_demand
 	}
-	@bot header_regexp User-Agent (?i)(facebookexternalhit|Facebot|WhatsApp|TelegramBot|Twitterbot|LinkedInBot|Slackbot|vkShare|Googlebot|YandexBot|bingbot|Discordbot)
-	handle @bot {
-		reverse_proxy 127.0.0.1:3001
+
+	log {
+		output stdout
+		format json
 	}
-	handle {
+
+	route {
+		@bot header_regexp ua User-Agent "(?i).*(facebookexternalhit|Facebot|WhatsApp|TelegramBot|Twitterbot|LinkedInBot|Slackbot|vkShare|Googlebot|YandexBot|bingbot|Discordbot).*"
+		reverse_proxy @bot 127.0.0.1:3001
+
 		reverse_proxy https://saa-s-engineer--m528dpa.replit.app {
 			header_up Host saa-s-engineer--m528dpa.replit.app
 			header_up X-Forwarded-Host {host}
