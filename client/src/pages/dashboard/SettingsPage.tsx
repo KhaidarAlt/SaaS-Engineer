@@ -759,6 +759,7 @@ export default function SettingsPage() {
                         if (file) handleImageUpload(file, "logo");
                       }}
                     />
+                    <p className="text-xs text-muted-foreground leading-tight">512×512 px, PNG или JPG, до 2 МБ</p>
                   </div>
                   <div className="flex-1 space-y-4">
                     <div className="space-y-2">
