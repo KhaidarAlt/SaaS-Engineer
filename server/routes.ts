@@ -672,6 +672,57 @@ export async function registerRoutes(
     res.type("text/plain").status(200).send(robotsTxt);
   });
 
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    if (req.method !== "GET") return next();
+    const ua = req.get("user-agent") || "";
+    if (!isBotUserAgent(ua)) return next();
+    if (req.path.startsWith("/api") || req.path.startsWith("/@") || req.path.startsWith("/node_modules") || req.path.startsWith("/src") || req.path === "/robots.txt" || req.path === "/favicon.ico") return next();
+
+    const host = getEffectiveHost(req);
+    const subdomain = host ? extractSubdomain(host) : null;
+
+    (async () => {
+      try {
+        let tenant: any = null;
+        let slug = "";
+
+        if (subdomain) {
+          tenant = await storage.getTenantBySlug(subdomain);
+          slug = subdomain;
+        }
+
+        const catalogMatch = req.path.match(/^\/c\/([^/]+)/);
+        if (!tenant && catalogMatch) {
+          slug = catalogMatch[1];
+          tenant = await storage.getTenantBySlug(slug);
+        }
+
+        if (tenant && slug) {
+          const { ogTitle, ogDescription, ogImage, canonicalUrl } = buildOgData(req, tenant, slug);
+          console.log(`[OG-Bot-MW] Serving bot OG for ${slug} - Title: ${ogTitle}`);
+          const html = generateOgHtml(ogTitle, ogDescription, ogImage, canonicalUrl);
+          res.set("Content-Type", "text/html; charset=utf-8");
+          res.set("Cache-Control", "no-cache, no-store, must-revalidate");
+          return res.status(200).send(html);
+        }
+
+        console.log(`[OG-Bot-MW] Serving default OG for path=${req.path}, host=${host}`);
+        const defaultHtml = generateOgHtml(
+          "SmartCatalog — Умный каталог для вашего бизнеса",
+          "Создайте красивый онлайн-каталог товаров, управляйте заказами через WhatsApp, используйте AI-ассистента для продаж",
+          "",
+          "https://botfactory.kz"
+        );
+        res.set("Content-Type", "text/html; charset=utf-8");
+        res.set("Cache-Control", "no-cache, no-store, must-revalidate");
+        return res.status(200).send(defaultHtml);
+      } catch (err) {
+        console.error("[OG-Bot-MW] Error:", err);
+        next();
+      }
+    })();
+  });
+
   // ── Anti-fraud: Caddy on_demand TLS allow endpoint ──────────────────
 
   const BLOCKED_ZONES = [
