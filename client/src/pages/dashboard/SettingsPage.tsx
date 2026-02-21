@@ -892,6 +892,19 @@ export default function SettingsPage() {
                   </p>
                 </div>
 
+                <div className="space-y-2">
+                  <Label htmlFor="notificationPhone">Номер WhatsApp для заказов</Label>
+                  <Input
+                    id="notificationPhone"
+                    placeholder="+7 (777) 123-45-67"
+                    {...form.register("notificationPhone")}
+                    data-testid="input-notification-phone"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    На этот номер покупатели будут отправлять заказы через WhatsApp
+                  </p>
+                </div>
+
                 {/* Карточка товара */}
                 <div className="space-y-3">
                   <Label className="text-base font-medium">Карточка товара</Label>

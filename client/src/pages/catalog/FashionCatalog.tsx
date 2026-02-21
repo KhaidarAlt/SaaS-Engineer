@@ -3,8 +3,6 @@ import { Link } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Heart,
-  Sparkles,
-  Ruler,
   X,
   Package,
   Flame,
@@ -15,18 +13,10 @@ import {
   Home,
   ShoppingBag,
   ChevronRight,
-  Shirt,
-  Palette,
-  Wand2,
+  Phone,
+  MapPin,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-} from "@/components/ui/sheet";
 import { useCart } from "@/contexts/CartContext";
 import { useToast } from "@/hooks/use-toast";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -224,8 +214,6 @@ function GridProductCard({
   isFavorite,
   onToggleFavorite,
   onQuickAddToCart,
-  onOpenSizes,
-  onOpenStylist,
   index,
 }: {
   product: any;
@@ -233,8 +221,6 @@ function GridProductCard({
   isFavorite: boolean;
   onToggleFavorite: (id: string) => void;
   onQuickAddToCart: (product: any) => void;
-  onOpenSizes: (product: any) => void;
-  onOpenStylist: (product: any) => void;
   index: number;
 }) {
   const [imgLoaded, setImgLoaded] = useState(false);
@@ -435,25 +421,8 @@ function GridProductCard({
               <Flame className="h-3 w-3 text-rose-400/60" />
               {viewers}
             </span>
-          </div>
-
-          <div className="flex items-center justify-between pt-1.5 border-t border-white/[0.05]">
-            <div className="flex items-center gap-0.5">
-              <button onClick={handleFavorite} className="p-1.5 rounded-full hover:bg-white/10 transition-colors" data-testid={`button-favorite-grid-${product.id}`}>
-                <Heart className={`h-4 w-4 transition-all ${isFavorite ? "text-rose-500 fill-rose-500" : "text-white/50 hover:text-white/80"}`} />
-              </button>
-              <button onClick={handleAddCart} className="p-1.5 rounded-full hover:bg-white/10 transition-colors">
-                <ShoppingBag className={`h-4 w-4 text-white/50 hover:text-white/80 transition-all`} style={bagAnim ? { animation: "bagPulse 0.4s ease-in-out" } : undefined} />
-              </button>
-              <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); onOpenStylist(product); }} className="p-1.5 rounded-full hover:bg-white/10 transition-colors" data-testid={`button-stylist-grid-${product.id}`}>
-                <Sparkles className="h-4 w-4 text-white/50 hover:text-violet-400 transition-colors" />
-              </button>
-              <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); onOpenSizes(product); }} className="p-1.5 rounded-full hover:bg-white/10 transition-colors" data-testid={`button-sizes-grid-${product.id}`}>
-                <Ruler className="h-4 w-4 text-white/50 hover:text-white/80 transition-colors" />
-              </button>
-            </div>
-            <button onClick={handleShare} className="p-1.5 rounded-full hover:bg-white/10 transition-colors" data-testid={`button-share-${product.id}`}>
-              <Share2 className="h-4 w-4 text-white/50 hover:text-white/80 transition-colors" />
+            <button onClick={handleShare} className="ml-auto p-0.5 hover:text-white/60 transition-colors" data-testid={`button-share-${product.id}`}>
+              <Share2 className="h-3 w-3" />
             </button>
           </div>
         </div>
@@ -544,16 +513,10 @@ export default function FashionCatalog({
   const { toggleFavorite, isFavorite, count: favCount } = useFavorites(slug);
 
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const [sizeSheetOpen, setSizeSheetOpen] = useState(false);
-  const [activeProduct, setActiveProduct] = useState<any | null>(null);
-  const [selectedSize, setSelectedSize] = useState<string | null>(null);
-  const [selectedColor, setSelectedColor] = useState<string | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
-  const [stylistSheetOpen, setStylistSheetOpen] = useState(false);
-  const [stylistProduct, setStylistProduct] = useState<any | null>(null);
   const [viewMode, setViewMode] = useState<'feed' | 'grid'>(() => {
     try {
       const saved = localStorage.getItem(`fashion_view_${slug}`);
@@ -623,46 +586,7 @@ export default function FashionCatalog({
     setCurrentIndex(idx);
   }, []);
 
-  const openSizeSheet = useCallback((product: any) => {
-    setActiveProduct(product);
-    setSelectedSize(null);
-    setSelectedColor(null);
-    setSizeSheetOpen(true);
-  }, []);
-
-  const openStylistSheet = useCallback((product: any) => {
-    setStylistProduct(product);
-    setStylistSheetOpen(true);
-  }, []);
-
-  const handleAddToCart = useCallback(() => {
-    if (!activeProduct) return;
-    if (activeProduct.sizes && activeProduct.sizes.length > 0 && !selectedSize) {
-      toast({ title: "Выберите размер", description: "Для добавления в корзину необходимо выбрать размер", variant: "destructive" });
-      return;
-    }
-    const productToAdd = { ...activeProduct, price: activeProduct.computedPrice || activeProduct.price };
-    addItem(productToAdd);
-    toast({
-      title: "Добавлено в корзину",
-      description: (
-        <div className="flex items-center justify-between gap-4">
-          <span className="truncate">{activeProduct.name}{selectedSize ? ` (${selectedSize})` : ""}{selectedColor ? ` — ${selectedColor}` : ""}</span>
-          <a href={`${basePath}/cart`} className="shrink-0 text-primary font-medium hover:underline">Оформить</a>
-        </div>
-      ),
-    });
-    setSizeSheetOpen(false);
-    setActiveProduct(null);
-    setSelectedSize(null);
-    setSelectedColor(null);
-  }, [activeProduct, selectedSize, selectedColor, addItem, toast, basePath]);
-
   const handleQuickAddToCart = useCallback((product: any) => {
-    if (product.sizes && product.sizes.length > 0) {
-      openSizeSheet(product);
-      return;
-    }
     const productToAdd = { ...product, price: product.computedPrice || product.price };
     addItem(productToAdd);
     toast({
@@ -674,19 +598,7 @@ export default function FashionCatalog({
         </div>
       ),
     });
-  }, [addItem, toast, basePath, openSizeSheet]);
-
-  const getAvailableColors = useCallback(() => {
-    if (!activeProduct) return [];
-    if (!selectedSize || !activeProduct.sizeColorStock) {
-      return activeProduct.colors || [];
-    }
-    const availableHexes = activeProduct.sizeColorStock
-      .filter((sc: any) => sc.size === selectedSize && sc.qty > 0)
-      .map((sc: any) => sc.colorHex || sc.color);
-    if (availableHexes.length === 0) return activeProduct.colors || [];
-    return (activeProduct.colors || []).filter((c: any) => availableHexes.includes(c.hex));
-  }, [activeProduct, selectedSize]);
+  }, [addItem, toast, basePath]);
 
   if (filteredProducts.length === 0 && !searchQuery && !selectedCategory) {
     return (
@@ -710,21 +622,39 @@ export default function FashionCatalog({
 
   const headerContent = (
     <>
-      <header className="sticky top-0 z-50 flex items-center justify-between gap-2 px-4 bg-black/80 backdrop-blur-xl border-b border-white/[0.04]" style={{ height: HEADER_HEIGHT }}>
-        <div className="flex items-center gap-2.5">
-          {tenant?.logoUrl && (
-            <img src={resolveImageUrl(tenant.logoUrl)} alt={tenant.name} className="h-8 w-8 rounded-full object-cover border border-white/20 shadow-lg shadow-rose-500/10" data-testid="img-tenant-logo" />
-          )}
-          <span className="font-bold text-white truncate text-[15px]" data-testid="text-tenant-name">
-            {tenant?.name || slug}
-          </span>
+      <header className="sticky top-0 z-50 bg-black/80 backdrop-blur-xl border-b border-white/[0.04]">
+        <div className="flex items-center justify-between gap-2 px-4" style={{ height: HEADER_HEIGHT }}>
+          <div className="flex items-center gap-2.5">
+            {tenant?.logoUrl && (
+              <img src={resolveImageUrl(tenant.logoUrl)} alt={tenant.name} className="h-8 w-8 rounded-full object-cover border border-white/20 shadow-lg shadow-rose-500/10" data-testid="img-tenant-logo" />
+            )}
+            <span className="font-bold text-white truncate text-[15px]" data-testid="text-tenant-name">
+              {tenant?.name || slug}
+            </span>
+          </div>
+          <div className="flex items-center gap-0.5">
+            <button onClick={toggleViewMode} className="p-2 rounded-xl hover:bg-white/10 transition-colors" data-testid="button-toggle-view" title={viewMode === 'feed' ? 'Сетка' : 'Лента'}>
+              {viewMode === 'feed' ? <LayoutGrid className="h-5 w-5 text-white/70" /> : <Rows3 className="h-5 w-5 text-white/70" />}
+            </button>
+            <ThemeToggle />
+          </div>
         </div>
-        <div className="flex items-center gap-0.5">
-          <button onClick={toggleViewMode} className="p-2 rounded-xl hover:bg-white/10 transition-colors" data-testid="button-toggle-view" title={viewMode === 'feed' ? 'Сетка' : 'Лента'}>
-            {viewMode === 'feed' ? <LayoutGrid className="h-5 w-5 text-white/70" /> : <Rows3 className="h-5 w-5 text-white/70" />}
-          </button>
-          <ThemeToggle />
-        </div>
+        {(tenant?.contactPhone || tenant?.address) && (
+          <div className="flex items-center gap-3 px-4 pb-2 text-[11px] text-white/50 overflow-x-auto">
+            {tenant.contactPhone && (
+              <a href={`tel:${tenant.contactPhone}`} className="flex items-center gap-1 shrink-0 hover:text-white/70 transition-colors" data-testid="link-header-phone">
+                <Phone className="h-3 w-3" />
+                <span>{tenant.contactPhone}</span>
+              </a>
+            )}
+            {tenant.address && (
+              <span className="flex items-center gap-1 shrink-0" data-testid="text-header-address">
+                <MapPin className="h-3 w-3" />
+                <span className="truncate max-w-[200px]">{tenant.address}</span>
+              </span>
+            )}
+          </div>
+        )}
       </header>
 
       <AnimatePresence>
@@ -794,177 +724,6 @@ export default function FashionCatalog({
     </>
   );
 
-  const sizeSheet = (
-    <Sheet open={sizeSheetOpen} onOpenChange={setSizeSheetOpen}>
-      <SheetContent side="bottom" className="rounded-t-3xl max-w-md mx-auto bg-neutral-950 border-white/[0.06]">
-        <SheetHeader>
-          <SheetTitle className="text-white">{activeProduct?.name || "Выберите размер"}</SheetTitle>
-          <SheetDescription className="text-white/50">Выберите размер и цвет для добавления в корзину</SheetDescription>
-        </SheetHeader>
-        {activeProduct && (
-          <div className="mt-4 space-y-6">
-            <div className="flex items-center gap-3">
-              {activeProduct.mainImageUrl && (
-                <img src={resolveImageUrl(activeProduct.mainImageUrl)} alt={activeProduct.name} className="w-16 h-16 rounded-xl object-cover border border-white/10" />
-              )}
-              <div>
-                <p className="font-semibold text-white">{activeProduct.name}</p>
-                <div className="flex items-center gap-2">
-                  {activeProduct.hasDiscount ? (
-                    <>
-                      <span className="text-lg font-bold bg-gradient-to-r from-rose-400 to-fuchsia-400 bg-clip-text text-transparent">{formatPrice(activeProduct.computedPrice)}</span>
-                      <span className="text-sm text-white/30 line-through">{formatPrice(activeProduct.originalPrice)}</span>
-                    </>
-                  ) : (
-                    <span className="text-lg font-bold text-white">{formatPrice(activeProduct.computedPrice || activeProduct.price)}</span>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {activeProduct.sizes && activeProduct.sizes.length > 0 && (
-              <div>
-                <p className="text-sm font-medium text-white/80 mb-2">Размер</p>
-                <div className="flex flex-wrap gap-2">
-                  {activeProduct.sizes.map((s: { size: string; qty: number }) => {
-                    const isAvailable = activeProduct.alwaysInStock || s.qty > 0;
-                    const isSelected = selectedSize === s.size;
-                    return (
-                      <button
-                        key={s.size}
-                        disabled={!isAvailable}
-                        onClick={() => { setSelectedSize(isSelected ? null : s.size); setSelectedColor(null); }}
-                        className={`min-w-[48px] px-3 py-2 rounded-xl text-sm font-medium transition-all border ${
-                          isSelected
-                            ? "bg-gradient-to-r from-rose-500 to-fuchsia-500 text-white border-transparent shadow-lg shadow-rose-500/25"
-                            : isAvailable
-                              ? "bg-white/10 text-white/80 border-white/[0.06] hover:bg-white/15"
-                              : "bg-white/5 text-white/20 border-transparent cursor-not-allowed line-through"
-                        }`}
-                        data-testid={`button-size-${s.size}`}
-                      >
-                        {s.size}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {activeProduct.colors && activeProduct.colors.length > 0 && (
-              <div>
-                <p className="text-sm font-medium text-white/80 mb-2">
-                  Цвет {selectedColor && <span className="ml-2 text-white/40 font-normal">— {selectedColor}</span>}
-                </p>
-                <div className="flex flex-wrap gap-3">
-                  {getAvailableColors().map((c: { name: string; hex: string }) => {
-                    const isSelected = selectedColor === c.name;
-                    return (
-                      <button
-                        key={c.hex}
-                        onClick={() => setSelectedColor(isSelected ? null : c.name)}
-                        className={`w-9 h-9 rounded-full border-2 transition-all flex items-center justify-center ${isSelected ? "border-rose-400 scale-110 shadow-lg shadow-rose-500/20" : "border-transparent"}`}
-                        title={c.name}
-                        data-testid={`button-color-${c.name}`}
-                      >
-                        <span className="w-7 h-7 rounded-full block border border-white/10" style={{ backgroundColor: c.hex }} />
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            <Button
-              className="w-full bg-gradient-to-r from-rose-500 to-fuchsia-500 hover:from-rose-600 hover:to-fuchsia-600 text-white font-semibold shadow-lg shadow-rose-500/25 border-0"
-              size="lg"
-              onClick={handleAddToCart}
-              disabled={activeProduct.sizes && activeProduct.sizes.length > 0 && !selectedSize}
-              data-testid="button-add-to-cart"
-            >
-              <ShoppingBag className="h-4 w-4 mr-2" />
-              В корзину
-            </Button>
-          </div>
-        )}
-      </SheetContent>
-    </Sheet>
-  );
-
-  const getStylistTips = (product: any) => {
-    const tips: { icon: any; title: string; text: string }[] = [];
-    if (product.colors && product.colors.length > 0) {
-      const colorNames = product.colors.slice(0, 3).map((c: any) => c.name).join(", ");
-      tips.push({ icon: Palette, title: "Цветовые сочетания", text: `${colorNames} — отлично сочетаются с нейтральными тонами: белым, бежевым и серым.` });
-    }
-    if (product.tags?.includes("new")) {
-      tips.push({ icon: Sparkles, title: "Трендовая модель", text: "Эта модель в тренде! Сочетайте с минималистичными аксессуарами для актуального образа." });
-    }
-    if (product.tags?.includes("hit")) {
-      tips.push({ icon: Flame, title: "Выбор покупателей", text: "Бестселлер сезона. Универсальная модель, которая подходит для любого случая." });
-    }
-    tips.push({ icon: Shirt, title: "Совет стилиста", text: "Для создания стильного повседневного образа сочетайте с джинсами или брюками свободного кроя." });
-    tips.push({ icon: Wand2, title: "Как носить", text: "Дополните образ аксессуарами — сумкой в тон или контрастным шарфом для эффектного акцента." });
-    return tips;
-  };
-
-  const stylistSheet = (
-    <Sheet open={stylistSheetOpen} onOpenChange={setStylistSheetOpen}>
-      <SheetContent side="bottom" className="rounded-t-3xl max-w-md mx-auto bg-neutral-950 border-white/[0.06]">
-        <SheetHeader>
-          <SheetTitle className="text-white flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-violet-400" />
-            ИИ Стилист
-          </SheetTitle>
-          <SheetDescription className="text-white/50">Рекомендации по стилю для этого товара</SheetDescription>
-        </SheetHeader>
-        {stylistProduct && (
-          <div className="mt-4 space-y-5">
-            <div className="flex items-center gap-3">
-              {stylistProduct.mainImageUrl && (
-                <img src={resolveImageUrl(stylistProduct.mainImageUrl)} alt={stylistProduct.name} className="w-16 h-20 rounded-xl object-cover border border-white/10" />
-              )}
-              <div>
-                <p className="font-semibold text-white text-sm">{stylistProduct.name}</p>
-                {stylistProduct.brand && <p className="text-white/40 text-xs">{stylistProduct.brand}</p>}
-                <p className="text-sm font-bold mt-1 bg-gradient-to-r from-rose-400 to-fuchsia-400 bg-clip-text text-transparent">
-                  {formatPrice(stylistProduct.computedPrice || stylistProduct.price)}
-                </p>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              {getStylistTips(stylistProduct).map((tip, i) => {
-                const IconComp = tip.icon;
-                return (
-                  <div key={i} className="flex gap-3 p-3 rounded-xl bg-white/5 border border-white/[0.06]">
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-500/20 to-fuchsia-500/20 flex items-center justify-center shrink-0">
-                      <IconComp className="h-4 w-4 text-violet-400" />
-                    </div>
-                    <div>
-                      <p className="text-white text-xs font-semibold mb-0.5">{tip.title}</p>
-                      <p className="text-white/50 text-xs leading-relaxed">{tip.text}</p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            <Button
-              className="w-full bg-gradient-to-r from-violet-500 to-fuchsia-500 hover:from-violet-600 hover:to-fuchsia-600 text-white font-semibold shadow-lg shadow-violet-500/25 border-0"
-              size="lg"
-              onClick={() => { handleQuickAddToCart(stylistProduct); setStylistSheetOpen(false); }}
-              data-testid="button-stylist-add-cart"
-            >
-              <ShoppingBag className="h-4 w-4 mr-2" />
-              Добавить в корзину
-            </Button>
-          </div>
-        )}
-      </SheetContent>
-    </Sheet>
-  );
-
   if (viewMode === 'grid') {
     const showCarousels = !selectedCategory && !searchQuery;
     return (
@@ -1029,8 +788,6 @@ export default function FashionCatalog({
                     isFavorite={isFavorite(product.id)}
                     onToggleFavorite={toggleFavorite}
                     onQuickAddToCart={handleQuickAddToCart}
-                    onOpenSizes={openSizeSheet}
-                    onOpenStylist={openStylistSheet}
                     index={index}
                   />
                 ))}
@@ -1038,9 +795,6 @@ export default function FashionCatalog({
             </div>
           )}
         </div>
-
-        {sizeSheet}
-        {stylistSheet}
 
         <BottomNavBar
           basePath={basePath}
@@ -1144,20 +898,6 @@ export default function FashionCatalog({
                       <Heart className={`h-5 w-5 transition-all ${favorite ? "text-rose-500 fill-rose-500" : "text-white"}`} style={favorite ? { animation: "heartBounce 0.6s ease-in-out" } : undefined} />
                     </div>
                   </button>
-
-                  <button onClick={() => openStylistSheet(product)} className="flex flex-col items-center gap-1" data-testid="button-ai-stylist">
-                    <div className="w-12 h-12 rounded-full bg-white/10 backdrop-blur-xl flex items-center justify-center border border-white/[0.08]">
-                      <Sparkles className="h-5 w-5 text-white" />
-                    </div>
-                    <span className="text-white/70 text-[10px] font-medium">Стилист</span>
-                  </button>
-
-                  <button onClick={() => openSizeSheet(product)} className="flex flex-col items-center gap-1" data-testid={`button-sizes-${product.id}`}>
-                    <div className="w-12 h-12 rounded-full bg-white/10 backdrop-blur-xl flex items-center justify-center border border-white/[0.08]">
-                      <Ruler className="h-5 w-5 text-white" />
-                    </div>
-                    <span className="text-white/70 text-[10px] font-medium">Размеры</span>
-                  </button>
                 </div>
 
                 <div className="absolute bottom-0 left-0 right-16 p-4 z-10">
@@ -1208,9 +948,6 @@ export default function FashionCatalog({
           })
         )}
       </div>
-
-      {sizeSheet}
-      {stylistSheet}
 
       <BottomNavBar
         basePath={basePath}
