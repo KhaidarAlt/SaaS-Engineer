@@ -649,7 +649,7 @@ export default function FoodCatalog({
               <h2 className="text-xl font-bold text-foreground mb-4" data-testid={`text-category-${sectionId}`}>
                 {cat ? cat.name : "Другое"}
               </h2>
-              <div className="grid grid-cols-2 gap-3 sm:gap-4">
+              <div className={`grid gap-3 sm:gap-4 ${sectionProducts.length === 1 ? "grid-cols-1" : "grid-cols-2"}`}>
                 {sectionProducts.map((product: any) => (
                   <DishCard
                     key={product.id}
