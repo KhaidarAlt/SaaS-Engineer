@@ -165,7 +165,9 @@ function handleRequest(req, res) {
   const clientIp = req.headers["x-forwarded-for"] || req.socket.remoteAddress || "";
   const bot = isBot(ua);
 
-  console.log(`[REQ] ${clientIp} | ${host}${path} | UA="${ua.substring(0, 100)}" | -> ${bot ? "BOT" : "PROXY"}`);
+  const isAssetReq = /^\/(objects\/uploads|assets|favicon|images|api)\//i.test(path) || /\.(png|jpg|jpeg|gif|webp|svg|ico|css|js|woff2?|ttf|mp4|pdf)(\?|$)/i.test(path);
+  const routeLabel = bot ? (isAssetReq ? "BOT-ASSET-PROXY" : "BOT") : "PROXY";
+  console.log(`[REQ] ${clientIp} | ${host}${path} | UA="${ua.substring(0, 100)}" | -> ${routeLabel}`);
 
   if (path === "/health") {
     res.writeHead(200, { "Content-Type": "text/plain" });
@@ -181,7 +183,7 @@ function handleRequest(req, res) {
     return;
   }
 
-  if (bot) {
+  if (bot && !isAssetReq) {
     const slug = extractSlug(host, path);
     serveBotOg(req, res, slug, host);
     return;
