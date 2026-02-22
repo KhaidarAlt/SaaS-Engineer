@@ -1,11 +1,48 @@
 const http = require("http");
 const https = require("https");
+const httpProxy = require("http-proxy");
 
 const PORT = process.env.PORT || 3001;
 const REPLIT_HOST = process.env.REPLIT_HOST || "saa-s-engineer--m528dpa.replit.app";
 const CACHE_TTL = 5 * 60 * 1000;
 
 const cache = new Map();
+
+const BOT_REGEX = /facebookexternalhit|Facebot|WhatsApp|TelegramBot|Twitterbot|LinkedInBot|Slackbot|vkShare|Googlebot|YandexBot|bingbot|Discordbot/i;
+
+const proxy = httpProxy.createProxyServer({
+  target: `https://${REPLIT_HOST}`,
+  changeOrigin: true,
+  secure: true,
+  followRedirects: false,
+  proxyTimeout: 30000,
+  timeout: 30000,
+  headers: {
+    Host: REPLIT_HOST,
+  },
+});
+
+proxy.on("proxyReq", (proxyReq, req) => {
+  proxyReq.setHeader("Host", REPLIT_HOST);
+  proxyReq.setHeader("X-Forwarded-Host", req.headers["host"] || "");
+  proxyReq.setHeader("X-Forwarded-Proto", "https");
+  const clientIp = req.headers["x-forwarded-for"] || req.socket.remoteAddress || "";
+  proxyReq.setHeader("X-Forwarded-For", clientIp);
+});
+
+proxy.on("error", (err, req, res) => {
+  const host = req.headers["host"] || "";
+  const ua = (req.headers["user-agent"] || "").substring(0, 80);
+  console.error(`[PROXY-ERR] ${host}${req.url} UA="${ua}" err=${err.message}`);
+  if (!res.headersSent) {
+    res.writeHead(502, { "Content-Type": "text/plain" });
+    res.end("Bad Gateway");
+  }
+});
+
+function isBot(userAgent) {
+  return BOT_REGEX.test(userAgent || "");
+}
 
 function escapeHtml(str) {
   if (!str) return "";
@@ -75,28 +112,7 @@ function resolveImageUrl(imageRaw, slug) {
   return `https://${slug}.botfactory.kz${imageRaw.startsWith("/") ? "" : "/"}${imageRaw}`;
 }
 
-async function handleRequest(req, res) {
-  const host = req.headers["host"] || "";
-  const path = req.url || "/";
-
-  console.log(`[OG-Proxy] ${req.method} ${host}${path} ua=${(req.headers["user-agent"] || "").substring(0, 60)}`);
-
-  if (path === "/robots.txt") {
-    res.writeHead(200, { "Content-Type": "text/plain" });
-    res.end(
-      "User-agent: *\nAllow: /\n\nUser-agent: facebookexternalhit\nAllow: /\n\nUser-agent: WhatsApp\nAllow: /\n\nUser-agent: TelegramBot\nAllow: /\n"
-    );
-    return;
-  }
-
-  if (path === "/health") {
-    res.writeHead(200, { "Content-Type": "text/plain" });
-    res.end("ok");
-    return;
-  }
-
-  const slug = extractSlug(host, path);
-
+async function serveBotOg(req, res, slug, host) {
   if (!slug) {
     const html = generateOgHtml(
       "SmartCatalog — Умный каталог для вашего бизнеса",
@@ -121,13 +137,12 @@ async function handleRequest(req, res) {
 
     const tenant = catalogData.tenant || catalogData;
     const title = tenant.ogTitle || tenant.name || slug;
-    const description =
-      tenant.ogDescription || tenant.description || "Онлайн-каталог товаров";
+    const description = tenant.ogDescription || tenant.description || "Онлайн-каталог товаров";
     const imageRaw = tenant.ogImageUrl || tenant.logoUrl || "";
     const image = resolveImageUrl(imageRaw, slug);
     const canonicalUrl = `https://${slug}.botfactory.kz`;
 
-    console.log(`[OG-Proxy] Serving OG for ${slug}: title="${title}", image=${image || "none"}`);
+    console.log(`[BOT-OG] slug=${slug} title="${title}" image=${image || "none"}`);
 
     const html = generateOgHtml(title, description, image, canonicalUrl);
     res.writeHead(200, {
@@ -136,19 +151,47 @@ async function handleRequest(req, res) {
     });
     res.end(html);
   } catch (err) {
-    console.error(`[OG-Proxy] Error fetching catalog for ${slug}:`, err.message);
-    const html = generateOgHtml(
-      slug,
-      "Онлайн-каталог товаров",
-      "",
-      `https://${slug}.botfactory.kz`
-    );
+    console.error(`[BOT-OG] Error for ${slug}:`, err.message);
+    const html = generateOgHtml(slug, "Онлайн-каталог товаров", "", `https://${slug}.botfactory.kz`);
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
     res.end(html);
   }
 }
 
+function handleRequest(req, res) {
+  const host = req.headers["host"] || "";
+  const path = req.url || "/";
+  const ua = req.headers["user-agent"] || "";
+  const clientIp = req.headers["x-forwarded-for"] || req.socket.remoteAddress || "";
+  const bot = isBot(ua);
+
+  console.log(`[REQ] ${clientIp} | ${host}${path} | UA="${ua.substring(0, 100)}" | -> ${bot ? "BOT" : "PROXY"}`);
+
+  if (path === "/health") {
+    res.writeHead(200, { "Content-Type": "text/plain" });
+    res.end("ok");
+    return;
+  }
+
+  if (path === "/robots.txt") {
+    res.writeHead(200, { "Content-Type": "text/plain" });
+    res.end(
+      "User-agent: *\nAllow: /\n\nUser-agent: facebookexternalhit\nAllow: /\n\nUser-agent: WhatsApp\nAllow: /\n\nUser-agent: TelegramBot\nAllow: /\n"
+    );
+    return;
+  }
+
+  if (bot) {
+    const slug = extractSlug(host, path);
+    serveBotOg(req, res, slug, host);
+    return;
+  }
+
+  proxy.web(req, res);
+}
+
 const server = http.createServer(handleRequest);
-server.listen(PORT, "127.0.0.1", () => {
-  console.log(`[OG-Proxy] Listening on 127.0.0.1:${PORT}`);
+server.listen(PORT, "0.0.0.0", () => {
+  console.log(`[OG-Proxy] Listening on 0.0.0.0:${PORT}`);
+  console.log(`[OG-Proxy] Bots -> OG HTML | Users -> ${REPLIT_HOST}`);
 });
