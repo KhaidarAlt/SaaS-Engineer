@@ -1,0 +1,420 @@
+[
+  {
+    "action": "skip",
+    "clientASNDescription": "BEGET-AS",
+    "clientAsn": "198610",
+    "clientCountryName": "RU",
+    "clientIP": "45.90.35.9",
+    "clientRefererHost": "",
+    "clientRequestHTTPHost": "megashop.botfactory.kz",
+    "clientRequestHTTPMethodName": "GET",
+    "clientRequestHTTPProtocol": "HTTP/2",
+    "clientRequestPath": "/",
+    "clientRequestQuery": "?fb_test=1000",
+    "contentScanObjTypes": [],
+    "datetime": "2026-02-22T11:06:24Z",
+    "ref": "",
+    "rayName": "9d1e038f9e0870d2",
+    "ruleId": "4374abc4535446a590cbc4850c928e76",
+    "description": "Allow Facebook crawler",
+    "rulesetId": "ae811fe494724644852c8e36bf3c82ad",
+    "source": "firewallCustom",
+    "userAgent": "facebookexternalhit/1.1",
+    "matchIndex": 0,
+    "metadata": [
+      {
+        "key": "ruleset_version",
+        "value": "2"
+      },
+      {
+        "key": "version",
+        "value": "2"
+      },
+      {
+        "key": "type",
+        "value": "customer"
+      }
+    ],
+    "sampleInterval": 1
+  },
+  {
+    "action": "skip",
+    "clientASNDescription": "BEGET-AS",
+    "clientAsn": "198610",
+    "clientCountryName": "RU",
+    "clientIP": "45.90.35.9",
+    "clientRefererHost": "",
+    "clientRequestHTTPHost": "megashop.botfactory.kz",
+    "clientRequestHTTPMethodName": "GET",
+    "clientRequestHTTPProtocol": "HTTP/2",
+    "clientRequestPath": "/",
+    "clientRequestQuery": "?fb_test=999",
+    "contentScanObjTypes": [],
+    "datetime": "2026-02-22T11:03:28Z",
+    "ref": "",
+    "rayName": "9d1dff420fcd70da",
+    "ruleId": "4374abc4535446a590cbc4850c928e76",
+    "description": "Allow Facebook crawler",
+    "rulesetId": "ae811fe494724644852c8e36bf3c82ad",
+    "source": "firewallCustom",
+    "userAgent": "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)",
+    "matchIndex": 0,
+    "metadata": [
+      {
+        "key": "ruleset_version",
+        "value": "2"
+      },
+      {
+        "key": "version",
+        "value": "2"
+      },
+      {
+        "key": "type",
+        "value": "customer"
+      }
+    ],
+    "sampleInterval": 1
+  },
+  {
+    "action": "skip",
+    "clientASNDescription": "FACEBOOK - Facebook, Inc.",
+    "clientAsn": "32934",
+    "clientCountryName": "IE",
+    "clientIP": "2a03:2880:31ff:5b::",
+    "clientRefererHost": "",
+    "clientRequestHTTPHost": "megashop.botfactory.kz",
+    "clientRequestHTTPMethodName": "GET",
+    "clientRequestHTTPProtocol": "HTTP/2",
+    "clientRequestPath": "/",
+    "clientRequestQuery": "?fb_test=999",
+    "contentScanObjTypes": [],
+    "datetime": "2026-02-22T10:59:53Z",
+    "ref": "",
+    "rayName": "9d1dfa011c0d4913",
+    "ruleId": "4374abc4535446a590cbc4850c928e76",
+    "description": "Allow Facebook crawler",
+    "rulesetId": "ae811fe494724644852c8e36bf3c82ad",
+    "source": "firewallCustom",
+    "userAgent": "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)",
+    "matchIndex": 0,
+    "metadata": [
+      {
+        "key": "ruleset_version",
+        "value": "2"
+      },
+      {
+        "key": "version",
+        "value": "2"
+      },
+      {
+        "key": "type",
+        "value": "customer"
+      }
+    ],
+    "sampleInterval": 1
+  },
+  {
+    "action": "skip",
+    "clientASNDescription": "FACEBOOK - Facebook, Inc.",
+    "clientAsn": "32934",
+    "clientCountryName": "US",
+    "clientIP": "2a03:2880:13ff:73::",
+    "clientRefererHost": "",
+    "clientRequestHTTPHost": "megashop.botfactory.kz",
+    "clientRequestHTTPMethodName": "GET",
+    "clientRequestHTTPProtocol": "HTTP/2",
+    "clientRequestPath": "/",
+    "clientRequestQuery": "?fb_test=999",
+    "contentScanObjTypes": [],
+    "datetime": "2026-02-22T10:59:51Z",
+    "ref": "",
+    "rayName": "9d1df9f95d632d2f",
+    "ruleId": "4374abc4535446a590cbc4850c928e76",
+    "description": "Allow Facebook crawler",
+    "rulesetId": "ae811fe494724644852c8e36bf3c82ad",
+    "source": "firewallCustom",
+    "userAgent": "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)",
+    "matchIndex": 0,
+    "metadata": [
+      {
+        "key": "ruleset_version",
+        "value": "2"
+      },
+      {
+        "key": "version",
+        "value": "2"
+      },
+      {
+        "key": "type",
+        "value": "customer"
+      }
+    ],
+    "sampleInterval": 1
+  },
+  {
+    "action": "skip",
+    "clientASNDescription": "FACEBOOK - Facebook, Inc.",
+    "clientAsn": "32934",
+    "clientCountryName": "IE",
+    "clientIP": "2a03:2880:31ff:20::",
+    "clientRefererHost": "",
+    "clientRequestHTTPHost": "megashop.botfactory.kz",
+    "clientRequestHTTPMethodName": "GET",
+    "clientRequestHTTPProtocol": "HTTP/2",
+    "clientRequestPath": "/",
+    "clientRequestQuery": "?fb_test=456",
+    "contentScanObjTypes": [],
+    "datetime": "2026-02-22T10:33:45Z",
+    "ref": "",
+    "rayName": "9d1dd3bab969fe0a",
+    "ruleId": "4374abc4535446a590cbc4850c928e76",
+    "description": "Allow Facebook crawler",
+    "rulesetId": "ae811fe494724644852c8e36bf3c82ad",
+    "source": "firewallCustom",
+    "userAgent": "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)",
+    "matchIndex": 0,
+    "metadata": [
+      {
+        "key": "ruleset_version",
+        "value": "2"
+      },
+      {
+        "key": "version",
+        "value": "2"
+      },
+      {
+        "key": "type",
+        "value": "customer"
+      }
+    ],
+    "sampleInterval": 1
+  },
+  {
+    "action": "skip",
+    "clientASNDescription": "FACEBOOK - Facebook, Inc.",
+    "clientAsn": "32934",
+    "clientCountryName": "US",
+    "clientIP": "2a03:2880:22ff:8::",
+    "clientRefererHost": "",
+    "clientRequestHTTPHost": "megashop.botfactory.kz",
+    "clientRequestHTTPMethodName": "GET",
+    "clientRequestHTTPProtocol": "HTTP/2",
+    "clientRequestPath": "/",
+    "clientRequestQuery": "?fb_test=456",
+    "contentScanObjTypes": [],
+    "datetime": "2026-02-22T10:33:30Z",
+    "ref": "",
+    "rayName": "9d1dd35aaed11ffa",
+    "ruleId": "4374abc4535446a590cbc4850c928e76",
+    "description": "Allow Facebook crawler",
+    "rulesetId": "ae811fe494724644852c8e36bf3c82ad",
+    "source": "firewallCustom",
+    "userAgent": "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)",
+    "matchIndex": 0,
+    "metadata": [
+      {
+        "key": "ruleset_version",
+        "value": "2"
+      },
+      {
+        "key": "version",
+        "value": "2"
+      },
+      {
+        "key": "type",
+        "value": "customer"
+      }
+    ],
+    "sampleInterval": 1
+  },
+  {
+    "action": "skip",
+    "clientASNDescription": "FACEBOOK - Facebook, Inc.",
+    "clientAsn": "32934",
+    "clientCountryName": "US",
+    "clientIP": "2a03:2880:16ff:a::",
+    "clientRefererHost": "",
+    "clientRequestHTTPHost": "megashop.botfactory.kz",
+    "clientRequestHTTPMethodName": "GET",
+    "clientRequestHTTPProtocol": "HTTP/2",
+    "clientRequestPath": "/",
+    "clientRequestQuery": "",
+    "contentScanObjTypes": [],
+    "datetime": "2026-02-22T10:33:12Z",
+    "ref": "",
+    "rayName": "9d1dd2ecb9c15e93",
+    "ruleId": "4374abc4535446a590cbc4850c928e76",
+    "description": "Allow Facebook crawler",
+    "rulesetId": "ae811fe494724644852c8e36bf3c82ad",
+    "source": "firewallCustom",
+    "userAgent": "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)",
+    "matchIndex": 0,
+    "metadata": [
+      {
+        "key": "ruleset_version",
+        "value": "2"
+      },
+      {
+        "key": "version",
+        "value": "2"
+      },
+      {
+        "key": "type",
+        "value": "customer"
+      }
+    ],
+    "sampleInterval": 1
+  },
+  {
+    "action": "skip",
+    "clientASNDescription": "FACEBOOK - Facebook, Inc.",
+    "clientAsn": "32934",
+    "clientCountryName": "IE",
+    "clientIP": "2a03:2880:31ff:16::",
+    "clientRefererHost": "",
+    "clientRequestHTTPHost": "megashop.botfactory.kz",
+    "clientRequestHTTPMethodName": "GET",
+    "clientRequestHTTPProtocol": "HTTP/2",
+    "clientRequestPath": "/robots.txt",
+    "clientRequestQuery": "",
+    "contentScanObjTypes": [],
+    "datetime": "2026-02-22T10:33:11Z",
+    "ref": "",
+    "rayName": "9d1dd2e5df4e954d",
+    "ruleId": "4374abc4535446a590cbc4850c928e76",
+    "description": "Allow Facebook crawler",
+    "rulesetId": "ae811fe494724644852c8e36bf3c82ad",
+    "source": "firewallCustom",
+    "userAgent": "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)",
+    "matchIndex": 0,
+    "metadata": [
+      {
+        "key": "ruleset_version",
+        "value": "2"
+      },
+      {
+        "key": "version",
+        "value": "2"
+      },
+      {
+        "key": "type",
+        "value": "customer"
+      }
+    ],
+    "sampleInterval": 1
+  },
+  {
+    "action": "skip",
+    "clientASNDescription": "FACEBOOK - Facebook, Inc.",
+    "clientAsn": "32934",
+    "clientCountryName": "IE",
+    "clientIP": "2a03:2880:31ff:1c::",
+    "clientRefererHost": "",
+    "clientRequestHTTPHost": "happyfood.botfactory.kz",
+    "clientRequestHTTPMethodName": "GET",
+    "clientRequestHTTPProtocol": "HTTP/2",
+    "clientRequestPath": "/robots.txt",
+    "clientRequestQuery": "",
+    "contentScanObjTypes": [],
+    "datetime": "2026-02-22T10:22:55Z",
+    "ref": "",
+    "rayName": "9d1dc3deaafe9a08",
+    "ruleId": "4374abc4535446a590cbc4850c928e76",
+    "description": "Allow Facebook crawler",
+    "rulesetId": "ae811fe494724644852c8e36bf3c82ad",
+    "source": "firewallCustom",
+    "userAgent": "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)",
+    "matchIndex": 0,
+    "metadata": [
+      {
+        "key": "ruleset_version",
+        "value": "2"
+      },
+      {
+        "key": "version",
+        "value": "2"
+      },
+      {
+        "key": "type",
+        "value": "customer"
+      }
+    ],
+    "sampleInterval": 1
+  },
+  {
+    "action": "skip",
+    "clientASNDescription": "FACEBOOK - Facebook, Inc.",
+    "clientAsn": "32934",
+    "clientCountryName": "IE",
+    "clientIP": "31.13.127.37",
+    "clientRefererHost": "",
+    "clientRequestHTTPHost": "happyfood.botfactory.kz",
+    "clientRequestHTTPMethodName": "GET",
+    "clientRequestHTTPProtocol": "HTTP/2",
+    "clientRequestPath": "/",
+    "clientRequestQuery": "",
+    "contentScanObjTypes": [],
+    "datetime": "2026-02-22T10:22:43Z",
+    "ref": "",
+    "rayName": "9d1dc3936cf5639b",
+    "ruleId": "4374abc4535446a590cbc4850c928e76",
+    "description": "Allow Facebook crawler",
+    "rulesetId": "ae811fe494724644852c8e36bf3c82ad",
+    "source": "firewallCustom",
+    "userAgent": "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)",
+    "matchIndex": 0,
+    "metadata": [
+      {
+        "key": "ruleset_version",
+        "value": "2"
+      },
+      {
+        "key": "version",
+        "value": "2"
+      },
+      {
+        "key": "type",
+        "value": "customer"
+      }
+    ],
+    "sampleInterval": 1
+  },
+  {
+    "action": "skip",
+    "clientASNDescription": "FACEBOOK - Facebook, Inc.",
+    "clientAsn": "32934",
+    "clientCountryName": "IE",
+    "clientIP": "2a03:2880:31ff:24::",
+    "clientRefererHost": "",
+    "clientRequestHTTPHost": "happyfood.botfactory.kz",
+    "clientRequestHTTPMethodName": "GET",
+    "clientRequestHTTPProtocol": "HTTP/2",
+    "clientRequestPath": "/robots.txt",
+    "clientRequestQuery": "",
+    "contentScanObjTypes": [],
+    "datetime": "2026-02-22T10:22:40Z",
+    "ref": "",
+    "rayName": "9d1dc37daf13ef40",
+    "ruleId": "4374abc4535446a590cbc4850c928e76",
+    "description": "Allow Facebook crawler",
+    "rulesetId": "ae811fe494724644852c8e36bf3c82ad",
+    "source": "firewallCustom",
+    "userAgent": "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)",
+    "matchIndex": 0,
+    "metadata": [
+      {
+        "key": "ruleset_version",
+        "value": "2"
+      },
+      {
+        "key": "version",
+        "value": "2"
+      },
+      {
+        "key": "type",
+        "value": "customer"
+      }
+    ],
+    "sampleInterval": 1
+  }
+]
