@@ -916,11 +916,7 @@ function DishCard({
   const productTags = (product.tags || []).slice(0, 3);
 
   return (
-    <motion.div
-      layout
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3 }}
+    <div
       className={`rounded-2xl overflow-hidden bg-card shadow-sm border border-border/30 flex flex-col relative ${!isInStock ? "opacity-50 pointer-events-none" : ""}`}
       data-testid={`card-dish-${product.id}`}
     >
@@ -1052,6 +1048,6 @@ function DishCard({
           </div>
         </div>
       </div>
-    </motion.div>
+    </div>
   );
 }
