@@ -700,9 +700,22 @@ export function registerGrowthRoutes(
       if (niche && typeof niche === "string") {
         conditions.push(eq(growthScenarioTemplates.niche, niche));
       }
-      const templates = conditions.length > 0
+      const raw = conditions.length > 0
         ? await db.select().from(growthScenarioTemplates).where(and(...conditions))
         : await db.select().from(growthScenarioTemplates);
+      const templates = raw.map((t: any) => {
+        const blueprint = t.messageBlueprintJson as any;
+        return {
+          id: t.id,
+          niche: t.niche,
+          scenarioType: t.key,
+          nameRu: t.title,
+          descriptionRu: t.description,
+          messageTemplate: blueprint?.text ?? "",
+          placeholders: blueprint?.placeholders ?? [],
+          createdAt: t.createdAt,
+        };
+      });
       res.json(templates);
     } catch (error) {
       res.status(500).json({ error: "Ошибка загрузки шаблонов" });
