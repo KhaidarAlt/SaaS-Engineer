@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { CheckCircle2, Loader2, Package, Layers, CreditCard, Megaphone, Sparkles } from "lucide-react";
+import { CheckCircle2, Loader2, Package, Layers, CreditCard, Megaphone, Sparkles, ArrowLeft } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Link } from "wouter";
 import type { CatalogSummary } from "../../types/aiRopTypes";
 
 const SCAN_STEPS = [
@@ -115,7 +116,7 @@ export function WowScanIntro({ onComplete, summary, isLoading, isError }: Props)
                     Не удалось загрузить данные каталога, но вы можете продолжить настройку
                   </p>
                 )}
-                <div className="pt-4">
+                <div className="pt-4 space-y-3">
                   <Button
                     className="w-full"
                     onClick={onComplete}
@@ -124,6 +125,12 @@ export function WowScanIntro({ onComplete, summary, isLoading, isError }: Props)
                     <Sparkles className="mr-2 h-4 w-4" />
                     Начать интервью
                   </Button>
+                  <Link href="/dashboard" data-testid="link-back-to-dashboard">
+                    <button className="w-full flex items-center justify-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors py-2">
+                      <ArrowLeft className="h-4 w-4" />
+                      Перейти в панель управления
+                    </button>
+                  </Link>
                 </div>
               </CardContent>
             </Card>
