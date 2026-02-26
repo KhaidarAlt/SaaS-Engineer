@@ -3057,3 +3057,27 @@ export const messagingDeliveriesRelations = relations(messagingDeliveries, ({ on
 export const insertMessagingDeliverySchema = createInsertSchema(messagingDeliveries).omit({ id: true, createdAt: true });
 export type InsertMessagingDelivery = z.infer<typeof insertMessagingDeliverySchema>;
 export type MessagingDelivery = typeof messagingDeliveries.$inferSelect;
+
+// ============ AI LEARNING SUGGESTIONS ============
+export const aiLearningSuggestions = pgTable("ai_learning_suggestions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  topic: text("topic").notNull(),
+  problemSummary: text("problem_summary").notNull(),
+  suggestedContent: text("suggested_content").notNull(),
+  status: text("status").notNull().default("pending"),
+  sourceDialogIds: text("source_dialog_ids").array(),
+  potentialRevenueImpact: integer("potential_revenue_impact"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const aiLearningSuggestionsRelations = relations(aiLearningSuggestions, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [aiLearningSuggestions.tenantId],
+    references: [tenants.id],
+  }),
+}));
+
+export const insertAiLearningSuggestionSchema = createInsertSchema(aiLearningSuggestions).omit({ id: true, createdAt: true });
+export type InsertAiLearningSuggestion = z.infer<typeof insertAiLearningSuggestionSchema>;
+export type AiLearningSuggestion = typeof aiLearningSuggestions.$inferSelect;

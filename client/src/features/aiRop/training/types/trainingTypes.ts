@@ -35,7 +35,19 @@ export type TrainingEventType =
   | "ANTI_PATTERN_ADDED"
   | "IGNORE_SUGGESTION";
 
-export type TrainingSubTab = "quick-train" | "triggers" | "knowledge" | "anti-patterns" | "history";
+export type TrainingSubTab = "ai-coach" | "quick-train" | "triggers" | "knowledge" | "anti-patterns" | "history";
+
+export interface AiLearningSuggestion {
+  id: string;
+  tenantId: string;
+  topic: string;
+  problemSummary: string;
+  suggestedContent: string;
+  status: "pending" | "approved" | "rejected";
+  sourceDialogIds: string[] | null;
+  potentialRevenueImpact: number | null;
+  createdAt: string;
+}
 
 export interface AiTrigger {
   id: string;

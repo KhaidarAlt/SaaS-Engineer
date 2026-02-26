@@ -1,8 +1,9 @@
 import { Button } from "@/components/ui/button";
-import { Zap, Settings2, BookOpen, ShieldOff, History } from "lucide-react";
+import { Zap, Settings2, BookOpen, ShieldOff, History, Bot } from "lucide-react";
 import type { TrainingSubTab } from "../types/trainingTypes";
 
 const TABS: { key: TrainingSubTab; label: string; icon: typeof Zap }[] = [
+  { key: "ai-coach", label: "AI Coach", icon: Bot },
   { key: "quick-train", label: "Быстрое обучение", icon: Zap },
   { key: "triggers", label: "Триггеры", icon: Settings2 },
   { key: "knowledge", label: "База знаний", icon: BookOpen },

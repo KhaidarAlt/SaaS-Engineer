@@ -28,6 +28,7 @@ import { registerAiTrainingRoutes } from "./ai-training-routes.js";
 import { registerAiAnalyticsRoutes } from "./ai-analytics-routes.js";
 import { registerAiRopConnectRoutes } from "./ai-rop-connect-routes.js";
 import { registerGrowthRoutes } from "./ai-rop-growth-routes.js";
+import { registerAiCoachRoutes } from "./ai-coach-routes.js";
 import { seedScenarioTemplates } from "./growth/seedScenarioTemplates.js";
 import { startGrowthSyncWorker } from "./growth/syncWorker.js";
 
@@ -7324,6 +7325,7 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
   registerAiAnalyticsRoutes(app, requireAuth, requireAiAccess);
   registerAiRopConnectRoutes(app, storage, requireAuth, requireAiAccess);
   registerGrowthRoutes(app, storage, requireAuth, requireAiAccess);
+  registerAiCoachRoutes(app, storage, requireAuth, requireAiAccess);
 
   return httpServer;
 }

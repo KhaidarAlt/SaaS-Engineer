@@ -4,6 +4,7 @@ import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { SectionHeader } from "../../components/SectionHeader";
 import { TrainingSubTabs } from "../components/TrainingSubTabs";
+import { AiCoachPanel } from "../components/AiCoachPanel";
 import { QuickTrainPanel } from "../components/QuickTrainPanel";
 import { TriggerList } from "../components/TriggerList";
 import { TriggerEditorModal } from "../components/TriggerEditorModal";
@@ -40,7 +41,7 @@ import type {
 } from "../types/trainingTypes";
 
 export default function TrainingPage() {
-  const [activeTab, setActiveTab] = useState<TrainingSubTab>("quick-train");
+  const [activeTab, setActiveTab] = useState<TrainingSubTab>("ai-coach");
   const [editingTrigger, setEditingTrigger] = useState<AiTrigger | null>(null);
   const [triggerModalOpen, setTriggerModalOpen] = useState(false);
   const [editingKb, setEditingKb] = useState<KnowledgeItem | null>(null);
@@ -241,6 +242,8 @@ export default function TrainingPage() {
       />
 
       <TrainingSubTabs active={activeTab} onChange={setActiveTab} />
+
+      {activeTab === "ai-coach" && <AiCoachPanel />}
 
       {activeTab === "quick-train" && (
         <QuickTrainPanel

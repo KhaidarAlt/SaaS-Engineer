@@ -7,6 +7,7 @@ import type {
   QuickTrainRequest,
   QuickTrainResult,
   RecentTestMessage,
+  AiLearningSuggestion,
 } from "../types/trainingTypes";
 
 export const TRAINING_KEYS = {
@@ -16,6 +17,7 @@ export const TRAINING_KEYS = {
   antiPatterns: ["/api/ai/anti-patterns"] as const,
   history: ["/api/ai/training/history"] as const,
   recentMessages: ["/api/ai/training/recent-messages"] as const,
+  coachSuggestions: ["/api/ai/coach/suggestions"] as const,
 };
 
 export async function fetchTriggers(): Promise<AiTrigger[]> {
@@ -118,5 +120,30 @@ export async function previewResponse(userText: string): Promise<{ currentRespon
 
 export async function regenerateImproved(userText: string, currentResponse: string): Promise<{ improvedResponse: string }> {
   const res = await apiRequest("POST", "/api/ai/training/regenerate-improved", { userText, currentResponse });
+  return res.json();
+}
+
+export async function fetchCoachSuggestions(status?: string): Promise<AiLearningSuggestion[]> {
+  const url = status ? `/api/ai/coach/suggestions?status=${status}` : "/api/ai/coach/suggestions";
+  const res = await fetch(url, { credentials: "include" });
+  if (!res.ok) throw new Error("Failed to fetch coach suggestions");
+  return res.json();
+}
+
+export async function runCoachAnalysis(): Promise<{ suggestions: number; message: string }> {
+  const res = await apiRequest("POST", "/api/ai/coach/analyze");
+  return res.json();
+}
+
+export async function approveCoachSuggestion(id: string): Promise<void> {
+  await apiRequest("POST", `/api/ai/coach/suggestions/${id}/approve`);
+}
+
+export async function rejectCoachSuggestion(id: string): Promise<void> {
+  await apiRequest("POST", `/api/ai/coach/suggestions/${id}/reject`);
+}
+
+export async function updateCoachSuggestion(id: string, data: { topic?: string; suggestedContent?: string }): Promise<AiLearningSuggestion> {
+  const res = await apiRequest("PUT", `/api/ai/coach/suggestions/${id}`, data);
   return res.json();
 }
