@@ -1,0 +1,64 @@
+PROMPT: Implement AI Coach & Semi-Auto Learning Module
+Context:
+I am building botfactory.kz. We need to implement a "Semi-Auto Learning" system where an AI Business Consultant (gpt-4o) analyzes chat logs and suggests new knowledge items for the user to approve.
+
+1. Database Schema Update:
+Using Drizzle ORM, create a new table ai_learning_suggestions:
+
+id: uuid (primary key)
+
+tenantId: uuid (references tenants)
+
+topic: text (short title)
+
+problem_summary: text (why this is a gap)
+
+suggested_content: text (the actual answer/article text)
+
+status: enum ('pending', 'approved', 'rejected') default 'pending'
+
+source_dialog_ids: uuid array (references ai_dialogs)
+
+potential_revenue_impact: integer (estimated KZT)
+
+createdAt: timestamp
+
+2. Backend Logic (Node.js + Express):
+Create a service AiCoachService and a background job (or an endpoint /api/admin/coach/analyze):
+
+Data Source: Fetch last 50 records from messaging_messages where direction = 'inbound' and the corresponding ai_dialogs have no successful 'sale' stage, or where the bot's response in ai_dialog_events indicates uncertainty.
+
+AI Analysis: Send these logs to OpenAI gpt-4o.
+
+System Prompt: "You are a Business Analyst for botfactory.kz. Analyze these chats. Identify 3 recurring customer questions that the bot couldn't answer or answered poorly. For each, suggest a clear, professional knowledge base article. Output ONLY a JSON array matching the ai_learning_suggestions schema."
+
+Storage: Save unique suggestions to ai_learning_suggestions.
+
+3. Frontend Implementation (React + shadcn/ui + Tailwind):
+In the Training (Обучение) section (referencing image_7dde5f.png):
+
+Add a horizontal scroll area or a grid titled "AI Coach Recommendations".
+
+Card Component: Show topic, problem_summary, and a preview of suggested_content.
+
+Actions: - "Approve" (Одобрить): On click, insert the suggestion into knowledge_items (set type='ARTICLE', source='TRAINING', content=suggested_content). Then update suggestion status to approved.
+
+"Edit" (Править): Open a shadcn Dialog to edit the text before approving.
+
+"Reject" (Отклонить): Set status to rejected.
+
+Feedback: Use sonner or toast to show: "Knowledge updated! AI Score +5%".
+
+4. Integration Points:
+
+Knowledge Base: Ensure the "Approved" items appear immediately in the knowledge_items list (referenced in image_7e301d.png).
+
+Context Stuffing: Since we use "context stuffing", ensure the bot's next prompt fetcher includes these new TRAINING source items from knowledge_items.
+
+5. UI/UX Polish:
+
+Use a "Robot" icon and a soft purple/blue border for AI-generated cards to distinguish them from manual training.
+
+Add a "Revenue Impact" badge (e.g., "+15,000 ₸ potential") to each card to motivate the user.
+
+Important: Use existing database connections and Drizzle configurations. Do not create duplicate tables for messaging or knowledge.
