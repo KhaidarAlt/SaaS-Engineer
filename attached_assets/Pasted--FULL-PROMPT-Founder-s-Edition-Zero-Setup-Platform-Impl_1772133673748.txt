@@ -1,0 +1,52 @@
+🚀 FULL PROMPT: Founder's Edition "Zero-Setup" Platform Implementation
+Context:
+Finalize the botfactory.kz landing and backend. The core message is: "No Integrators Needed. No Complex Setup. Just Upload & Sell." We are offering an exclusive Beta Partnership for the first 50 companies.
+
+1. UI/UX: The "Zero-Effort" Founder's Card
+Update the pricing section to a single, bold "Founder's Edition" card:
+
+Badge: "Exclusive Founder's Pass: 50 Seats Only".
+
+Headline: "Интеллект, который настраивает себя сам".
+
+Value Proposition: "Вам не нужны программисты или интеграторы. Загрузите товары — и через 5 минут ИИ готов продавать, анализировать и расти вместе с вами."
+
+Price: "360 000 ₸ / год (Цена зафиксирована за вами НАВСЕГДА)".
+
+CTA Button: "Занять место партнера-основателя".
+
+2. Key Features (Technical & Functional):
+
+Plug & Play: Автоматическое создание базы знаний из вашего каталога (pgvector).
+
+AI Business Analyst: Глубокий разбор прибыли, отвалов и поведения клиентов на основе реальных данных.
+
+Self-Learning (AI Coach): Бот сам находит пробелы в ответах, предлагает улучшения и внедряет их после вашего одобрения.
+
+Human-Like Emulation: Имитация печатания, пауз и отправка фото товаров/ссылок.
+
+Enterprise Integrations: Свой домен, AMO CRM, Bitrix24 и модуль мониторинга цен Kaspi (в разработке).
+
+Custom Development: Возможность запрашивать индивидуальные фичи под ваш бизнес, которые мы внедрим приоритетно.
+
+3. Safety & Flexibility (The "Trust Box"):
+
+14-Day Refund: Возврат денег за вычетом фактически потраченных ИИ-токенов.
+
+Credit Rollover: 500 диалогов в месяц. Неиспользованные пакетные диалоги никогда не сгорают и переносятся на следующий месяц.
+
+No Expiration: Купленные дополнительные пакеты диалогов действуют бессрочно.
+
+4. Backend & Logic Integration:
+
+Auto-Onboarding: При первой загрузке каталога автоматически запускать скрипт создания эмбеддингов (pgvector).
+
+Feature Request System: Создать простую форму/кнопку в Dashboard "Запросить индивидуальную фичу" для пользователей с флагом is_founder.
+
+Typing Simulation: Внедрить getTypingDelay во все каналы отправки (WhatsApp/Web).
+
+Analyst Access: Дать AI-аналитику доступ к таблицам ai_dialogs и messaging_messages для генерации отчетов.
+
+5. Design Style:
+
+Use a high-end "Founder" aesthetic: clean typography, subtle golden or electric blue accents, and a "Proof of Progress" counter: "Осталось мест: [Count]/50".

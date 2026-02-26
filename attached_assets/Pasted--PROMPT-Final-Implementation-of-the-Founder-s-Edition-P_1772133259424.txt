@@ -1,0 +1,57 @@
+🚀 PROMPT: Final Implementation of the Founder's Edition & Pricing Engine
+Context:
+We are pivoting to an aggressive "Beta Partners" strategy for botfactory.kz. We need to replace the current pricing grid with a single, high-converting "Founder's Edition" offer and implement the credit rollover logic.
+
+1. UI/UX: The "Founder's Edition" Card
+Replace the three columns with one premium, wide feature-card:
+
+Badge: "Программа Founder-Партнер (Осталось 50 мест)".
+
+Headline: "Интеллект для вашего бизнеса на пожизненных условиях".
+
+Price: "360 000 ₸ / год".
+
+Subtext: "Эта цена фиксируется за вами НАВСЕГДА. При продлении через год цена не изменится".
+
+Trust Badges: - "14 дней гарантия возврата (за вычетом токенов)".
+
+"Остатки диалогов переносятся на след. месяц".
+
+2. Feature List (Include these specific points):
+
+AI-Продавец: С обучением через pgvector и визуальным поиском (фото товаров).
+
+AI-Бизнес Аналитик: Глубокий разбор вашего бизнеса на основе реальных данных из CRM и диалогов.
+
+Интеграции: Подключение AMO CRM, Bitrix24 и использование собственного домена.
+
+Human-Like Chat: Имитация печатания и пауз для WhatsApp.
+
+Kaspi Module (Coming Soon): Доступ к ИИ-мониторингу цен на маркетплейсе Kaspi.
+
+Dialogs: 500 сессий в месяц включено.
+
+3. The "Refill Packs" Component (Below the main card):
+Create a grid with 3 options for purchasing additional dialogs:
+
+Starter: 200 dialogs — 9 000 ₸.
+
+Growth: 500 dialogs — 17 500 ₸.
+
+Scale: 1 500 dialogs — 37 500 ₸.
+
+Critical Logic: Add a label: "Диалоги не сгорают и переносятся на следующий месяц".
+
+4. Backend Logic & Database (Drizzle):
+
+Credit System: Implement a balance field in the tenants table.
+
+Rollover: Monthly subscription resets to 500, but any purchased "Refill" credits must be added to a persistent_balance that never resets.
+
+Refund Calculation: Create a function to track total OpenAI token costs per tenantId to calculate potential refunds (Subscription Price - Tokens Used).
+
+Emulation Logic: Use the getTypingDelay function we discussed to delay outbound messages in messaging_messages.
+
+5. Integration with AI Business Analyst:
+
+Ensure the AI Analyst has read access to ai_dialogs, messaging_messages, and ai_learning_suggestions to provide "Real Data" business insights as promised in the UI.

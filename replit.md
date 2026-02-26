@@ -97,12 +97,14 @@ Key architectural decisions include:
 - **Thread key convention**: externalThreadId = "whatsapp_cloud:{fromPhone}" for Meta Cloud, "whatsapp:{fromPhone}" for WAHA
 
 ## Pricing & Billing
-- **4-tier plan structure**: Free (0₸), Start (4,990₸), Business (19,990₸), Scale (29,990₸)
-- **Dialog-based billing**: Each plan includes a monthly dialog limit (0/100/300/700). Overage at 50₸/dialog.
+- **Founder's Edition**: Single premium plan — 360,000₸/year, price locked forever for first 50 beta partners
+- **Dialog-based billing**: 500 dialogs/month included. Unused dialogs roll over (Credit Rollover). No expiration on purchased packages.
+- **Dialog packages**: 4 add-on packages (100/5,000₸, 300/12,000₸, 500/17,500₸, 1,000/30,000₸) — purchased packages never expire
+- **14-day refund policy**: Full refund minus consumed AI tokens within 14 days
 - **Trial period**: 2-day free trial on registration (status="trial")
 - **Plan request flow**: User selects plan → POST /api/request-plan → Free plan auto-activates; paid plans require admin approval
-- **Landing page**: 3-card pricing section (Start/Business/Scale) with psychological triggers (anchor pricing, scarcity badge, ROI calculator) + 10-item FAQ accordion
-- **BillingPage**: Shows current plan, usage bars (products, categories, dialogs), overage cost display, all available plans
+- **Landing page**: Single "Founder's Edition" card with golden/amber accent, 50-seat counter, trust box (refund/rollover/no-expiration), ROI calculator + 10-item FAQ accordion
+- **BillingPage**: Shows current Founder plan with guarantees, usage bars, dialog packages section (4 tiers, buy buttons), feature request CTA
 - **PlanSelectionPopup**: 3 main plan cards (Start/Business/Scale) + free plan option at bottom
 - **Database plan IDs**: Free=c360ccb1, Start=8f1b3a2e, Business=12f05fab, Scale=5b057f3f
 

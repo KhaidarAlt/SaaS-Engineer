@@ -856,217 +856,114 @@ export default function LandingPage() {
       </section>
 
       {/* ═══════════════════════════════════════════════════════ */}
-      {/* PRICING — 3 TIERS + PSYCHOLOGICAL TRIGGERS */}
+      {/* PRICING — FOUNDER'S EDITION */}
       {/* ═══════════════════════════════════════════════════════ */}
       <section id="pricing" className="py-16 md:py-24">
         <div className="container mx-auto px-4">
           <motion.div {...fadeInUp} className="text-center mb-10 md:mb-14">
-            <Badge variant="secondary" className="mb-4 no-default-hover-elevate no-default-active-elevate">
-              <Receipt className="w-3 h-3 mr-1" />
-              Тарифы
+            <Badge className="mb-4 no-default-hover-elevate no-default-active-elevate bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20">
+              <Crown className="w-3 h-3 mr-1" />
+              Exclusive Founder's Pass: 50 Seats Only
             </Badge>
             <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-3" data-testid="text-pricing-title">
-              Тарифы SmartCatalog
+              Интеллект, который настраивает себя сам
             </h2>
-            <p className="text-muted-foreground max-w-2xl mx-auto mb-2">
-              AI-продавец, который увеличивает продажи в WhatsApp, Instagram и Telegram
-            </p>
-            <p className="text-sm text-muted-foreground/80 max-w-lg mx-auto">
-              Большинство клиентов получают первые заявки уже в первые недели
+            <p className="text-muted-foreground max-w-2xl mx-auto">
+              Вам не нужны программисты или интеграторы. Загрузите товары — и через 5 минут ИИ готов продавать, анализировать и расти вместе с вами.
             </p>
           </motion.div>
 
-          <motion.div
-            className="grid md:grid-cols-3 gap-5 md:gap-6 max-w-5xl mx-auto items-stretch"
-            variants={staggerContainer}
-            initial="initial"
-            whileInView="whileInView"
-            viewport={{ once: true }}
-          >
-            {/* ─── Start ─── */}
-            <motion.div variants={staggerItem} className="flex">
-              <Card className="h-full flex flex-col w-full relative overflow-visible" data-testid="card-plan-start">
-                <div className="absolute -top-3 left-4">
-                  <Badge variant="secondary" className="no-default-hover-elevate no-default-active-elevate text-[10px] px-2.5 py-0.5">
-                    Ранняя цена для первых 50 клиентов
-                  </Badge>
-                </div>
-                <CardHeader className="pt-8 pb-4">
-                  <div className="flex items-center gap-2 mb-1">
-                    <div className="w-9 h-9 rounded-lg bg-blue-500/10 flex items-center justify-center">
-                      <Zap className="w-5 h-5 text-blue-500" />
-                    </div>
-                    <CardTitle className="text-xl">Start</CardTitle>
-                  </div>
-                  <CardDescription className="text-sm">Запустите AI-продажи и получите первые заказы</CardDescription>
-                  <div className="pt-3">
-                    <span className="text-base text-muted-foreground line-through" data-testid="text-price-start-old">9 990 ₸</span>
-                    <div className="flex items-baseline gap-1.5">
-                      <span className="text-3xl font-bold" data-testid="text-price-start">4 990 ₸</span>
-                      <span className="text-muted-foreground text-sm">/ мес</span>
-                    </div>
-                    <p className="text-xs text-green-600 dark:text-green-400 mt-1 font-medium">
-                      Экономия более 60 000 ₸ в год
-                    </p>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">
-                      Цена фиксируется навсегда
-                    </p>
-                  </div>
-                </CardHeader>
-                <CardContent className="flex-1 pt-0">
-                  <ul className="space-y-2.5 text-sm">
-                    {[
-                      "SmartCatalog",
-                      "Ваш AI-продавец (все функции)",
-                      "Раздел Рост",
-                      "1 канал подключения",
-                      "100 диалогов в месяц",
-                    ].map((f, i) => (
-                      <li key={i} className="flex items-start gap-2">
-                        <Check className="w-4 h-4 text-primary shrink-0 mt-0.5" />
-                        <span>{f}</span>
-                      </li>
-                    ))}
-                  </ul>
-                  <div className="mt-4 pt-3 border-t border-border/50 space-y-1.5">
-                    <p className="text-xs text-muted-foreground flex items-center gap-1">
-                      <Shield className="w-3 h-3" />
-                      Попробуйте бесплатно 2 дня
-                    </p>
-                    <p className="text-xs text-muted-foreground">50 ₸ за диалог сверх лимита</p>
-                  </div>
-                </CardContent>
-                <CardFooter>
-                  <Link href="/register" className="w-full">
-                    <Button variant="outline" className="w-full" data-testid="button-pricing-start">
-                      Начать бесплатно
-                    </Button>
-                  </Link>
-                </CardFooter>
-              </Card>
-            </motion.div>
+          <motion.div {...fadeInUp} className="max-w-2xl mx-auto">
+            <Card className="relative overflow-visible border-amber-500/30 dark:border-amber-500/20" data-testid="card-founder-edition">
+              <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-10">
+                <Badge className="no-default-hover-elevate no-default-active-elevate px-4 py-1.5 text-xs bg-gradient-to-r from-amber-500 to-amber-600 text-white border-0">
+                  <Crown className="w-3.5 h-3.5 mr-1.5" />
+                  Founder's Edition
+                </Badge>
+              </div>
 
-            {/* ─── Business (highlighted) ─── */}
-            <motion.div variants={staggerItem} className="flex">
-              <Card className="h-full flex flex-col w-full border-primary relative overflow-visible" data-testid="card-plan-business">
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-10">
-                  <Badge className="no-default-hover-elevate no-default-active-elevate px-4 py-1 text-xs">
-                    <Crown className="w-3 h-3 mr-1" />
-                    Самый популярный
-                  </Badge>
+              <CardHeader className="pt-10 pb-4 text-center">
+                <div className="mx-auto w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-500/20 to-amber-600/10 flex items-center justify-center mb-3">
+                  <Crown className="w-7 h-7 text-amber-500" />
                 </div>
-                <CardHeader className="pt-8 pb-4">
-                  <div className="flex items-center gap-2 mb-1">
-                    <div className="w-9 h-9 rounded-lg bg-amber-500/10 flex items-center justify-center">
-                      <Crown className="w-5 h-5 text-amber-500" />
-                    </div>
-                    <CardTitle className="text-xl">Business</CardTitle>
+                <CardTitle className="text-2xl md:text-3xl">Партнёр-основатель</CardTitle>
+                <CardDescription className="text-base mt-2">
+                  Полный доступ ко всей платформе. Навсегда.
+                </CardDescription>
+                <div className="pt-5">
+                  <div className="flex items-baseline justify-center gap-2">
+                    <span className="text-4xl md:text-5xl font-bold" data-testid="text-price-founder">360 000 ₸</span>
+                    <span className="text-muted-foreground text-sm">/ год</span>
                   </div>
-                  <CardDescription className="text-sm">Полноценная система AI-продаж для роста бизнеса</CardDescription>
-                  <div className="pt-3">
-                    <div className="flex items-baseline gap-1.5">
-                      <span className="text-3xl font-bold" data-testid="text-price-business">19 990 ₸</span>
-                      <span className="text-muted-foreground text-sm">/ мес</span>
-                    </div>
+                  <p className="text-sm text-amber-600 dark:text-amber-400 mt-2 font-medium">
+                    Цена зафиксирована за вами НАВСЕГДА
+                  </p>
+                  <div className="inline-flex items-center gap-1.5 mt-2 px-3 py-1 rounded-full bg-amber-500/10 text-amber-700 dark:text-amber-400 text-xs font-medium" data-testid="text-seats-counter">
+                    <Users className="w-3 h-3" />
+                    Осталось мест: <AnimatedCounter target={47} />/50
                   </div>
-                </CardHeader>
-                <CardContent className="flex-1 pt-0">
-                  <ul className="space-y-2.5 text-sm">
-                    {[
-                      "Все функции платформы",
-                      "AI-продавец",
-                      "Growth Engine",
-                      "Мультиканал (WhatsApp, Instagram, Telegram)",
-                      "Аналитика",
-                      "300 диалогов в месяц",
-                    ].map((f, i) => (
-                      <li key={i} className="flex items-start gap-2">
-                        <Check className="w-4 h-4 text-primary shrink-0 mt-0.5" />
-                        <span>{f}</span>
-                      </li>
-                    ))}
-                  </ul>
-                  <div className="mt-4 pt-3 border-t border-border/50 space-y-1.5">
-                    <p className="text-xs text-muted-foreground flex items-center gap-1">
-                      <Shield className="w-3 h-3" />
-                      Попробуйте бесплатно 2 дня
-                    </p>
-                    <p className="text-xs text-muted-foreground">50 ₸ за диалог сверх лимита</p>
-                  </div>
-                </CardContent>
-                <CardFooter>
-                  <Link href="/register" className="w-full">
-                    <Button className="w-full" data-testid="button-pricing-business">
-                      Запустить рост
-                    </Button>
-                  </Link>
-                </CardFooter>
-              </Card>
-            </motion.div>
+                </div>
+              </CardHeader>
 
-            {/* ─── Scale ─── */}
-            <motion.div variants={staggerItem} className="flex">
-              <Card className="h-full flex flex-col w-full" data-testid="card-plan-scale">
-                <CardHeader className="pb-4">
-                  <div className="flex items-center gap-2 mb-1">
-                    <div className="w-9 h-9 rounded-lg bg-purple-500/10 flex items-center justify-center">
-                      <Rocket className="w-5 h-5 text-purple-500" />
+              <CardContent className="pt-2 pb-6">
+                <div className="grid sm:grid-cols-2 gap-x-6 gap-y-3 mb-6">
+                  {[
+                    { icon: Zap, text: "Plug & Play: База знаний из каталога за 5 минут (pgvector)" },
+                    { icon: Brain, text: "AI Business Analyst: Разбор прибыли, отвалов и поведения" },
+                    { icon: BookOpen, text: "Self-Learning (AI Coach): Бот находит пробелы и улучшает себя сам" },
+                    { icon: Smartphone, text: "Human-Like: Имитация печатания, паузы, фото товаров" },
+                    { icon: Globe, text: "Enterprise: Свой домен, AMO CRM, Bitrix24, Kaspi мониторинг" },
+                    { icon: Sparkles, text: "Custom Development: Индивидуальные фичи под ваш бизнес" },
+                  ].map((item, i) => (
+                    <div key={i} className="flex items-start gap-2.5 text-sm">
+                      <div className="w-7 h-7 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0 mt-0.5">
+                        <item.icon className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                      </div>
+                      <span>{item.text}</span>
                     </div>
-                    <CardTitle className="text-xl">Scale</CardTitle>
-                  </div>
-                  <CardDescription className="text-sm">Для компаний, которые масштабируют продажи</CardDescription>
-                  <div className="pt-3">
-                    <div className="flex items-baseline gap-1.5">
-                      <span className="text-3xl font-bold" data-testid="text-price-scale">29 990 ₸</span>
-                      <span className="text-muted-foreground text-sm">/ мес</span>
+                  ))}
+                </div>
+
+                <div className="rounded-xl border border-border/60 bg-muted/30 p-4 mb-6 space-y-2.5">
+                  <p className="text-sm font-semibold flex items-center gap-2">
+                    <Shield className="w-4 h-4 text-primary" />
+                    Гарантии и гибкость
+                  </p>
+                  <div className="grid sm:grid-cols-3 gap-3">
+                    <div className="text-center p-3 rounded-lg bg-background">
+                      <p className="text-xs font-medium text-muted-foreground mb-1">14-Day Refund</p>
+                      <p className="text-xs">Возврат за вычетом AI-токенов</p>
+                    </div>
+                    <div className="text-center p-3 rounded-lg bg-background">
+                      <p className="text-xs font-medium text-muted-foreground mb-1">Credit Rollover</p>
+                      <p className="text-xs">500 диалогов/мес. Остаток переносится</p>
+                    </div>
+                    <div className="text-center p-3 rounded-lg bg-background">
+                      <p className="text-xs font-medium text-muted-foreground mb-1">No Expiration</p>
+                      <p className="text-xs">Доп. пакеты действуют бессрочно</p>
                     </div>
                   </div>
-                </CardHeader>
-                <CardContent className="flex-1 pt-0">
-                  <ul className="space-y-2.5 text-sm">
-                    {[
-                      "Все функции",
-                      "Growth автоматизации",
-                      "Расширенная аналитика",
-                      "Приоритетная поддержка",
-                      "700 диалогов в месяц",
-                    ].map((f, i) => (
-                      <li key={i} className="flex items-start gap-2">
-                        <Check className="w-4 h-4 text-primary shrink-0 mt-0.5" />
-                        <span>{f}</span>
-                      </li>
-                    ))}
-                  </ul>
-                  <div className="mt-4 pt-3 border-t border-border/50 space-y-1.5">
-                    <p className="text-xs text-muted-foreground flex items-center gap-1">
-                      <Shield className="w-3 h-3" />
-                      Попробуйте бесплатно 2 дня
-                    </p>
-                    <p className="text-xs text-muted-foreground">50 ₸ за диалог сверх лимита</p>
-                  </div>
-                </CardContent>
-                <CardFooter>
-                  <Link href="/register" className="w-full">
-                    <Button variant="outline" className="w-full" data-testid="button-pricing-scale">
-                      Масштабировать
-                    </Button>
-                  </Link>
-                </CardFooter>
-              </Card>
-            </motion.div>
+                </div>
+
+                <Link href="/register" className="block">
+                  <Button className="w-full" size="lg" data-testid="button-pricing-founder">
+                    <Crown className="w-5 h-5 mr-2" />
+                    Занять место партнёра-основателя
+                  </Button>
+                </Link>
+              </CardContent>
+            </Card>
           </motion.div>
 
-          {/* Social proof + risk reversal */}
           <motion.div {...fadeInUp} className="text-center mt-8 space-y-2">
             <p className="text-sm font-medium">
-              Даже один возвращённый клиент окупает тариф
+              Даже один возвращённый клиент окупает платформу
             </p>
             <p className="text-xs text-muted-foreground">
               Уже используют магазины техники, одежды и доставки
             </p>
           </motion.div>
 
-          {/* ROI calculator block */}
           <motion.div {...fadeInUp} className="mt-12 max-w-2xl mx-auto">
             <Card data-testid="card-roi-block">
               <CardContent className="p-6 md:p-8 text-center space-y-3">
@@ -1118,31 +1015,31 @@ export default function LandingPage() {
               <AccordionItem value="q3" data-testid="faq-item-3">
                 <AccordionTrigger className="text-left text-sm md:text-base">Что происходит, если я превышу лимит диалогов?</AccordionTrigger>
                 <AccordionContent className="text-muted-foreground">
-                  AI продолжает работать без остановки. Каждый диалог сверх лимита тарифа стоит 50 ₸. Вы платите только за реально использованные диалоги, никаких скрытых платежей.
+                  AI продолжает работать без остановки. Неиспользованные пакетные диалоги никогда не сгорают и переносятся на следующий месяц. Вы также можете докупить пакеты диалогов, которые действуют бессрочно.
                 </AccordionContent>
               </AccordionItem>
               <AccordionItem value="q4" data-testid="faq-item-4">
-                <AccordionTrigger className="text-left text-sm md:text-base">Есть ли бесплатный период?</AccordionTrigger>
+                <AccordionTrigger className="text-left text-sm md:text-base">Могу ли я вернуть деньги?</AccordionTrigger>
                 <AccordionContent className="text-muted-foreground">
-                  Да, при регистрации на любом тарифе вы получаете 2 дня бесплатного использования. Это позволяет настроить каталог, подключить AI-ассистента и протестировать его работу до оплаты.
+                  Да, в течение 14 дней после оплаты мы вернём деньги за вычетом фактически потраченных AI-токенов. Никаких скрытых условий.
                 </AccordionContent>
               </AccordionItem>
               <AccordionItem value="q5" data-testid="faq-item-5">
                 <AccordionTrigger className="text-left text-sm md:text-base">Как подключить WhatsApp / Instagram / Telegram?</AccordionTrigger>
                 <AccordionContent className="text-muted-foreground">
-                  Подключение занимает несколько минут прямо из панели управления. Для WhatsApp — через QR-код или Meta Business API. Для Instagram и Telegram — через привязку аккаунта. На тарифе Start доступен один канал, на Business и Scale — все каналы.
+                  Подключение занимает несколько минут прямо из панели управления. Для WhatsApp — через QR-код или Meta Business API. Для Instagram и Telegram — через привязку аккаунта. В Founder's Edition доступны все каналы.
                 </AccordionContent>
               </AccordionItem>
               <AccordionItem value="q6" data-testid="faq-item-6">
-                <AccordionTrigger className="text-left text-sm md:text-base">Чем отличается тариф Business от Start?</AccordionTrigger>
+                <AccordionTrigger className="text-left text-sm md:text-base">Что значит «цена зафиксирована навсегда»?</AccordionTrigger>
                 <AccordionContent className="text-muted-foreground">
-                  Business включает все каналы одновременно (WhatsApp + Instagram + Telegram), 300 диалогов вместо 100, Growth Engine для рассылок и возврата клиентов, а также развёрнутую аналитику по продажам.
+                  Партнёры-основатели получают годовую цену 360 000 ₸, которая не будет повышаться при продлении. Когда платформа выйдет из бета-фазы, новая цена будет выше, но для вас она останется прежней.
                 </AccordionContent>
               </AccordionItem>
               <AccordionItem value="q7" data-testid="faq-item-7">
-                <AccordionTrigger className="text-left text-sm md:text-base">Можно ли перейти на другой тариф?</AccordionTrigger>
+                <AccordionTrigger className="text-left text-sm md:text-base">Можно ли запросить индивидуальную фичу?</AccordionTrigger>
                 <AccordionContent className="text-muted-foreground">
-                  Да, вы можете повысить или понизить тариф в любое время из личного кабинета. Переход на более высокий тариф активируется сразу, на более низкий — с нового расчётного периода.
+                  Да, партнёры-основатели могут запрашивать индивидуальные доработки через панель управления. Мы внедряем их приоритетно — это одно из ключевых преимуществ Founder's Edition.
                 </AccordionContent>
               </AccordionItem>
               <AccordionItem value="q8" data-testid="faq-item-8">
