@@ -50,7 +50,7 @@ interface TenantContext {
   domainVerified?: boolean;
   storeDescription?: string;
   contactPhone?: string;
-  products?: Array<{ name: string; price: number; description?: string; category?: string }>;
+  products?: Array<{ name: string; price: number; description?: string; category?: string; imageUrl?: string; productUrl?: string }>;
   promotions?: Promotion[];
   discounts?: DiscountInfo[];
   policies?: {
@@ -418,8 +418,23 @@ ${context.paymentOptions.kaspiPayLink}
         if (p.description) {
           prompt += ` (${p.description.substring(0, 100)})`;
         }
+        if (p.imageUrl) {
+          prompt += ` [фото: ${p.imageUrl}]`;
+        }
+        if (p.productUrl) {
+          prompt += ` [ссылка: ${p.productUrl}]`;
+        }
       });
     });
+
+    prompt += `\n\n## ПРАВИЛО ОТОБРАЖЕНИЯ ТОВАРА
+Если конкретный товар найден и соответствует запросу клиента, показывай его с изображением, ценой и ссылкой.
+Формат ответа:
+![Название товара](URL_фото)
+**Название товара** — цена тг
+Подробнее и заказать: ссылка_на_товар
+
+Если у товара нет фото — показывай без изображения. Если нет ссылки — не добавляй ссылку.`;
   }
   
   if (context.categoryPriorities && context.categoryPriorities.length > 0) {

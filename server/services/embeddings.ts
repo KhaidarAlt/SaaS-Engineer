@@ -2,8 +2,8 @@ import OpenAI from "openai";
 import { db } from "../db";
 import { pool } from "../db";
 import { eq, and, isNull } from "drizzle-orm";
-import { knowledgeItems } from "@shared/schema";
-import type { KnowledgeItem } from "@shared/schema";
+import { knowledgeItems, products } from "@shared/schema";
+import type { KnowledgeItem, Product } from "@shared/schema";
 
 const openai = new OpenAI({
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
@@ -96,4 +96,104 @@ export async function hasEmbeddings(tenantId: string): Promise<boolean> {
     [tenantId]
   );
   return result.rows[0].has;
+}
+
+export async function embedProduct(productId: string, name: string, description?: string | null, category?: string | null): Promise<void> {
+  const parts = [name];
+  if (category) parts.push(`Категория: ${category}`);
+  if (description) parts.push(description);
+  const textToEmbed = parts.join("\n");
+  const embeddingVector = await generateEmbedding(textToEmbed);
+  const vectorStr = `[${embeddingVector.join(",")}]`;
+
+  await pool.query(
+    `UPDATE products SET embedding = $1::vector WHERE id = $2`,
+    [vectorStr, productId]
+  );
+}
+
+export interface ProductSearchResult {
+  id: string;
+  tenantId: string;
+  name: string;
+  description: string | null;
+  price: string;
+  mainImageUrl: string | null;
+  categoryId: string | null;
+  inStock: boolean;
+  similarity: number;
+}
+
+export async function searchProductsBySimilarity(
+  tenantId: string,
+  queryText: string,
+  limit: number = 5
+): Promise<ProductSearchResult[]> {
+  const queryEmbedding = await generateEmbedding(queryText);
+  const vectorStr = `[${queryEmbedding.join(",")}]`;
+
+  const result = await pool.query(
+    `SELECT id, tenant_id, name, description, price, main_image_url, category_id, in_stock,
+            1 - (embedding <=> $1::vector) AS similarity
+     FROM products
+     WHERE tenant_id = $2
+       AND is_active = true
+       AND embedding IS NOT NULL
+     ORDER BY embedding <=> $1::vector
+     LIMIT $3`,
+    [vectorStr, tenantId, limit]
+  );
+
+  return result.rows.map((row: any) => ({
+    id: row.id,
+    tenantId: row.tenant_id,
+    name: row.name,
+    description: row.description,
+    price: row.price,
+    mainImageUrl: row.main_image_url,
+    categoryId: row.category_id,
+    inStock: row.in_stock,
+    similarity: parseFloat(row.similarity),
+  }));
+}
+
+export async function hasProductEmbeddings(tenantId: string): Promise<boolean> {
+  const result = await pool.query(
+    `SELECT EXISTS(SELECT 1 FROM products WHERE tenant_id = $1 AND embedding IS NOT NULL) as has`,
+    [tenantId]
+  );
+  return result.rows[0].has;
+}
+
+export async function backfillProductEmbeddings(tenantId: string): Promise<number> {
+  const categoryResult = await pool.query(
+    `SELECT id, name FROM categories WHERE tenant_id = $1`,
+    [tenantId]
+  );
+  const categoryMap = new Map<string, string>();
+  categoryResult.rows.forEach((row: any) => categoryMap.set(row.id, row.name));
+
+  const items = await db
+    .select({ id: products.id, name: products.name, description: products.description, categoryId: products.categoryId })
+    .from(products)
+    .where(
+      and(
+        eq(products.tenantId, tenantId),
+        eq(products.isActive, true),
+        isNull(products.embedding)
+      )
+    );
+
+  let count = 0;
+  for (const item of items) {
+    try {
+      const catName = item.categoryId ? categoryMap.get(item.categoryId) : undefined;
+      await embedProduct(item.id, item.name, item.description, catName);
+      count++;
+    } catch (err) {
+      console.error(`[Embeddings] Failed to embed product ${item.id}:`, err);
+    }
+  }
+
+  return count;
 }

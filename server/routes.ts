@@ -29,7 +29,7 @@ import { registerAiAnalyticsRoutes } from "./ai-analytics-routes.js";
 import { registerAiRopConnectRoutes } from "./ai-rop-connect-routes.js";
 import { registerGrowthRoutes } from "./ai-rop-growth-routes.js";
 import { registerAiCoachRoutes } from "./ai-coach-routes.js";
-import { searchKnowledgeBySimilarity, hasEmbeddings } from "./services/embeddings.js";
+import { searchKnowledgeBySimilarity, hasEmbeddings, searchProductsBySimilarity, hasProductEmbeddings, backfillProductEmbeddings, embedProduct } from "./services/embeddings.js";
 import { seedScenarioTemplates } from "./growth/seedScenarioTemplates.js";
 import { startGrowthSyncWorker } from "./growth/syncWorker.js";
 
@@ -1856,6 +1856,18 @@ export async function registerRoutes(
         description: description && description.trim() !== "" ? description : null,
         tenantId: req.user!.tenantId!,
       });
+      (async () => {
+        try {
+          let catName: string | undefined;
+          if (product.categoryId) {
+            const cats = await storage.getCategories(req.user!.tenantId!);
+            catName = cats.find(c => c.id === product.categoryId)?.name;
+          }
+          await embedProduct(product.id, product.name, product.description, catName);
+        } catch (err) {
+          console.error("[Embeddings] auto-embed product failed:", err);
+        }
+      })();
       res.json(product);
     } catch (error) {
       console.error("Product creation error:", error);
@@ -1872,6 +1884,20 @@ export async function registerRoutes(
         mainImageUrl: mainImageUrl && mainImageUrl.trim() !== "" ? mainImageUrl : null,
         description: description && description.trim() !== "" ? description : null,
       });
+      if (product) {
+        (async () => {
+          try {
+            let catName: string | undefined;
+            if (product.categoryId) {
+              const cats = await storage.getCategories(req.user!.tenantId!);
+              catName = cats.find(c => c.id === product.categoryId)?.name;
+            }
+            await embedProduct(product.id, product.name, product.description, catName);
+          } catch (err) {
+            console.error("[Embeddings] auto-embed product update failed:", err);
+          }
+        })();
+      }
       res.json(product);
     } catch (error) {
       res.status(500).json({ message: "Ошибка обновления товара" });
@@ -1881,6 +1907,20 @@ export async function registerRoutes(
   app.patch("/api/products/:id", requireAuth, async (req, res) => {
     try {
       const product = await storage.updateProduct(req.params.id, req.user!.tenantId!, req.body);
+      if (product && (req.body.name || req.body.description)) {
+        (async () => {
+          try {
+            let catName: string | undefined;
+            if (product.categoryId) {
+              const cats = await storage.getCategories(req.user!.tenantId!);
+              catName = cats.find(c => c.id === product.categoryId)?.name;
+            }
+            await embedProduct(product.id, product.name, product.description, catName);
+          } catch (err) {
+            console.error("[Embeddings] auto-embed product patch failed:", err);
+          }
+        })();
+      }
       res.json(product);
     } catch (error) {
       res.status(500).json({ message: "Ошибка обновления товара" });
@@ -4532,6 +4572,16 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
           } catch (err) {
             console.error("[Embeddings] vector search fallback to static:", err);
           }
+
+          let metaSemanticProducts: any[] = [];
+          try {
+            const hasProdEmb = await hasProductEmbeddings(tenantId);
+            if (hasProdEmb && req.body.content) {
+              metaSemanticProducts = await searchProductsBySimilarity(tenantId, req.body.content, 5);
+            }
+          } catch (err) {
+            console.error("[Embeddings] product search fallback:", err);
+          }
           
           // Get active sales script
           const activeScript = salesScripts.find(s => s.isActive);
@@ -4542,6 +4592,41 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
           // Get categories for products
           const categories = await storage.getCategories(tenantId);
           const categoryMap = new Map(categories.map(c => [c.id, c.name]));
+
+          const metaPlatformDomain = process.env.PLATFORM_DOMAIN || "botfactory.kz";
+          const metaCatalogBaseUrl = ((tenant as any)?.customDomain && (tenant as any)?.domainVerified)
+            ? `https://${(tenant as any).customDomain}`
+            : `https://${tenant?.slug}.${metaPlatformDomain}`;
+
+          let metaContextProducts = products.slice(0, 20).map(p => ({
+            name: p.name,
+            price: Number(p.price),
+            description: p.description || undefined,
+            category: p.categoryId ? categoryMap.get(p.categoryId) : undefined,
+            imageUrl: p.mainImageUrl || undefined,
+            productUrl: `${metaCatalogBaseUrl}/product/${p.id}`,
+          }));
+
+          if (metaSemanticProducts.length > 0) {
+            const metaSemanticIds = new Set(metaSemanticProducts.map(sp => sp.id));
+            const semanticMapped = metaSemanticProducts.map(sp => ({
+              name: sp.name,
+              price: Number(sp.price),
+              description: sp.description || undefined,
+              category: sp.categoryId ? categoryMap.get(sp.categoryId) : undefined,
+              imageUrl: sp.mainImageUrl || undefined,
+              productUrl: `${metaCatalogBaseUrl}/product/${sp.id}`,
+            }));
+            const restProducts = products.filter(p => !metaSemanticIds.has(p.id)).slice(0, 20 - semanticMapped.length).map(p => ({
+              name: p.name,
+              price: Number(p.price),
+              description: p.description || undefined,
+              category: p.categoryId ? categoryMap.get(p.categoryId) : undefined,
+              imageUrl: p.mainImageUrl || undefined,
+              productUrl: `${metaCatalogBaseUrl}/product/${p.id}`,
+            }));
+            metaContextProducts = [...semanticMapped, ...restProducts];
+          }
           
           // Build full context for AI
           const context = {
@@ -4551,12 +4636,7 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
             domainVerified: (tenant as any)?.domainVerified || false,
             storeDescription: tenant?.description || undefined,
             tone: aiSettings?.tone || "friendly",
-            products: products.slice(0, 20).map(p => ({
-              name: p.name,
-              price: Number(p.price),
-              description: p.description || undefined,
-              category: p.categoryId ? categoryMap.get(p.categoryId) : undefined,
-            })),
+            products: metaContextProducts,
             salesScript: activeScript ? {
               stages: activeScript.stagesJson || [],
               forbiddenPhrases: activeScript.forbiddenPhrasesJson || [],
@@ -5373,6 +5453,13 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
   });
 
   // Process incoming WhatsApp message with AI
+  function getTypingDelay(message: string): number {
+    const baseDelay = Math.min(message.length * 50, 4000);
+    const variance = baseDelay * 0.2;
+    const randomOffset = (Math.random() * 2 - 1) * variance;
+    return Math.max(500, Math.round(baseDelay + randomOffset));
+  }
+
   async function processIncomingWhatsAppMessage(instance: any, from: string, text: string) {
     const { generateAiResponse, isOpenAiConfigured } = await import("./services/openai");
     
@@ -5452,6 +5539,16 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
       console.error("[Embeddings] vector search fallback to static:", err);
     }
 
+    let semanticProducts: any[] = [];
+    try {
+      const hasProdEmb = await hasProductEmbeddings(tenantId);
+      if (hasProdEmb && text) {
+        semanticProducts = await searchProductsBySimilarity(tenantId, text, 5);
+      }
+    } catch (err) {
+      console.error("[Embeddings] product search fallback:", err);
+    }
+
     const kaspiIntegration = await storage.getKaspiIntegration(tenantId);
     const enabledBankProducts = await storage.getEnabledBankProducts(tenantId);
     const aiPriorities = await db.select().from(categoryAiPriority).where(eq(categoryAiPriority.tenantId, tenantId));
@@ -5461,6 +5558,41 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
     // Build category map
     const categoryMap = new Map<string, string>();
     categories.forEach(c => categoryMap.set(c.id, c.name));
+
+    const platformDomain = process.env.PLATFORM_DOMAIN || "botfactory.kz";
+    const catalogBaseUrl = ((tenant as any)?.customDomain && (tenant as any)?.domainVerified)
+      ? `https://${(tenant as any).customDomain}`
+      : `https://${tenant.slug}.${platformDomain}`;
+
+    let contextProducts = products.slice(0, 50).map(p => ({
+      name: p.name,
+      price: Number(p.price),
+      description: p.description || undefined,
+      category: p.categoryId ? categoryMap.get(p.categoryId) : undefined,
+      imageUrl: p.mainImageUrl || undefined,
+      productUrl: `${catalogBaseUrl}/product/${p.id}`,
+    }));
+
+    if (semanticProducts.length > 0) {
+      const semanticIds = new Set(semanticProducts.map(sp => sp.id));
+      const semanticMapped = semanticProducts.map(sp => ({
+        name: sp.name,
+        price: Number(sp.price),
+        description: sp.description || undefined,
+        category: sp.categoryId ? categoryMap.get(sp.categoryId) : undefined,
+        imageUrl: sp.mainImageUrl || undefined,
+        productUrl: `${catalogBaseUrl}/product/${sp.id}`,
+      }));
+      const restProducts = products.filter(p => !semanticIds.has(p.id)).slice(0, 50 - semanticMapped.length).map(p => ({
+        name: p.name,
+        price: Number(p.price),
+        description: p.description || undefined,
+        category: p.categoryId ? categoryMap.get(p.categoryId) : undefined,
+        imageUrl: p.mainImageUrl || undefined,
+        productUrl: `${catalogBaseUrl}/product/${p.id}`,
+      }));
+      contextProducts = [...semanticMapped, ...restProducts];
+    }
     
     const context = {
       storeName: tenant.name,
@@ -5469,12 +5601,7 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
       domainVerified: (tenant as any)?.domainVerified || false,
       storeDescription: tenant.description || undefined,
       contactPhone: tenant.contactPhone || undefined,
-      products: products.slice(0, 50).map(p => ({
-        name: p.name,
-        price: Number(p.price),
-        description: p.description || undefined,
-        category: p.categoryId ? categoryMap.get(p.categoryId) : undefined,
-      })),
+      products: contextProducts,
       promotions: promotions.filter(p => p.isActive).map(p => ({
         name: p.title,
         description: p.description || undefined,
@@ -5618,11 +5745,18 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
         }
       }
       
-      // Apply typing delay after AI generation (simulates human typing)
-      const typingDelay = (tenant as any).aiTypingDelay || 0;
-      if (typingDelay > 0) {
-        console.log(`[WAHA] Simulating typing for ${typingDelay}s...`);
-        await new Promise(resolve => setTimeout(resolve, typingDelay * 1000));
+      const typingDelayMs = getTypingDelay(aiResult.content);
+      const chatId = `${customerPhone}@c.us`;
+      try {
+        const { sendTypingStatus, stopTypingStatus } = await import("./messaging/providers/wahaWhatsAppAdapter");
+        await sendTypingStatus(instance.instanceName, chatId);
+        try {
+          await new Promise(resolve => setTimeout(resolve, typingDelayMs));
+        } finally {
+          await stopTypingStatus(instance.instanceName, chatId);
+        }
+      } catch (typingErr) {
+        // Non-critical
       }
       
       const { sendMessage: coreSendMessage } = await import("./messaging/core");

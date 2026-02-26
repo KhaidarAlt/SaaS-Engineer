@@ -168,6 +168,38 @@ export function ingestWebhook(raw: WahaWebhookPayload): IngestResult {
 const WAHA_BASE_URL = process.env.WAHA_BASE_URL || "https://waha.botfactory.kz";
 const WAHA_API_KEY = process.env.WAHA_API_KEY || "";
 
+export async function sendTypingStatus(sessionName: string, chatId: string): Promise<void> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (WAHA_API_KEY) headers["X-Api-Key"] = WAHA_API_KEY;
+
+  try {
+    await fetch(`${WAHA_BASE_URL}/api/startTyping`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ session: sessionName, chatId }),
+      signal: AbortSignal.timeout(5000),
+    });
+  } catch (err) {
+    // Non-critical — silently ignore typing indicator failures
+  }
+}
+
+export async function stopTypingStatus(sessionName: string, chatId: string): Promise<void> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (WAHA_API_KEY) headers["X-Api-Key"] = WAHA_API_KEY;
+
+  try {
+    await fetch(`${WAHA_BASE_URL}/api/stopTyping`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ session: sessionName, chatId }),
+      signal: AbortSignal.timeout(5000),
+    });
+  } catch (err) {
+    // Non-critical
+  }
+}
+
 export async function sendOutbound(req: NormalizedOutbound): Promise<ProviderSendResult> {
   if (req.provider !== "waha" || req.channel !== "whatsapp") {
     return {

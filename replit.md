@@ -115,7 +115,9 @@ Key architectural decisions include:
 - **AI Services**:
     - OpenAI API (gpt-4o, gpt-4o-mini for chat; text-embedding-3-small for vector embeddings)
     - Google Generative AI
-- **Vector Search**: pgvector extension enabled in PostgreSQL. `knowledge_items` table has `embedding vector(1536)` column. Semantic similarity search (`embedding <=> query`) replaces static context stuffing when embeddings are available. Utility: `server/services/embeddings.ts` (generateEmbedding, searchKnowledgeBySimilarity, embedKnowledgeItem, backfillEmbeddings). Backfill API: `POST /api/ai/knowledge/backfill-embeddings`. New knowledge items auto-embed on creation (fire-and-forget).
+- **Vector Search**: pgvector extension enabled in PostgreSQL. `knowledge_items` table has `embedding vector(1536)` column. `products` table also has `embedding vector(1536)` column. Semantic similarity search (`embedding <=> query`) replaces static context stuffing when embeddings are available. Utility: `server/services/embeddings.ts` (generateEmbedding, searchKnowledgeBySimilarity, searchProductsBySimilarity, embedKnowledgeItem, embedProduct, backfillEmbeddings, backfillProductEmbeddings). Backfill APIs: `POST /api/ai/knowledge/backfill-embeddings`, `POST /api/ai/products/backfill-embeddings`. New knowledge items and products auto-embed on creation (fire-and-forget).
+- **Visual Product Delivery**: AI system prompt instructs the bot to display product images using Markdown format `![name](url)` with price and catalog link when a specific product matches the user's query.
+- **Typing Simulation**: `getTypingDelay(message)` calculates delay based on message length (50ms/char, capped at 4s) with ±20% random variance. WAHA adapter sends `startTyping`/`stopTyping` status before delivering the AI response.
 - **File Storage**: Replit Object Storage (Google Cloud Storage)
 - **Payment Processing**:
     - Kaspi Business (full integration with 3-step verification, invoice creation, payment status tracking, notifications)

@@ -7,7 +7,7 @@ import {
   tenants, aiSettings, aiTestingMessages, discounts, promotions, bankProducts,
 } from "@shared/schema";
 import { generateAiResponse } from "./services/openai";
-import { embedKnowledgeItem, backfillEmbeddings } from "./services/embeddings";
+import { embedKnowledgeItem, backfillEmbeddings, backfillProductEmbeddings } from "./services/embeddings";
 import OpenAI from "openai";
 
 const openaiClient = new OpenAI({
@@ -298,6 +298,17 @@ export function registerAiTrainingRoutes(
     } catch (error: any) {
       console.error("[Embeddings] backfill error:", error);
       res.status(500).json({ error: "Ошибка при генерации эмбеддингов" });
+    }
+  });
+
+  app.post("/api/ai/products/backfill-embeddings", requireAuth, requireAiAccess, async (req: Request, res: Response) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const count = await backfillProductEmbeddings(tenantId);
+      res.json({ success: true, embedded: count, message: `Обработано ${count} товаров` });
+    } catch (error: any) {
+      console.error("[Embeddings] product backfill error:", error);
+      res.status(500).json({ error: "Ошибка при генерации эмбеддингов товаров" });
     }
   });
 
