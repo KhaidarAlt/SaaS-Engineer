@@ -113,8 +113,9 @@ Key architectural decisions include:
     - Meta WhatsApp Cloud API (full integration with OAuth, template management, warm-up logic, webhook verification, broadcast support)
     - Instagram Direct (full integration with OAuth, Facebook Page linking, webhook handling)
 - **AI Services**:
-    - OpenAI API
+    - OpenAI API (gpt-4o, gpt-4o-mini for chat; text-embedding-3-small for vector embeddings)
     - Google Generative AI
+- **Vector Search**: pgvector extension enabled in PostgreSQL. `knowledge_items` table has `embedding vector(1536)` column. Semantic similarity search (`embedding <=> query`) replaces static context stuffing when embeddings are available. Utility: `server/services/embeddings.ts` (generateEmbedding, searchKnowledgeBySimilarity, embedKnowledgeItem, backfillEmbeddings). Backfill API: `POST /api/ai/knowledge/backfill-embeddings`. New knowledge items auto-embed on creation (fire-and-forget).
 - **File Storage**: Replit Object Storage (Google Cloud Storage)
 - **Payment Processing**:
     - Kaspi Business (full integration with 3-step verification, invoice creation, payment status tracking, notifications)

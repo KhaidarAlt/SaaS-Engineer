@@ -7,6 +7,7 @@ import {
   tenants, aiSettings, aiTestingMessages, discounts, promotions, bankProducts,
 } from "@shared/schema";
 import { generateAiResponse } from "./services/openai";
+import { embedKnowledgeItem, backfillEmbeddings } from "./services/embeddings";
 import OpenAI from "openai";
 
 const openaiClient = new OpenAI({
@@ -98,6 +99,10 @@ export function registerAiTrainingRoutes(
           content: editedText,
           source: "TRAINING",
         }).returning();
+
+        embedKnowledgeItem(kbItem.id, editedText, userText.substring(0, 100)).catch(err =>
+          console.error("[Embeddings] async embed failed:", err)
+        );
 
         const [event] = await db.insert(aiTrainingEvents).values({
           tenantId,
@@ -273,10 +278,26 @@ export function registerAiTrainingRoutes(
         source: source || "USER",
         tags: tags || null,
       }).returning();
+
+      embedKnowledgeItem(item.id, content, title).catch(err =>
+        console.error("[Embeddings] async embed failed:", err)
+      );
+
       res.json(item);
     } catch (error: any) {
       console.error("Ошибка создания записи базы знаний:", error);
       res.status(500).json({ error: "Ошибка создания записи базы знаний" });
+    }
+  });
+
+  app.post("/api/ai/knowledge/backfill-embeddings", requireAuth, requireAiAccess, async (req: Request, res: Response) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const count = await backfillEmbeddings(tenantId);
+      res.json({ success: true, embedded: count, message: `Обработано ${count} записей` });
+    } catch (error: any) {
+      console.error("[Embeddings] backfill error:", error);
+      res.status(500).json({ error: "Ошибка при генерации эмбеддингов" });
     }
   });
 

@@ -8,6 +8,7 @@ import {
   aiTrainingEvents,
 } from "@shared/schema";
 import { analyzeDialogs } from "./services/ai-coach.service";
+import { embedKnowledgeItem } from "./services/embeddings";
 import type { IStorage } from "./storage";
 import { z } from "zod";
 
@@ -69,15 +70,15 @@ export function registerAiCoachRoutes(
         return res.status(400).json({ message: "Рекомендация уже обработана" });
       }
 
-      await db.transaction(async (tx) => {
-        await tx.insert(knowledgeItems).values({
+      const result = await db.transaction(async (tx) => {
+        const [kbItem] = await tx.insert(knowledgeItems).values({
           tenantId,
           type: "ARTICLE",
           title: suggestion.topic,
           content: suggestion.suggestedContent,
           source: "TRAINING",
           isActive: true,
-        });
+        }).returning();
 
         await tx.insert(aiKnowledgeArticles).values({
           tenantId,
@@ -97,7 +98,13 @@ export function registerAiCoachRoutes(
           eventType: "KB_ADDED",
           context: { source: "ai_coach", topic: suggestion.topic, suggestionId: id },
         });
+
+        return kbItem;
       });
+
+      embedKnowledgeItem(result.id, suggestion.suggestedContent, suggestion.topic).catch(err =>
+        console.error("[Embeddings] async embed failed:", err)
+      );
 
       res.json({ success: true, message: "Знание одобрено и добавлено в базу" });
     } catch (error: any) {

@@ -29,6 +29,7 @@ import { registerAiAnalyticsRoutes } from "./ai-analytics-routes.js";
 import { registerAiRopConnectRoutes } from "./ai-rop-connect-routes.js";
 import { registerGrowthRoutes } from "./ai-rop-growth-routes.js";
 import { registerAiCoachRoutes } from "./ai-coach-routes.js";
+import { searchKnowledgeBySimilarity, hasEmbeddings } from "./services/embeddings.js";
 import { seedScenarioTemplates } from "./growth/seedScenarioTemplates.js";
 import { startGrowthSyncWorker } from "./growth/syncWorker.js";
 
@@ -4492,7 +4493,7 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
           }));
           
           // Get all context data in parallel
-          const [tenant, products, aiSettings, salesScripts, tagRules, faqItems, knowledge, policies, promotions, discounts, kaspiIntegration, enabledBankProducts, aiPriorities, crossSellItems, upsellItems] = await Promise.all([
+          const [tenant, products, aiSettings, salesScripts, tagRules, faqItems, knowledgeRaw, policies, promotions, discounts, kaspiIntegration, enabledBankProducts, aiPriorities, crossSellItems, upsellItems] = await Promise.all([
             storage.getTenant(tenantId),
             storage.getProducts(tenantId),
             storage.getAiSettings(tenantId),
@@ -4509,6 +4510,28 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
             db.select().from(productCrossSell).where(eq(productCrossSell.tenantId, tenantId)).orderBy(productCrossSell.sortOrder),
             db.select().from(productUpsell).where(eq(productUpsell.tenantId, tenantId)),
           ]);
+
+          let knowledge = knowledgeRaw;
+          try {
+            const useVectorSearch = await hasEmbeddings(tenantId);
+            if (useVectorSearch && req.body.content) {
+              const semanticResults = await searchKnowledgeBySimilarity(tenantId, req.body.content, 5);
+              if (semanticResults.length > 0) {
+                knowledge = semanticResults.map(r => ({
+                  id: r.id,
+                  tenantId: r.tenantId,
+                  title: r.title,
+                  content: r.content,
+                  category: r.type,
+                  isPublished: true,
+                  createdAt: r.createdAt,
+                  updatedAt: r.updatedAt,
+                }));
+              }
+            }
+          } catch (err) {
+            console.error("[Embeddings] vector search fallback to static:", err);
+          }
           
           // Get active sales script
           const activeScript = salesScripts.find(s => s.isActive);
@@ -5406,7 +5429,29 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
     const policies = await storage.getAiPolicies(tenantId);
     const tagRules = await storage.getAiTagRules(tenantId);
     const faqItems = await storage.getAiFaqItems(tenantId);
-    const knowledgeArticles = await storage.getAiKnowledgeArticles(tenantId);
+    let knowledgeArticles = await storage.getAiKnowledgeArticles(tenantId);
+
+    try {
+      const useVectorSearch = await hasEmbeddings(tenantId);
+      if (useVectorSearch && text) {
+        const semanticResults = await searchKnowledgeBySimilarity(tenantId, text, 5);
+        if (semanticResults.length > 0) {
+          knowledgeArticles = semanticResults.map(r => ({
+            id: r.id,
+            tenantId: r.tenantId,
+            title: r.title,
+            content: r.content,
+            category: r.type,
+            isPublished: true,
+            createdAt: r.createdAt,
+            updatedAt: r.updatedAt,
+          }));
+        }
+      }
+    } catch (err) {
+      console.error("[Embeddings] vector search fallback to static:", err);
+    }
+
     const kaspiIntegration = await storage.getKaspiIntegration(tenantId);
     const enabledBankProducts = await storage.getEnabledBankProducts(tenantId);
     const aiPriorities = await db.select().from(categoryAiPriority).where(eq(categoryAiPriority.tenantId, tenantId));

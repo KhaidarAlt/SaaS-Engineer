@@ -1,7 +1,19 @@
 import { sql, relations } from "drizzle-orm";
-import { pgTable, text, varchar, integer, boolean, timestamp, decimal, jsonb, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, boolean, timestamp, decimal, jsonb, uniqueIndex, customType } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+
+const vector = customType<{ data: number[]; driverData: string }>({
+  dataType() {
+    return "vector(1536)";
+  },
+  toDriver(value: number[]): string {
+    return `[${value.join(",")}]`;
+  },
+  fromDriver(value: string): number[] {
+    return JSON.parse(value);
+  },
+});
 
 // ============ PLANS ============
 export const plans = pgTable("plans", {
@@ -1292,6 +1304,7 @@ export const knowledgeItems = pgTable("knowledge_items", {
   source: text("source").default("USER"), // USER | IMPORT | TRAINING | SYSTEM
   tags: text("tags").array(),
   isActive: boolean("is_active").default(true),
+  embedding: vector("embedding"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -1303,7 +1316,7 @@ export const knowledgeItemsRelations = relations(knowledgeItems, ({ one }) => ({
   }),
 }));
 
-export const insertKnowledgeItemSchema = createInsertSchema(knowledgeItems).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertKnowledgeItemSchema = createInsertSchema(knowledgeItems).omit({ id: true, embedding: true, createdAt: true, updatedAt: true });
 export type InsertKnowledgeItem = z.infer<typeof insertKnowledgeItemSchema>;
 export type KnowledgeItem = typeof knowledgeItems.$inferSelect;
 
