@@ -929,8 +929,7 @@ function DishCard({
             muted
             loop
             playsInline
-            className="w-full h-full object-contain p-1"
-            style={{ objectFit: "contain" }}
+            className="w-full h-full object-contain"
             data-testid={`video-product-${product.id}`}
           />
         ) : imgUrl ? (
