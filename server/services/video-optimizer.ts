@@ -29,7 +29,11 @@ async function getVideoInfo(inputPath: string): Promise<VideoInfo> {
 
 type AspectRatio = "16:9" | "9:16" | "1:1";
 
-function getAspectCropFilter(info: VideoInfo, targetAspect: AspectRatio): string {
+function toEven(n: number): number {
+  return n % 2 === 0 ? n : n + 1;
+}
+
+function getAspectPadFilter(info: VideoInfo, targetAspect: AspectRatio): string {
   const [tw, th] = targetAspect.split(":").map(Number);
   const targetRatio = tw / th;
   const currentRatio = info.width / info.height;
@@ -38,27 +42,43 @@ function getAspectCropFilter(info: VideoInfo, targetAspect: AspectRatio): string
     return "";
   }
 
+  const iw = toEven(info.width);
+  const ih = toEven(info.height);
+
   if (currentRatio > targetRatio) {
-    const newWidth = Math.round(info.height * targetRatio);
-    const cropW = newWidth % 2 === 0 ? newWidth : newWidth - 1;
-    const cropH = info.height % 2 === 0 ? info.height : info.height - 1;
-    const x = Math.round((info.width - cropW) / 2);
-    return `crop=${cropW}:${cropH}:${x}:0`;
+    const padH = toEven(Math.round(iw / targetRatio));
+    return `pad=${iw}:${padH}:(ow-iw)/2:(oh-ih)/2:white`;
   } else {
-    const newHeight = Math.round(info.width / targetRatio);
-    const cropW = info.width % 2 === 0 ? info.width : info.width - 1;
-    const cropH = newHeight % 2 === 0 ? newHeight : newHeight - 1;
-    const y = Math.round((info.height - cropH) / 2);
-    return `crop=${cropW}:${cropH}:0:${y}`;
+    const padW = toEven(Math.round(ih * targetRatio));
+    return `pad=${padW}:${ih}:(ow-iw)/2:(oh-ih)/2:white`;
   }
 }
 
-function getScaleFilter(info: VideoInfo, targetAspect: AspectRatio): string {
-  let maxDim = 1280;
-  if (targetAspect === "9:16") {
-    if (info.height > maxDim) return `scale=-2:${maxDim}`;
+function getPaddedDimensions(info: VideoInfo, targetAspect: AspectRatio): { width: number; height: number } {
+  const [tw, th] = targetAspect.split(":").map(Number);
+  const targetRatio = tw / th;
+  const currentRatio = info.width / info.height;
+
+  if (Math.abs(currentRatio - targetRatio) < 0.05) {
+    return { width: info.width, height: info.height };
+  }
+
+  const iw = toEven(info.width);
+  const ih = toEven(info.height);
+
+  if (currentRatio > targetRatio) {
+    return { width: iw, height: toEven(Math.round(iw / targetRatio)) };
   } else {
-    if (info.width > maxDim) return `scale=${maxDim}:-2`;
+    return { width: toEven(Math.round(ih * targetRatio)), height: ih };
+  }
+}
+
+function getScaleFilter(width: number, height: number, targetAspect: AspectRatio): string {
+  const maxDim = 1280;
+  if (targetAspect === "9:16") {
+    if (height > maxDim) return `scale=-2:${maxDim}`;
+  } else {
+    if (width > maxDim) return `scale=${maxDim}:-2`;
   }
   return "";
 }
@@ -100,12 +120,15 @@ export async function optimizeVideo(
 
     const filters: string[] = [];
 
+    const effectiveAspect = aspectRatio || "16:9";
+
     if (aspectRatio) {
-      const cropFilter = getAspectCropFilter(info, aspectRatio);
-      if (cropFilter) filters.push(cropFilter);
+      const padFilter = getAspectPadFilter(info, aspectRatio);
+      if (padFilter) filters.push(padFilter);
     }
 
-    const scaleFilter = getScaleFilter(info, aspectRatio || "16:9");
+    const padded = aspectRatio ? getPaddedDimensions(info, aspectRatio) : { width: info.width, height: info.height };
+    const scaleFilter = getScaleFilter(padded.width, padded.height, effectiveAspect);
     if (scaleFilter) filters.push(scaleFilter);
 
     const vfArg = filters.length > 0 ? `-vf "${filters.join(",")}"` : "";
@@ -134,10 +157,11 @@ export async function optimizeVideo(
       const posterTime = Math.min(0.5, clipDuration / 2);
       const posterFilters: string[] = [];
       if (aspectRatio) {
-        const cropFilter = getAspectCropFilter(info, aspectRatio);
-        if (cropFilter) posterFilters.push(cropFilter);
+        const padFilter = getAspectPadFilter(info, aspectRatio);
+        if (padFilter) posterFilters.push(padFilter);
       }
-      const pScaleFilter = getScaleFilter(info, aspectRatio || "16:9");
+      const pPadded = aspectRatio ? getPaddedDimensions(info, aspectRatio) : { width: info.width, height: info.height };
+      const pScaleFilter = getScaleFilter(pPadded.width, pPadded.height, effectiveAspect);
       if (pScaleFilter) posterFilters.push(pScaleFilter);
       const posterVf = posterFilters.length > 0 ? `-vf "${posterFilters.join(",")}"` : "";
 
