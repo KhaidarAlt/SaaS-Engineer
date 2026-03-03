@@ -180,7 +180,7 @@ function ProductCard({
       <Card className="overflow-hidden h-full hover-elevate">
         <Link href={`${basePath}/product/${product.id}`}>
           <div
-            className="aspect-square relative overflow-hidden bg-muted cursor-pointer"
+            className="aspect-square relative overflow-hidden bg-white dark:bg-neutral-900 cursor-pointer"
           >
             {(product as any).videoUrl && (product as any).videoPrimary ? (
               <video
@@ -364,7 +364,7 @@ function QuickViewModal({
 
   const modalContent = (
     <div className="space-y-4">
-      <div className="w-full aspect-square bg-muted rounded-lg overflow-hidden">
+      <div className="w-full aspect-square bg-white dark:bg-neutral-900 rounded-lg overflow-hidden">
         {product.mainImageUrl ? (
           <img
             src={resolveImageUrl(product.mainImageUrl)}
@@ -496,7 +496,7 @@ function QuickViewModal({
           </DialogTitle>
         </DialogHeader>
         <div className="grid grid-cols-2 gap-6">
-          <div className="w-full aspect-square bg-muted rounded-lg overflow-hidden">
+          <div className="w-full aspect-square bg-white dark:bg-neutral-900 rounded-lg overflow-hidden">
             {product.mainImageUrl ? (
               <img
                 src={resolveImageUrl(product.mainImageUrl)}
@@ -1264,7 +1264,7 @@ export default function CatalogHome({ basePath: parentBasePath }: { basePath?: s
                     <Card key={product.id} className="hover-elevate">
                       <CardContent className="p-4 flex items-center gap-4">
                         <Link href={`${basePath}/product/${product.id}`}>
-                          <div className="w-24 h-24 rounded-lg overflow-hidden bg-muted shrink-0 cursor-pointer relative">
+                          <div className="w-24 h-24 rounded-lg overflow-hidden bg-white dark:bg-neutral-900 shrink-0 cursor-pointer relative">
                             {product.mainImageUrl ? (
                               <img
                                 src={resolveImageUrl(product.mainImageUrl)}
@@ -1370,7 +1370,7 @@ export default function CatalogHome({ basePath: parentBasePath }: { basePath?: s
                           <tr key={product.id} className="border-b last:border-b-0">
                             <td className="p-3">
                               <Link href={`${basePath}/product/${product.id}`}>
-                                <div className="w-12 h-12 rounded-md overflow-hidden bg-muted cursor-pointer">
+                                <div className="w-12 h-12 rounded-md overflow-hidden bg-white dark:bg-neutral-900 cursor-pointer">
                                   {product.mainImageUrl ? (
                                     <img
                                       src={resolveImageUrl(product.mainImageUrl)}
