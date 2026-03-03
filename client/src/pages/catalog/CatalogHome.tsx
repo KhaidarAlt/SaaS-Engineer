@@ -1166,69 +1166,6 @@ export default function CatalogHome({ basePath: parentBasePath }: { basePath?: s
           </div>
         )}
 
-        {data?.categories && data.categories.length > 0 && (
-          <div className="flex flex-wrap gap-2 mb-6">
-            <Badge
-              variant={categoryFilter === "all" ? "default" : "outline"}
-              className="cursor-pointer"
-              onClick={() => setCategoryFilter("all")}
-            >
-              Все
-            </Badge>
-            {data.categories.filter(c => !c.parentId).map((parentCat) => {
-              const subcats = data.categories?.filter(sub => sub.parentId === parentCat.id) || [];
-              const isParentOrChildSelected = categoryFilter === parentCat.id || 
-                subcats.some(sub => sub.id === categoryFilter);
-              
-              if (subcats.length === 0) {
-                return (
-                  <Badge
-                    key={parentCat.id}
-                    variant={categoryFilter === parentCat.id ? "default" : "outline"}
-                    className="cursor-pointer"
-                    onClick={() => setCategoryFilter(parentCat.id)}
-                  >
-                    {parentCat.name}
-                  </Badge>
-                );
-              }
-              
-              return (
-                <DropdownMenu key={parentCat.id}>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant={isParentOrChildSelected ? "default" : "outline"}
-                      size="sm"
-                      className="gap-1"
-                      data-testid={`dropdown-category-${parentCat.id}`}
-                    >
-                      {parentCat.name}
-                      <ChevronDown className="h-3 w-3" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start">
-                    <DropdownMenuItem 
-                      onClick={() => setCategoryFilter(parentCat.id)}
-                      data-testid={`menu-all-${parentCat.id}`}
-                    >
-                      Все {parentCat.name}
-                    </DropdownMenuItem>
-                    {subcats.map((subCat) => (
-                      <DropdownMenuItem 
-                        key={subCat.id} 
-                        onClick={() => setCategoryFilter(subCat.id)}
-                        className={categoryFilter === subCat.id ? "bg-accent" : ""}
-                        data-testid={`menu-subcat-${subCat.id}`}
-                      >
-                        {subCat.name}
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              );
-            })}
-          </div>
-        )}
 
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-6">
           <p className="text-sm text-muted-foreground" data-testid="text-product-count">
