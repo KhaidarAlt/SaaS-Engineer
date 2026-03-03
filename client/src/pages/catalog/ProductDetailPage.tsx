@@ -419,7 +419,8 @@ export default function ProductDetailPage() {
                         autoPlay
                         muted
                         playsInline
-                        className="w-full h-full object-contain bg-black"
+                        className="w-full h-full object-contain p-1"
+                        style={{ objectFit: "contain" }}
                         data-testid={`video-product-${product.id}`}
                       />
                     </motion.div>
@@ -502,7 +503,8 @@ export default function ProductDetailPage() {
                           poster={videoPosterUrl || resolveImageUrl(product.mainImageUrl)}
                           muted
                           playsInline
-                          className="w-full h-full object-contain bg-black"
+                          className="w-full h-full object-contain p-0.5"
+                          style={{ objectFit: "contain" }}
                         />
                       ) : (
                         <img
