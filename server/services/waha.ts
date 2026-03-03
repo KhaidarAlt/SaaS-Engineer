@@ -18,10 +18,13 @@ interface WahaQRResponse {
 
 interface WahaSessionConfig {
   name: string;
-  webhooks?: {
-    url: string;
-    events: string[];
-  }[];
+  config?: {
+    webhooks?: {
+      url: string;
+      events: string[];
+    }[];
+  };
+  start?: boolean;
 }
 
 async function wahaRequest(method: string, endpoint: string, body?: any): Promise<any> {
@@ -67,20 +70,23 @@ export const wahaService = {
   },
 
   async createSession(sessionName: string, webhookUrl?: string): Promise<WahaSession> {
-    const config: WahaSessionConfig = {
+    const body: WahaSessionConfig = {
       name: sessionName,
+      start: true,
     };
 
     if (webhookUrl) {
-      config.webhooks = [
-        {
-          url: webhookUrl,
-          events: ["message", "message.any", "session.status"],
-        },
-      ];
+      body.config = {
+        webhooks: [
+          {
+            url: webhookUrl,
+            events: ["message", "message.any", "message.ack", "session.status", "message.waiting"],
+          },
+        ],
+      };
     }
 
-    return wahaRequest("POST", "/api/sessions", config);
+    return wahaRequest("POST", "/api/sessions", body);
   },
 
   async startSession(sessionName: string): Promise<WahaSession> {
@@ -177,7 +183,7 @@ export const wahaService = {
         webhooks: [
           {
             url: webhookUrl,
-            events: ["message", "message.any", "session.status"],
+            events: ["message", "message.any", "message.ack", "session.status", "message.waiting"],
           },
         ],
       },

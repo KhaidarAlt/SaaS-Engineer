@@ -5219,11 +5219,8 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
       }
       const webhookUrl = baseUrl ? `${baseUrl}/api/waha/webhook` : "";
       
-      // Create session in WAHA
+      // Create and start session in WAHA (start: true is included in createSession)
       await wahaService.createSession(instanceName, webhookUrl || undefined);
-      
-      // Start session
-      await wahaService.startSession(instanceName);
       
       // Save to database
       const instance = await storage.createWahaInstance({
@@ -5497,8 +5494,9 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
     
     // Check if tenant has AI enabled
     const tenant = await storage.getTenant(tenantId);
+    console.log(`[WAHA] Tenant ${tenantId} aiEnabled=${tenant?.aiEnabled}`);
     if (!tenant || !tenant.aiEnabled) {
-      console.log(`[WAHA] AI disabled for tenant ${tenantId}`);
+      console.log(`[WAHA] AI disabled for tenant ${tenantId}, skipping response`);
       return;
     }
     
