@@ -929,7 +929,7 @@ function DishCard({
             muted
             loop
             playsInline
-            className="w-full h-full object-cover"
+            className="w-full h-full object-contain bg-white dark:bg-black"
             data-testid={`video-product-${product.id}`}
           />
         ) : imgUrl ? (
