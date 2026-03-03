@@ -5452,7 +5452,7 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
         await storage.updateWahaInstance(instance.id, instance.tenantId, { status: newStatus });
       }
       
-      if (event === "message" || event === "message.ack") {
+      if (event === "message" || event === "message.any" || event === "message.ack") {
         const { acceptInboundWahaWebhook } = await import("./messaging/core");
         acceptInboundWahaWebhook(instance.tenantId, { event, session, payload }).catch(err => {
           console.error("[WAHA] Canonical ingest error (non-fatal):", err);

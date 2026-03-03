@@ -23,15 +23,29 @@ export async function runWahaHistorySync(tenantId: string, syncRunId: string) {
 
     for (const instance of instances) {
       try {
-        const chats = await wahaService.getChats(instance.instanceName);
+        let chats = await wahaService.getChats(instance.instanceName);
+        
+        if (!Array.isArray(chats) || chats.length === 0) {
+          console.log(`[WahaSync] getChats returned empty for ${instance.instanceName}, trying getContacts fallback`);
+          const contacts = await wahaService.getContacts(instance.instanceName);
+          if (Array.isArray(contacts) && contacts.length > 0) {
+            chats = contacts.map((c: any) => ({
+              id: c.id?._serialized || c.id || "",
+              name: c.name || c.pushname || c.shortName || null,
+              pushName: c.pushname || null,
+            }));
+          }
+        }
+
         if (!Array.isArray(chats)) continue;
 
         for (const chat of chats) {
           try {
-            if (!chat.id || !chat.id.includes("@c.us")) continue;
+            const chatId = typeof chat.id === "string" ? chat.id : chat.id?._serialized || "";
+            if (!chatId || !chatId.includes("@c.us")) continue;
             chatsScanned++;
 
-            const phone = chat.id.replace("@c.us", "");
+            const phone = chatId.replace("@c.us", "");
             if (!phone || phone.length < 7) continue;
 
             const displayName = chat.name || chat.pushName || null;

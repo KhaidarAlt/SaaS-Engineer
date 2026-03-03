@@ -12,8 +12,8 @@ import { fetchSummary, ANALYTICS_KEYS } from "../analytics/api/analyticsApi";
 import { fetchScore, TESTING_KEYS } from "../testing/api/testingApi";
 import { fetchSettings, saveSettings, AI_ROP_KEYS } from "../api/aiRopApi";
 import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { AlertTriangle, Power } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
 
@@ -35,42 +35,40 @@ export default function OverviewPage() {
     queryFn: fetchScore,
   });
 
-  const activateMutation = useMutation({
-    mutationFn: () => saveSettings({ enabled: true }),
-    onSuccess: () => {
+  const toggleMutation = useMutation({
+    mutationFn: (enabled: boolean) => saveSettings({ enabled }),
+    onSuccess: (_data, enabled) => {
       queryClient.invalidateQueries({ queryKey: AI_ROP_KEYS.settings });
       queryClient.invalidateQueries({ queryKey: ["/api/ai/status"] });
-      toast({ title: "AI-бот активирован" });
+      toast({ title: enabled ? "AI-бот включён" : "AI-бот выключен" });
     },
   });
 
   return (
     <div data-testid="page-overview" className="space-y-4">
-      <SectionHeader
-        title="Обзор"
-        subtitle="Центр управления AI-продавцом"
-      />
-
-      {settings && !settings.enabled && (
-        <Card data-testid="bot-activation-banner" className="border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700">
-          <CardContent className="px-5 py-4 flex items-center gap-4">
-            <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0" />
-            <div className="flex-1">
-              <p className="font-medium text-amber-900 dark:text-amber-200">AI-бот выключен</p>
-              <p className="text-sm text-amber-700 dark:text-amber-400">Бот не отвечает на сообщения клиентов. Нажмите «Активировать», чтобы включить.</p>
-            </div>
-            <Button
-              data-testid="button-activate-bot"
-              onClick={() => activateMutation.mutate()}
-              disabled={activateMutation.isPending}
-              className="bg-amber-600 hover:bg-amber-700 text-white shrink-0"
+      <div className="flex items-center justify-between">
+        <SectionHeader
+          title="Обзор"
+          subtitle="Центр управления AI-продавцом"
+        />
+        {settings && (
+          <div className="flex items-center gap-3">
+            <Badge
+              data-testid="badge-ai-status"
+              variant={settings.enabled ? "default" : "secondary"}
+              className={settings.enabled ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" : ""}
             >
-              <Power className="h-4 w-4 mr-2" />
-              {activateMutation.isPending ? "Включаю..." : "Активировать"}
-            </Button>
-          </CardContent>
-        </Card>
-      )}
+              {settings.enabled ? "AI включён" : "AI выключен"}
+            </Badge>
+            <Switch
+              data-testid="switch-ai-toggle"
+              checked={settings.enabled}
+              onCheckedChange={(checked) => toggleMutation.mutate(checked)}
+              disabled={toggleMutation.isPending}
+            />
+          </div>
+        )}
+      </div>
 
       <div className="grid grid-cols-1 md:grid-cols-[3fr_2fr] gap-4">
         <ScoreHeroCard />
