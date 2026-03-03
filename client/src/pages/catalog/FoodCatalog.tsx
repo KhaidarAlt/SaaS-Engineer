@@ -560,7 +560,7 @@ export default function FoodCatalog({
                         <ImageWithSkeleton
                           src={resolveImageUrl(p.mainImageUrl)}
                           alt={p.name}
-                          className="w-full h-full object-cover"
+                          className="w-full h-full object-contain p-1"
                         />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center">
@@ -616,7 +616,7 @@ export default function FoodCatalog({
                       <ImageWithSkeleton
                         src={resolveImageUrl(item.mainImageUrl)}
                         alt={item.name}
-                        className="w-full h-full object-cover"
+                        className="w-full h-full object-contain p-1"
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center">
@@ -735,7 +735,7 @@ export default function FoodCatalog({
                   <img
                     src={resolveImageUrl(activeProduct.mainImageUrl)}
                     alt={activeProduct.name}
-                    className="w-full h-full object-cover"
+                    className="w-full h-full object-contain p-1"
                   />
                 </div>
               )}
@@ -936,7 +936,7 @@ function DishCard({
           <ImageWithSkeleton
             src={imgUrl}
             alt={product.name}
-            className="w-full h-full object-cover"
+            className="w-full h-full object-contain p-1"
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center">

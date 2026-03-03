@@ -195,7 +195,7 @@ export default function ProductDetailPage() {
                 <img
                   src={resolveImageUrl(product.mainImageUrl)}
                   alt={product.name}
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-contain p-1"
                   loading="lazy"
                   data-testid={`img-cross-sell-${product.id}`}
                 />
@@ -428,7 +428,7 @@ export default function ProductDetailPage() {
                       key={currentImageIndex}
                       src={allImages[currentImageIndex]}
                       alt={product.name}
-                      className="w-full h-full object-cover"
+                      className="w-full h-full object-contain p-2"
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       exit={{ opacity: 0 }}

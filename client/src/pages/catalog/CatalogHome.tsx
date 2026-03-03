@@ -197,7 +197,7 @@ function ProductCard({
               <img
                 src={resolveImageUrl(product.mainImageUrl)}
                 alt={product.name}
-                className="w-full h-full object-cover"
+                className="w-full h-full object-contain p-1"
                 loading="lazy"
               />
             ) : (
@@ -369,7 +369,7 @@ function QuickViewModal({
           <img
             src={resolveImageUrl(product.mainImageUrl)}
             alt={product.name}
-            className="w-full h-full object-cover"
+            className="w-full h-full object-contain p-1"
             data-testid={`img-quick-view-product-${product.id}`}
           />
         ) : (
@@ -501,7 +501,7 @@ function QuickViewModal({
               <img
                 src={resolveImageUrl(product.mainImageUrl)}
                 alt={product.name}
-                className="w-full h-full object-cover"
+                className="w-full h-full object-contain p-1"
                 data-testid={`img-dialog-quick-view-product-${product.id}`}
               />
             ) : (

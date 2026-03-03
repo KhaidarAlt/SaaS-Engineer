@@ -161,7 +161,7 @@ function CarouselSection({
                       <img
                         src={imageUrl}
                         alt={product.name}
-                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                        className="w-full h-full object-contain p-1 transition-transform duration-500 group-hover:scale-105"
                         loading="lazy"
                       />
                     ) : (
@@ -289,7 +289,7 @@ function GridProductCard({
                 <img
                   src={imageUrl}
                   alt={product.name}
-                  className={`w-full h-full object-cover transition-all duration-700 group-hover:scale-110 ${imgLoaded ? "opacity-100" : "opacity-0"}`}
+                  className={`w-full h-full object-contain p-1 transition-all duration-700 group-hover:scale-110 ${imgLoaded ? "opacity-100" : "opacity-0"}`}
                   loading="lazy"
                   onLoad={() => setImgLoaded(true)}
                   data-testid={`img-product-${product.id}`}
@@ -864,7 +864,7 @@ export default function FashionCatalog({
                       data-testid={`video-product-${product.id}`}
                     />
                   ) : imageUrl ? (
-                    <img src={imageUrl} alt={product.name} className="w-full h-full object-cover" loading={index < 2 ? "eager" : "lazy"} data-testid={`img-product-${product.id}`} />
+                    <img src={imageUrl} alt={product.name} className="w-full h-full object-contain p-1" loading={index < 2 ? "eager" : "lazy"} data-testid={`img-product-${product.id}`} />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center bg-gray-100 dark:bg-neutral-900">
                       <Package className="h-20 w-20 text-gray-400 dark:text-neutral-700" />
