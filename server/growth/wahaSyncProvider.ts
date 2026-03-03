@@ -1,6 +1,6 @@
 import { db } from "../db";
 import { growthContacts, growthSyncRuns, wahaInstances, aiRopChannels } from "@shared/schema";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, sql, inArray } from "drizzle-orm";
 import { wahaService } from "../services/waha";
 
 export async function runWahaHistorySync(tenantId: string, syncRunId: string) {
@@ -15,7 +15,7 @@ export async function runWahaHistorySync(tenantId: string, syncRunId: string) {
 
   try {
     const instances = await db.select().from(wahaInstances)
-      .where(and(eq(wahaInstances.tenantId, tenantId), eq(wahaInstances.status, "CONNECTED")));
+      .where(and(eq(wahaInstances.tenantId, tenantId), inArray(wahaInstances.status, ["running", "CONNECTED"])));
 
     if (instances.length === 0) {
       throw new Error("No connected WAHA instances found");
