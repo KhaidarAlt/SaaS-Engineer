@@ -5204,17 +5204,18 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
 
       const instanceName = wahaService.generateInstanceName(tenantId);
       
-      // Get webhook URL - use explicit env var, then REPLIT_DEV_DOMAIN, then derive from request
+      // Get webhook URL - production always uses botfactory.kz
       let baseUrl = process.env.WAHA_WEBHOOK_BASE_URL;
-      if (!baseUrl && process.env.REPLIT_DEV_DOMAIN) {
-        baseUrl = `https://${process.env.REPLIT_DEV_DOMAIN}`;
-      }
       if (!baseUrl) {
-        const protocol = req.headers["x-forwarded-proto"] || req.protocol || "https";
-        const host = req.headers["x-forwarded-host"] || req.headers.host;
-        if (host) {
-          baseUrl = `${protocol}://${host}`;
-        }
+        baseUrl = process.env.NODE_ENV === "production" || process.env.REPLIT_DEPLOYMENT
+          ? "https://botfactory.kz"
+          : process.env.REPLIT_DEV_DOMAIN
+            ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+            : (() => {
+                const protocol = req.headers["x-forwarded-proto"] || req.protocol || "https";
+                const host = req.headers["x-forwarded-host"] || req.headers.host;
+                return host ? `${protocol}://${host}` : "";
+              })();
       }
       const webhookUrl = baseUrl ? `${baseUrl}/api/waha/webhook` : "";
       
@@ -5408,9 +5409,15 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
           const matchedTenant = allTenants.find(t => t.id.startsWith(tenantIdPrefix));
           if (matchedTenant) {
             console.log(`[WAHA] Auto-registering session ${session} for tenant ${matchedTenant.id} (${matchedTenant.name})`);
-            const protocol = req.headers["x-forwarded-proto"] || req.protocol || "https";
-            const host = req.headers["x-forwarded-host"] || req.headers.host;
-            const webhookUrl = host ? `${protocol}://${host}/api/waha/webhook` : "";
+            const webhookUrl = process.env.NODE_ENV === "production" || process.env.REPLIT_DEPLOYMENT
+              ? "https://botfactory.kz/api/waha/webhook"
+              : process.env.REPLIT_DEV_DOMAIN
+                ? `https://${process.env.REPLIT_DEV_DOMAIN}/api/waha/webhook`
+                : (() => {
+                    const protocol = req.headers["x-forwarded-proto"] || req.protocol || "https";
+                    const host = req.headers["x-forwarded-host"] || req.headers.host;
+                    return host ? `${protocol}://${host}/api/waha/webhook` : "";
+                  })();
             instance = await storage.createWahaInstance({
               tenantId: matchedTenant.id,
               instanceName: session,

@@ -600,8 +600,11 @@ async function computeScore(tenantId: string, pool: any, storage: any) {
 
   let waConnected = false;
   try {
-    const waRes = await pool.query(`SELECT waha_status FROM tenants WHERE id = $1`, [tenantId]);
-    waConnected = waRes.rows[0]?.waha_status === "connected";
+    const waRes = await pool.query(
+      `SELECT COUNT(*) as cnt FROM waha_instances WHERE tenant_id = $1 AND status = 'running' AND is_active = true`,
+      [tenantId]
+    );
+    waConnected = parseInt(waRes.rows[0]?.cnt || "0") > 0;
   } catch {}
   operationsItems.whatsapp = { score: waConnected ? 5 : 0, max: 5, label: "WhatsApp подключён", passed: waConnected };
   if (waConnected) opsScore += 5;
@@ -764,8 +767,11 @@ export function registerAiTestingRoutes(
 
       let waConnected = false;
       try {
-        const waRes = await pool.query(`SELECT waha_status FROM tenants WHERE id = $1`, [tenantId]);
-        waConnected = waRes.rows[0]?.waha_status === "connected";
+        const waRes = await pool.query(
+          `SELECT COUNT(*) as cnt FROM waha_instances WHERE tenant_id = $1 AND status = 'running' AND is_active = true`,
+          [tenantId]
+        );
+        waConnected = parseInt(waRes.rows[0]?.cnt || "0") > 0;
       } catch {}
       reasons.push({ label: "WhatsApp подключён", passed: waConnected, detail: waConnected ? "Подключён" : "Не подключён", link: "/dashboard/whatsapp" });
 
