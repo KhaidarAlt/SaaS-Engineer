@@ -5431,13 +5431,15 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
         });
       }
 
-      if (event === "message") {
+      if (event === "message" || event === "message.any") {
         const from = payload?.from;
         const text = payload?.body;
         const fromMe = payload?.fromMe;
         
+        console.log(`[WAHA] Event=${event} from=${from} fromMe=${fromMe} text=${text?.substring?.(0, 50)}`);
+        
         if (from && text && !fromMe) {
-          console.log(`[WAHA] Message from ${from}: ${text}`);
+          console.log(`[WAHA] Processing message from ${from}: ${text}`);
           
           processIncomingWhatsAppMessage(instance, from, text).catch(err => {
             console.error("[WAHA] Error processing message:", err);
