@@ -5399,8 +5399,29 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
       const { event, session, payload } = req.body;
       console.log("[WAHA Webhook] Received:", JSON.stringify({ event, session, payloadKeys: Object.keys(payload || {}), from: payload?.from, body: payload?.body?.substring?.(0, 50) }));
       
-      // Find instance by session name
-      const instance = await storage.getWahaInstanceByName(session);
+      // Find instance by session name, auto-register if missing
+      let instance = await storage.getWahaInstanceByName(session);
+      if (!instance && session && session.startsWith("sc_")) {
+        const tenantIdPrefix = session.split("_")[1];
+        if (tenantIdPrefix) {
+          const allTenants = await storage.getAllTenants();
+          const matchedTenant = allTenants.find(t => t.id.startsWith(tenantIdPrefix));
+          if (matchedTenant) {
+            console.log(`[WAHA] Auto-registering session ${session} for tenant ${matchedTenant.id} (${matchedTenant.name})`);
+            const protocol = req.headers["x-forwarded-proto"] || req.protocol || "https";
+            const host = req.headers["x-forwarded-host"] || req.headers.host;
+            const webhookUrl = host ? `${protocol}://${host}/api/waha/webhook` : "";
+            instance = await storage.createWahaInstance({
+              tenantId: matchedTenant.id,
+              instanceName: session,
+              status: "running",
+              webhookUrl,
+              isActive: true,
+            });
+            console.log(`[WAHA] Auto-registered instance ${instance.id} for tenant ${matchedTenant.name}`);
+          }
+        }
+      }
       if (!instance) {
         console.log("[WAHA] Unknown session:", session);
         return res.json({ ok: true });
