@@ -21,14 +21,33 @@ export function registerAiRopConnectRoutes(
 
       const channelMap = new Map(channels.map((c: any) => [c.channelType, c]));
 
+      let wahaLiveStatus: string | null = null;
+      if (wahaInstances.length > 0) {
+        try {
+          const { wahaService } = await import("./services/waha");
+          const active = wahaInstances.find((i: any) => i.isActive);
+          if (active) {
+            const sess = await wahaService.getSession(active.instanceName);
+            wahaLiveStatus = sess.status;
+            const dbStatus = sess.status === "WORKING" ? "running"
+              : sess.status === "SCAN_QR_CODE" ? "scan_qr"
+              : sess.status === "STOPPED" ? "stopped"
+              : sess.status === "FAILED" ? "failed" : active.status;
+            if (dbStatus !== active.status) {
+              await storage.updateWahaInstance(active.id, tenantId, { status: dbStatus });
+              active.status = dbStatus;
+            }
+          }
+        } catch {}
+      }
+
       const deriveStatus = (type: string) => {
         const existing = channelMap.get(type);
-        if (existing) return existing;
 
         let status = "NOT_CONNECTED";
-        let isAiEnabled = false;
-        let displayName: string | null = null;
-        let lastError: string | null = null;
+        let isAiEnabled = existing?.isAiEnabled ?? false;
+        let displayName: string | null = existing?.displayName ?? null;
+        let lastError: string | null = existing?.lastError ?? null;
 
         if (type === "WHATSAPP_META" && waCloudIntegration) {
           status = waCloudIntegration.status === "connected" ? "CONNECTED"
@@ -38,42 +57,38 @@ export function registerAiRopConnectRoutes(
           isAiEnabled = status === "CONNECTED";
           displayName = "WhatsApp Cloud API";
           lastError = waCloudIntegration.connectionError;
-        }
-
-        if (type === "WHATSAPP_WAHA") {
+        } else if (type === "WHATSAPP_WAHA") {
           const active = wahaInstances.find((i: any) => i.status === "running" || i.status === "scan_qr");
           if (active) {
             status = active.status === "running" ? "CONNECTED" : "NEEDS_ACTION";
-            displayName = active.phoneNumber || active.instanceName;
-            isAiEnabled = active.isActive;
+            displayName = active.instanceName;
+            isAiEnabled = existing?.isAiEnabled ?? active.isActive;
           }
-        }
-
-        if (type === "INSTAGRAM" && instagramIntegration) {
+        } else if (type === "INSTAGRAM" && instagramIntegration) {
           status = instagramIntegration.status === "connected" ? "CONNECTED"
             : instagramIntegration.status === "error" ? "ERROR"
             : "NOT_CONNECTED";
           isAiEnabled = instagramIntegration.aiEnabled ?? false;
           displayName = instagramIntegration.instagramUsername;
           lastError = instagramIntegration.connectionError;
-        }
-
-        if (type === "TELEGRAM" && telegramIntegration) {
+        } else if (type === "TELEGRAM" && telegramIntegration) {
           status = telegramIntegration.status === "active" ? "CONNECTED"
             : telegramIntegration.status === "error" ? "ERROR"
             : "NOT_CONNECTED";
           isAiEnabled = status === "CONNECTED";
           displayName = telegramIntegration.botUsername ? `@${telegramIntegration.botUsername}` : null;
+        } else if (existing) {
+          return existing;
         }
 
-        return { channelType: type, status, isAiEnabled, displayName, lastError };
+        return { ...(existing || {}), channelType: type, status, isAiEnabled, displayName, lastError };
       };
 
       const types = ["WHATSAPP_META", "WHATSAPP_WAHA", "INSTAGRAM", "TELEGRAM"] as const;
       const result = types.map(deriveStatus);
 
       const upsertPromises = result
-        .filter((ch: any) => ch.status !== "NOT_CONNECTED" && !channelMap.has(ch.channelType))
+        .filter((ch: any) => ch.status !== "NOT_CONNECTED")
         .map((ch: any) =>
           storage.upsertAiRopChannel({
             tenantId,
