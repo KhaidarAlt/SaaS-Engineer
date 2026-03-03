@@ -558,7 +558,15 @@ export function registerGrowthRoutes(
         .where(eq(growthSyncRuns.tenantId, tenantId))
         .orderBy(desc(growthSyncRuns.createdAt))
         .limit(1);
-      res.json(latest || null);
+      if (!latest) return res.json(null);
+      const stats = (latest.statsJson as any) || {};
+      const mapped = {
+        ...latest,
+        contactsFound: stats.chatsScanned ?? stats.messagesScanned ?? 0,
+        contactsCreated: stats.contactsUpserted ?? 0,
+        contactsUpdated: 0,
+      };
+      res.json(mapped);
     } catch (error) {
       res.status(500).json({ error: "Ошибка" });
     }
