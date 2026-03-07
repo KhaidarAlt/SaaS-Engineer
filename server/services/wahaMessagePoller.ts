@@ -5,12 +5,15 @@ const MAX_MESSAGES_PER_CHAT = 10;
 
 const processedMessageIds = new Set<string>();
 const MAX_PROCESSED_IDS = 10000;
+const MESSAGE_AGE_LIMIT_S = 300;
 
 const watchedChatIds = new Map<string, Set<string>>();
 
 let storage: any = null;
 let processMessageFn: ((instance: any, from: string, text: string) => Promise<void>) | null = null;
 let intervalHandle: ReturnType<typeof setInterval> | null = null;
+let isRunning = false;
+let warmupDone = new Set<string>();
 
 function cleanupProcessedIds() {
   if (processedMessageIds.size > MAX_PROCESSED_IDS) {
@@ -48,21 +51,26 @@ async function getKnownChatIds(tenantId: string): Promise<string[]> {
     }
   } catch {}
 
-  try {
-    const contacts = await storage.getGrowthContacts?.(tenantId);
-    if (contacts && Array.isArray(contacts)) {
-      for (const c of contacts) {
-        if (c.phone) {
-          const phone = c.phone.replace(/[^0-9]/g, "");
-          if (phone.length >= 10) {
-            chatIds.add(`${phone}@c.us`);
-          }
-        }
-      }
-    }
-  } catch {}
-
   return [...chatIds];
+}
+
+async function warmupSession(instance: any, chatIds: string[]) {
+  const key = `${instance.tenantId}_${instance.instanceName}`;
+  if (warmupDone.has(key)) return;
+  warmupDone.add(key);
+
+  for (const chatId of chatIds) {
+    try {
+      const messages = await wahaService.getChatMessages(instance.instanceName, chatId, MAX_MESSAGES_PER_CHAT);
+      if (messages && messages.length > 0) {
+        for (const msg of messages) {
+          const msgId = msg.id?._serialized || msg.id?.id || `${msg.timestamp}_${msg.from}`;
+          if (msgId) processedMessageIds.add(msgId);
+        }
+        console.log(`[WahaPoller] Warmup: marked ${messages.length} existing messages as seen for ${chatId}`);
+      }
+    } catch {}
+  }
 }
 
 async function pollSessionMessages(instance: any) {
@@ -74,6 +82,9 @@ async function pollSessionMessages(instance: any) {
     if (!tenant || !tenant.aiEnabled) return;
 
     const chatIds = await getKnownChatIds(tenantId);
+    if (chatIds.length === 0) return;
+
+    await warmupSession(instance, chatIds);
 
     for (const chatId of chatIds) {
       try {
@@ -89,7 +100,7 @@ async function pollSessionMessages(instance: any) {
           }
 
           const messageAge = Date.now() / 1000 - (msg.timestamp || 0);
-          if (messageAge > 120) {
+          if (messageAge > MESSAGE_AGE_LIMIT_S) {
             processedMessageIds.add(msgId);
             continue;
           }
@@ -118,6 +129,8 @@ async function pollSessionMessages(instance: any) {
 }
 
 async function pollTick() {
+  if (isRunning) return;
+  isRunning = true;
   try {
     const instances = await storage.getActiveWahaInstances?.();
     if (!instances || !Array.isArray(instances)) return;
@@ -133,6 +146,8 @@ async function pollTick() {
     cleanupProcessedIds();
   } catch (err) {
     console.error("[WahaPoller] Tick error:", err);
+  } finally {
+    isRunning = false;
   }
 }
 
@@ -140,6 +155,11 @@ export function startWahaMessagePoller(
   storageInstance: any,
   processMessage: (instance: any, from: string, text: string) => Promise<void>
 ): void {
+  if (intervalHandle) {
+    console.log("[WahaPoller] Already running, skipping duplicate start");
+    return;
+  }
+
   storage = storageInstance;
   processMessageFn = processMessage;
 

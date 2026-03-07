@@ -66,7 +66,7 @@ export function registerAiRopRoutes(
         .returning();
 
       if (req.body.enabled !== undefined) {
-        await storage.updateTenant(tenantId, { aiEnabled: req.body.enabled });
+        await storage.updateTenant(tenantId, { aiEnabled: Boolean(req.body.enabled) });
       }
 
       res.json(updated);
