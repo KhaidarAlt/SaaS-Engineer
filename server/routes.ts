@@ -3651,40 +3651,12 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
             }
           }
 
-          // Send Kaspi payment link to customer via WhatsApp
+          // Payment link will be sent when customer sends order notification via WhatsApp
+          // (handled in WAHA message processing below)
           const effectivePayLink = paymentUrl || kaspiPayLink;
           if (effectivePayLink) {
-            try {
-              const wahaInstancesList = await storage.getWahaInstances(tenant.id);
-              const activeInstance = wahaInstancesList.find((i: any) => i.isActive && (i.status === "running" || i.status === "active"));
-              
-              if (activeInstance) {
-                let cleanPhone = orderData.customerPhone.replace(/\D/g, "");
-                if (cleanPhone.length === 11 && cleanPhone.startsWith("8")) {
-                  cleanPhone = "7" + cleanPhone.slice(1);
-                }
-                
-                await storage.updateOrderWithPayment(order.id, tenant.id, { status: "awaiting_payment" });
-
-                const paymentMessage = `Ваш заказ #${order.orderNumber} оформлен! 🎉\n\nСумма к оплате: ${Number(subtotal).toLocaleString('ru-RU')} ₸\n\nОплатить через Kaspi:\n${effectivePayLink}\n\nВ комментарии к платежу укажите: Заказ #${order.orderNumber}\n\nПосле оплаты, пожалуйста, напишите "оплатил" или отправьте скриншот чека — мы сразу подтвердим вашу оплату! ✅`;
-                
-                const { sendMessage: coreSendMsg } = await import("./messaging/core");
-                await coreSendMsg({
-                  tenantId: tenant.id,
-                  channel: "whatsapp",
-                  provider: "waha",
-                  fromAddress: activeInstance.instanceName,
-                  toAddress: cleanPhone,
-                  messageType: "text",
-                  content: { text: paymentMessage, wahaSession: activeInstance.instanceName },
-                  meta: { isPaymentLink: true },
-                  skipPolicyCheck: true,
-                });
-                console.log(`[Payment] Sent Kaspi payment link to ${cleanPhone} for order ${order.orderNumber}`);
-              }
-            } catch (whatsappErr) {
-              console.error("[Payment] Failed to send WhatsApp payment link:", whatsappErr);
-            }
+            await storage.updateOrderWithPayment(order.id, tenant.id, { status: "awaiting_payment" });
+            console.log(`[Payment] Kaspi link ready for order ${order.orderNumber}: ${effectivePayLink}`);
           }
         }
       } catch (paymentErr) {
@@ -5733,10 +5705,82 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
       content: text,
     });
     
-    // Skip AI response for order notification messages sent by customer via wa.me link
+    // Handle order notification messages sent by customer via wa.me link
     const orderNotificationPattern = /Новый заказ №?\s*\d|новый заказ|Дата:.*\d{2}\.\d{2}\.\d{4}/i;
     if (orderNotificationPattern.test(text) && text.includes("Контакт клиента")) {
-      console.log(`[WAHA] Skipping AI response for order notification from ${customerPhone}`);
+      console.log(`[WAHA] Order notification received from ${customerPhone}`);
+      
+      // Extract order number from message text (e.g., "Новый заказ №260307-7202")
+      const orderNumMatch = text.match(/Новый заказ №?\s*(\d{6}-\d{3,5})/i);
+      if (orderNumMatch) {
+        const orderNumber = orderNumMatch[1];
+        try {
+          const matchedOrder = await storage.getOrderByOrderNumber(tenantId, orderNumber);
+          if (matchedOrder && (matchedOrder.status === "awaiting_payment" || matchedOrder.status === "new")) {
+            // Find Kaspi payment link for this order
+            const kaspiIntegration = await storage.getKaspiIntegration(tenantId);
+            if (kaspiIntegration && kaspiIntegration.status === "connected") {
+              // Try to find auto-generated invoice URL from payment record
+              let effectivePayLink: string | null = null;
+              try {
+                const payment = await storage.getPaymentByOrderId(matchedOrder.id);
+                if (payment && payment.paymentUrl) {
+                  effectivePayLink = payment.paymentUrl;
+                }
+              } catch {}
+              if (!effectivePayLink && kaspiIntegration.kaspiPayLink) {
+                effectivePayLink = kaspiIntegration.kaspiPayLink;
+              }
+              
+              if (effectivePayLink) {
+                const subtotal = matchedOrder.total || "0";
+                const paymentMessage = `Спасибо за заказ #${orderNumber}! 🎉\n\nСумма к оплате: ${Number(subtotal).toLocaleString('ru-RU')} ₸\n\nОплатить через Kaspi:\n${effectivePayLink}\n\nВ комментарии к платежу укажите: Заказ #${orderNumber}\n\nПосле оплаты, пожалуйста, напишите "оплатил" или отправьте скриншот чека — мы сразу подтвердим вашу оплату! ✅`;
+                
+                await storage.createAiMessage({
+                  conversationId: conversation.id,
+                  role: "assistant",
+                  content: paymentMessage,
+                });
+                
+                const typingMs = getTypingDelay(paymentMessage);
+                const chatId = `${customerPhone}@c.us`;
+                try {
+                  const { sendTypingStatus, stopTypingStatus } = await import("./messaging/providers/wahaWhatsAppAdapter");
+                  await sendTypingStatus(instance.instanceName, chatId);
+                  await new Promise(resolve => setTimeout(resolve, typingMs));
+                  await stopTypingStatus(instance.instanceName, chatId);
+                } catch {}
+                
+                const { sendMessage: coreSendPayLink } = await import("./messaging/core");
+                await coreSendPayLink({
+                  tenantId,
+                  channel: "whatsapp",
+                  provider: "waha",
+                  fromAddress: instance.instanceName,
+                  toAddress: customerPhone,
+                  messageType: "text",
+                  content: { text: paymentMessage, wahaSession: instance.instanceName },
+                  meta: { isPaymentLink: true },
+                  skipPolicyCheck: true,
+                });
+                
+                if (matchedOrder.status === "new") {
+                  await storage.updateOrderWithPayment(matchedOrder.id, tenantId, { status: "awaiting_payment" });
+                }
+                
+                console.log(`[Payment] Sent Kaspi payment link to ${customerPhone} for order #${orderNumber}`);
+                aiResponseCooldown.set(`${tenantId}_${from}`, Date.now());
+                return;
+              }
+            }
+          }
+        } catch (payLinkErr) {
+          console.error(`[Payment] Failed to send payment link for order #${orderNumMatch[1]}:`, payLinkErr);
+        }
+      }
+      
+      // If no payment link was sent, still skip AI response for order notifications
+      console.log(`[WAHA] No payment link to send, skipping AI for order notification from ${customerPhone}`);
       return;
     }
     

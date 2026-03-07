@@ -175,6 +175,7 @@ export interface IStorage {
   getOrders(tenantId: string): Promise<Order[]>;
   getOrder(id: string, tenantId: string): Promise<(Order & { items?: OrderItem[] }) | undefined>;
   getRecentOrderByPhone(tenantId: string, phone: string): Promise<(Order & { items?: OrderItem[] }) | undefined>;
+  getOrderByOrderNumber(tenantId: string, orderNumber: string): Promise<(Order & { items?: OrderItem[] }) | undefined>;
   createOrder(order: InsertOrder, items: InsertOrderItem[]): Promise<Order>;
   updateOrderStatus(id: string, tenantId: string, status: string): Promise<Order | undefined>;
   
@@ -901,6 +902,21 @@ export class DatabaseStorage implements IStorage {
         inArray(orders.status, ["new", "awaiting_payment"]),
       ))
       .orderBy(desc(orders.createdAt))
+      .limit(1);
+    
+    if (results.length === 0) return undefined;
+    
+    const order = results[0];
+    const items = await db.select().from(orderItems).where(eq(orderItems.orderId, order.id));
+    return { ...order, items };
+  }
+
+  async getOrderByOrderNumber(tenantId: string, orderNumber: string): Promise<(Order & { items?: OrderItem[] }) | undefined> {
+    const results = await db.select().from(orders)
+      .where(and(
+        eq(orders.tenantId, tenantId),
+        eq(orders.orderNumber, orderNumber),
+      ))
       .limit(1);
     
     if (results.length === 0) return undefined;

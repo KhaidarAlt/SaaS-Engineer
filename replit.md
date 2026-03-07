@@ -42,7 +42,7 @@ Key architectural decisions include:
 -   **File Storage**: Replit Object Storage (Google Cloud Storage).
 -   **Payment Processing**:
     -   Kaspi Business (full integration with 3-step verification, invoice creation, payment status tracking, automated WhatsApp payment flow).
-        -   Auto-sends Kaspi payment link via WhatsApp after order creation (uses auto-generated invoice URL when available, falls back to static kaspiPayLink).
+        -   Kaspi payment link is sent via WhatsApp when the customer sends their order notification message (via wa.me link). The WAHA handler extracts the order number from the message, looks up the order and payment link, and replies with the Kaspi link in the same chat. This avoids the "No LID for user" WAHA error that occurs when trying to proactively message unknown contacts.
         -   Detects payment confirmation keywords ("оплатил", "оплатила", etc.) in WhatsApp messages before AI processing; updates order to `payment_verification` status and sends Telegram notification to manager.
         -   Sends WhatsApp thank-you message when manager marks order as paid in CRM; auto-advances order to `in_progress`.
         -   AI system prompt updated to defer to automated payment flow instead of manually sending links.
