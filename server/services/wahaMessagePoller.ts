@@ -3,26 +3,20 @@ import { wahaService } from "./waha";
 const POLL_INTERVAL_MS = 5000;
 const MAX_MESSAGES_PER_CHAT = 10;
 const DISCOVERY_INTERVAL_TICKS = 12;
-const DISCOVERY_BATCH_SIZE = 20;
 const ACTIVE_TTL_MS = 30 * 60 * 1000;
 
 const processedMessageIds = new Set<string>();
 const MAX_PROCESSED_IDS = 10000;
 const MESSAGE_AGE_LIMIT_S = 300;
 
-const watchedChatIds = new Map<string, Set<string>>();
-
 const activeChatIds = new Map<string, Map<string, number>>();
-
-const discoveryQueue = new Map<string, string[]>();
-const discoveryOffset = new Map<string, number>();
 
 let storage: any = null;
 let processMessageFn: ((instance: any, from: string, text: string) => Promise<void>) | null = null;
 let intervalHandle: ReturnType<typeof setInterval> | null = null;
 let isRunning = false;
 let tickCounter = 0;
-let initialDiscoveryDone = new Set<string>();
+let initialWarmupDone = new Set<string>();
 
 function cleanupProcessedIds() {
   if (processedMessageIds.size > MAX_PROCESSED_IDS) {
@@ -45,10 +39,10 @@ function pruneInactiveChats() {
 }
 
 export function addWatchedChatId(tenantId: string, chatId: string) {
-  if (!watchedChatIds.has(tenantId)) {
-    watchedChatIds.set(tenantId, new Set());
+  if (!activeChatIds.has(tenantId)) {
+    activeChatIds.set(tenantId, new Map());
   }
-  watchedChatIds.get(tenantId)!.add(chatId);
+  activeChatIds.get(tenantId)!.set(chatId, Date.now());
 }
 
 function markActive(tenantId: string, chatId: string) {
@@ -58,12 +52,8 @@ function markActive(tenantId: string, chatId: string) {
   activeChatIds.get(tenantId)!.set(chatId, Date.now());
 }
 
-async function getPollableChatIds(tenantId: string): Promise<string[]> {
+async function getKnownChatIds(tenantId: string): Promise<Set<string>> {
   const chatIds = new Set<string>();
-
-  if (watchedChatIds.has(tenantId)) {
-    watchedChatIds.get(tenantId)!.forEach(id => chatIds.add(id));
-  }
 
   if (activeChatIds.has(tenantId)) {
     activeChatIds.get(tenantId)!.forEach((_, id) => chatIds.add(id));
@@ -83,7 +73,7 @@ async function getPollableChatIds(tenantId: string): Promise<string[]> {
     }
   } catch {}
 
-  return [...chatIds];
+  return chatIds;
 }
 
 async function warmupChatIds(sessionName: string, chatIds: string[]) {
@@ -100,75 +90,45 @@ async function warmupChatIds(sessionName: string, chatIds: string[]) {
   }
 }
 
-async function runDiscovery(instance: any) {
+async function discoverNewChats(instance: any): Promise<void> {
   const sessionName = instance.instanceName;
   const tenantId = instance.tenantId;
-  const key = `${tenantId}_${sessionName}`;
 
   try {
-    const contacts = await wahaService.getAllContacts(sessionName);
-    if (!contacts || contacts.length === 0) return;
+    const chats = await wahaService.getChats(sessionName);
+    if (!chats || chats.length === 0) return;
 
-    const userChatIds = contacts
-      .filter(c => c.isUser && !c.isMe && !c.isGroup && c.id.endsWith("@c.us"))
-      .map(c => c.id);
+    const knownChatIds = await getKnownChatIds(tenantId);
 
-    const pollable = await getPollableChatIds(tenantId);
-    const knownSet = new Set(pollable);
+    const newPersonalChats = chats.filter((chat: any) => {
+      const chatId = chat.id?._serialized || chat.id;
+      if (!chatId || typeof chatId !== "string") return false;
+      if (!chatId.endsWith("@c.us")) return false;
+      if (knownChatIds.has(chatId)) return false;
+      return true;
+    });
 
-    const newChatIds = userChatIds.filter(id => !knownSet.has(id));
-
-    discoveryQueue.set(key, newChatIds);
-    discoveryOffset.set(key, 0);
-
-    if (!initialDiscoveryDone.has(key)) {
-      initialDiscoveryDone.add(key);
-      await warmupChatIds(sessionName, pollable);
-      console.log(`[WahaPoller] Initial warmup: ${pollable.length} known chats, ${processedMessageIds.size} messages marked seen`);
+    if (newPersonalChats.length > 0) {
+      console.log(`[WahaPoller] Discovery: found ${newPersonalChats.length} new chats for tenant ${tenantId.substring(0, 8)}`);
     }
 
-    if (newChatIds.length > 0) {
-      console.log(`[WahaPoller] Discovery: ${newChatIds.length} unknown contacts for tenant ${tenantId.substring(0, 8)} (total: ${userChatIds.length})`);
+    for (const chat of newPersonalChats) {
+      const chatId = chat.id?._serialized || chat.id;
+      markActive(tenantId, chatId);
+    }
+
+    if (!initialWarmupDone.has(`${tenantId}_${sessionName}`)) {
+      initialWarmupDone.add(`${tenantId}_${sessionName}`);
+      const allChatIds = [...knownChatIds];
+      for (const chat of newPersonalChats) {
+        const chatId = chat.id?._serialized || chat.id;
+        if (!knownChatIds.has(chatId)) allChatIds.push(chatId);
+      }
+      await warmupChatIds(sessionName, allChatIds);
+      console.log(`[WahaPoller] Initial warmup: ${allChatIds.length} chats, ${processedMessageIds.size} messages marked seen`);
     }
   } catch (err) {
     console.error(`[WahaPoller] Discovery error for ${sessionName}:`, err);
-  }
-}
-
-async function processDiscoveryBatch(instance: any) {
-  const key = `${instance.tenantId}_${instance.instanceName}`;
-  const queue = discoveryQueue.get(key);
-  const offset = discoveryOffset.get(key) || 0;
-
-  if (!queue || offset >= queue.length) return;
-
-  const batch = queue.slice(offset, offset + DISCOVERY_BATCH_SIZE);
-  discoveryOffset.set(key, offset + batch.length);
-
-  await warmupChatIds(instance.instanceName, batch);
-
-  for (const chatId of batch) {
-    try {
-      const messages = await wahaService.getChatMessages(instance.instanceName, chatId, 3);
-      if (!messages || messages.length === 0) continue;
-
-      const hasRecentUnread = messages.some(msg => {
-        if (msg.fromMe) return false;
-        const age = Date.now() / 1000 - (msg.timestamp || 0);
-        return age < MESSAGE_AGE_LIMIT_S;
-      });
-
-      if (hasRecentUnread) {
-        addWatchedChatId(instance.tenantId, chatId);
-        markActive(instance.tenantId, chatId);
-        console.log(`[WahaPoller] Auto-discovered active chat: ${chatId}`);
-      }
-    } catch {}
-  }
-
-  if (offset + batch.length >= queue.length) {
-    discoveryQueue.delete(key);
-    discoveryOffset.delete(key);
   }
 }
 
@@ -220,8 +180,8 @@ async function pollSessionMessages(instance: any) {
     const tenant = await storage.getTenant(tenantId);
     if (!tenant || !tenant.aiEnabled) return;
 
-    const chatIds = await getPollableChatIds(tenantId);
-    if (chatIds.length === 0) return;
+    const chatIds = await getKnownChatIds(tenantId);
+    if (chatIds.size === 0) return;
 
     for (const chatId of chatIds) {
       const hasNew = await pollChatMessages(instance, chatId);
@@ -252,12 +212,8 @@ async function pollTick() {
     for (const instance of runningInstances) {
       const key = `${instance.tenantId}_${instance.instanceName}`;
 
-      if (!initialDiscoveryDone.has(key) || isDiscoveryTick) {
-        await runDiscovery(instance);
-      }
-
-      if (discoveryQueue.has(key)) {
-        await processDiscoveryBatch(instance);
+      if (!initialWarmupDone.has(key) || isDiscoveryTick) {
+        await discoverNewChats(instance);
       }
 
       await pollSessionMessages(instance);
