@@ -2,7 +2,7 @@ import { wahaService } from "./waha";
 
 const POLL_INTERVAL_MS = 5000;
 const MAX_MESSAGES_PER_CHAT = 10;
-const DISCOVERY_INTERVAL_TICKS = 12;
+const DISCOVERY_INTERVAL_TICKS = 6;
 const ACTIVE_TTL_MS = 30 * 60 * 1000;
 const DISCOVERY_CONCURRENCY = 10;
 
@@ -91,31 +91,6 @@ async function warmupChatIds(sessionName: string, chatIds: string[]) {
   }
 }
 
-async function checkChatForRecentMessages(sessionName: string, chatId: string): Promise<boolean> {
-  try {
-    const messages = await wahaService.getChatMessages(sessionName, chatId, 3);
-    if (!messages || messages.length === 0) return false;
-
-    for (const msg of messages) {
-      if (msg.fromMe) continue;
-      const age = Date.now() / 1000 - (msg.timestamp || 0);
-      if (age < MESSAGE_AGE_LIMIT_S) {
-        const msgId = msg.id?._serialized || msg.id?.id || `${msg.timestamp}_${msg.from}`;
-        if (msgId) processedMessageIds.add(msgId);
-        return true;
-      }
-    }
-  } catch {}
-  return false;
-}
-
-async function processBatchConcurrent<T>(items: T[], concurrency: number, fn: (item: T) => Promise<void>) {
-  for (let i = 0; i < items.length; i += concurrency) {
-    const batch = items.slice(i, i + concurrency);
-    await Promise.all(batch.map(fn));
-  }
-}
-
 async function discoverContacts(instance: any): Promise<void> {
   const sessionName = instance.instanceName;
   const tenantId = instance.tenantId;
@@ -142,13 +117,13 @@ async function discoverContacts(instance: any): Promise<void> {
     if (newChatIds.length === 0) return;
 
     let addedCount = 0;
-    await processBatchConcurrent(newChatIds, DISCOVERY_CONCURRENCY, async (chatId) => {
-      const hasRecent = await checkChatForRecentMessages(sessionName, chatId);
-      if (hasRecent) {
+    for (const chatId of newChatIds) {
+      const hasNew = await pollChatMessages(instance, chatId);
+      if (hasNew) {
         markActive(tenantId, chatId);
         addedCount++;
       }
-    });
+    }
 
     if (addedCount > 0) {
       console.log(`[WahaPoller] Discovery: ${addedCount} active chats found out of ${newChatIds.length} new contacts for tenant ${tenantId.substring(0, 8)}`);
