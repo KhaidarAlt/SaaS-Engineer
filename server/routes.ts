@@ -5513,6 +5513,29 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
     }
   });
 
+  app.get("/api/waha/watch-phone/:phone", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const cleanPhone = req.params.phone.replace(/[^0-9]/g, "");
+      if (cleanPhone.length < 10) return res.status(400).json({ message: "invalid phone" });
+      const chatId = `${cleanPhone}@c.us`;
+      addWatchedChatId(tenantId, chatId);
+      let conversation = await storage.getAiConversationByPhone(tenantId, cleanPhone, "whatsapp");
+      if (!conversation) {
+        conversation = await storage.createAiConversation({
+          tenantId,
+          channel: "whatsapp",
+          customerPhone: cleanPhone,
+          status: "open",
+        });
+      }
+      console.log(`[WAHA] Added watch for ${chatId} tenant=${tenantId}`);
+      res.json({ ok: true, chatId, conversationId: conversation.id, message: `Номер ${cleanPhone} добавлен в мониторинг. Бот будет проверять входящие сообщения каждые 5 секунд.` });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   app.post("/api/waha/scan-new-messages", requireAuth, async (req: Request, res: Response) => {
     try {
       const tenantId = req.user!.tenantId!;
