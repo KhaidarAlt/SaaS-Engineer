@@ -3545,12 +3545,25 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
       // Send Telegram notification for new order
       if (tenant.telegramBotToken && tenant.telegramChatId) {
         const { sendTelegramMessage, formatNewOrderNotification } = await import("./services/telegram");
+        let conversationId: string | undefined;
+        try {
+          const conv = await storage.getAiConversationByPhone(tenant.id, orderData.customerPhone, "whatsapp");
+          if (conv) conversationId = conv.id;
+        } catch {}
         const message = formatNewOrderNotification({
           orderNumber: order.orderNumber,
           customerName: orderData.customerName,
           customerPhone: orderData.customerPhone,
           total: subtotal.toFixed(2),
-          itemsCount: orderItems.length,
+          comment: orderData.comment,
+          items: orderItems.map(item => ({
+            productName: item.productName,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            total: item.total,
+          })),
+          orderId: order.id,
+          conversationId,
         });
         sendTelegramMessage({
           botToken: tenant.telegramBotToken,
@@ -5840,7 +5853,9 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
           const { sendTelegramMessage, formatHumanRequestNotification } = await import("./services/telegram");
           const message = formatHumanRequestNotification({
             customerPhone,
+            customerName: conversation.customerName || undefined,
             message: text,
+            conversationId: conversation.id,
           });
           sendTelegramMessage({
             botToken: tenant.telegramBotToken,
@@ -5857,6 +5872,7 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
           const message = formatAiUnknownNotification({
             customerPhone,
             question: text,
+            conversationId: conversation.id,
           });
           sendTelegramMessage({
             botToken: tenant.telegramBotToken,

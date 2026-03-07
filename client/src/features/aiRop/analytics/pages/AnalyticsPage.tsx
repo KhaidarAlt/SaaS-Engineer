@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -26,6 +26,18 @@ export default function AnalyticsPage() {
   const [selectedDialogId, setSelectedDialogId] = useState<string | null>(null);
   const [dialogModalOpen, setDialogModalOpen] = useState(false);
   const [, navigate] = useLocation();
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const dialogParam = params.get("dialog");
+    if (dialogParam) {
+      setSelectedDialogId(dialogParam);
+      setDialogModalOpen(true);
+      const url = new URL(window.location.href);
+      url.searchParams.delete("dialog");
+      window.history.replaceState({}, "", url.pathname + url.search);
+    }
+  }, []);
 
   function handlePeriodChange(p: PeriodKey) {
     setPeriod(p);
