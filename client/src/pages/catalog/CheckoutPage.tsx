@@ -77,13 +77,21 @@ export default function CheckoutPage() {
     }
   }, [slug, items, subtotal]);
 
+  const savedCustomer = (() => {
+    try {
+      const raw = localStorage.getItem("sc_checkout_customer");
+      if (raw) return JSON.parse(raw);
+    } catch {}
+    return null;
+  })();
+
   const form = useForm<CheckoutInput>({
     resolver: zodResolver(checkoutSchema),
     defaultValues: {
-      customerName: "",
-      customerPhone: "",
-      customerEmail: "",
-      deliveryAddress: "",
+      customerName: savedCustomer?.customerName || "",
+      customerPhone: savedCustomer?.customerPhone || "",
+      customerEmail: savedCustomer?.customerEmail || "",
+      deliveryAddress: savedCustomer?.deliveryAddress || "",
       comment: "",
     },
   });
@@ -105,6 +113,14 @@ export default function CheckoutPage() {
       setOrderData(data);
       setOrderSuccess(true);
       clearCart();
+      try {
+        localStorage.setItem("sc_checkout_customer", JSON.stringify({
+          customerName: data.order.customerName,
+          customerPhone: data.order.customerPhone,
+          customerEmail: data.order.customerEmail || "",
+          deliveryAddress: data.order.deliveryAddress || "",
+        }));
+      } catch {}
       trackEvent({ 
         tenantSlug: slug, 
         eventType: 'order_created',
