@@ -22,6 +22,7 @@ import domainRoutes from "./domains/routes.js";
 import { startDomainWorker } from "./domains/worker.js";
 import { startGrowthWorker } from "./services/growthWorker.js";
 import { startOutboxWorker } from "./messaging/worker.js";
+import { startWahaMessagePoller, addWatchedChatId } from "./services/wahaMessagePoller.js";
 import { registerAiRopRoutes } from "./ai-rop-routes.js";
 import { registerAiTestingRoutes } from "./ai-testing-routes.js";
 import { registerAiTrainingRoutes } from "./ai-training-routes.js";
@@ -627,6 +628,7 @@ export async function registerRoutes(
   startGrowthWorker();
   startOutboxWorker();
   startGrowthSyncWorker();
+  startWahaMessagePoller(storage, processIncomingWhatsAppMessage);
   seedScenarioTemplates();
 
   app.get("/__ping", (_req: Request, res: Response) => {
@@ -5454,6 +5456,13 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
         acceptInboundWahaWebhook(instance.tenantId, { event, session, payload }).catch(err => {
           console.error("[WAHA] Canonical ingest error (non-fatal):", err);
         });
+
+        if (event === "message.ack" && payload?.from && !payload?.fromMe) {
+          addWatchedChatId(instance.tenantId, payload.from);
+        }
+        if (event === "message.ack" && payload?.to && payload?.fromMe) {
+          addWatchedChatId(instance.tenantId, payload.to);
+        }
       }
 
       if (event === "message" || event === "message.any") {
@@ -5476,6 +5485,67 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
     } catch (error) {
       console.error("[WAHA] Webhook error:", error);
       res.json({ ok: true }); // Always return 200 to WAHA
+    }
+  });
+
+  app.post("/api/waha/watch-phone", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const { phone } = req.body;
+      if (!phone) return res.status(400).json({ message: "phone required" });
+      const cleanPhone = phone.replace(/[^0-9]/g, "");
+      if (cleanPhone.length < 10) return res.status(400).json({ message: "invalid phone" });
+      const chatId = `${cleanPhone}@c.us`;
+      addWatchedChatId(tenantId, chatId);
+      let conversation = await storage.getAiConversationByPhone(tenantId, cleanPhone, "whatsapp");
+      if (!conversation) {
+        conversation = await storage.createAiConversation({
+          tenantId,
+          channel: "whatsapp",
+          customerPhone: cleanPhone,
+          status: "open",
+        });
+      }
+      console.log(`[WAHA] Added watch for ${chatId} tenant=${tenantId}`);
+      res.json({ ok: true, chatId, conversationId: conversation.id });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/waha/scan-new-messages", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const instances = await storage.getWahaInstances(tenantId);
+      const activeInstance = instances.find((i: any) => i.isActive && i.status === "running");
+      if (!activeInstance) return res.json({ found: 0, message: "No active WAHA session" });
+
+      const { phone } = req.body;
+      if (!phone) return res.status(400).json({ message: "phone required" });
+      const cleanPhone = phone.replace(/[^0-9]/g, "");
+      const chatId = `${cleanPhone}@c.us`;
+
+      const { wahaService } = await import("./services/waha");
+      const messages = await wahaService.getChatMessages(activeInstance.instanceName, chatId, 10);
+      const incomingMessages = messages.filter((m: any) => !m.fromMe && m.body);
+
+      for (const msg of incomingMessages) {
+        const from = msg.from;
+        const text = msg.body;
+        if (from && text) {
+          addWatchedChatId(tenantId, from);
+          const messageAge = Date.now() / 1000 - (msg.timestamp || 0);
+          if (messageAge < 600) {
+            processIncomingWhatsAppMessage(activeInstance, from, text).catch(err => {
+              console.error(`[WAHA] Scan error processing ${from}:`, err);
+            });
+          }
+        }
+      }
+
+      res.json({ found: incomingMessages.length, chatId });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
     }
   });
 

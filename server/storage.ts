@@ -1744,6 +1744,18 @@ export class DatabaseStorage implements IStorage {
     return instances.length;
   }
 
+  async getActiveWahaInstances(): Promise<WahaInstance[]> {
+    return db.select().from(wahaInstances)
+      .where(eq(wahaInstances.isActive, true))
+      .orderBy(desc(wahaInstances.createdAt));
+  }
+
+  async getAiConversationsByTenant(tenantId: string): Promise<AiConversation[]> {
+    return db.select().from(aiConversations)
+      .where(eq(aiConversations.tenantId, tenantId))
+      .orderBy(desc(aiConversations.updatedAt));
+  }
+
   // ============ ADMIN: PLAN MANAGEMENT ============
   async changeSubscriptionPlan(subscriptionId: string, planId: string): Promise<void> {
     const endsAt = new Date();

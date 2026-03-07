@@ -190,6 +190,23 @@ export const wahaService = {
     });
   },
 
+  async getMessages(sessionName: string, chatId: string, limit: number = 10): Promise<any[]> {
+    try {
+      return await wahaRequest("GET", `/api/messages?session=${sessionName}&chatId=${chatId}&limit=${limit}&downloadMedia=false`);
+    } catch (error: any) {
+      return [];
+    }
+  },
+
+  async getChatMessages(sessionName: string, chatId: string, limit: number = 5): Promise<any[]> {
+    try {
+      const msgs = await this.getMessages(sessionName, chatId, limit);
+      return Array.isArray(msgs) ? msgs : [];
+    } catch {
+      return [];
+    }
+  },
+
   generateInstanceName(tenantId: string): string {
     const shortId = tenantId.substring(0, 8);
     const timestamp = Date.now().toString(36);
