@@ -5734,7 +5734,7 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
               
               if (effectivePayLink) {
                 const subtotal = matchedOrder.total || "0";
-                const paymentMessage = `Спасибо за заказ #${orderNumber}! 🎉\n\nСумма к оплате: ${Number(subtotal).toLocaleString('ru-RU')} ₸\n\nОплатить через Kaspi:\n${effectivePayLink}\n\nВ комментарии к платежу укажите: Заказ #${orderNumber}\n\nПосле оплаты, пожалуйста, напишите "оплатил" или отправьте скриншот чека — мы сразу подтвердим вашу оплату! ✅`;
+                const paymentMessage = `Спасибо за заказ #${orderNumber}! 🎉\n\nСумма к оплате: ${Number(subtotal).toLocaleString('ru-RU')} ₸\n\nОплатить через Kaspi:\n${effectivePayLink}\n\nПосле оплаты, пожалуйста, напишите "оплатил" или отправьте скриншот чека — мы сразу подтвердим вашу оплату! ✅`;
                 
                 await storage.createAiMessage({
                   conversationId: conversation.id,
