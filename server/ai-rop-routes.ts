@@ -65,6 +65,10 @@ export function registerAiRopRoutes(
         .where(eq(aiSettings.tenantId, tenantId))
         .returning();
 
+      if (req.body.enabled !== undefined) {
+        await storage.updateTenant(tenantId, { aiEnabled: req.body.enabled });
+      }
+
       res.json(updated);
     } catch (error: any) {
       console.error("Ошибка обновления настроек AI-РОП:", error);
