@@ -220,7 +220,10 @@ export async function sendOutbound(req: NormalizedOutbound): Promise<ProviderSen
     };
   }
 
-  const recipientPhone = req.toAddress.replace(/\D/g, "");
+  let recipientPhone = req.toAddress.replace(/\D/g, "");
+  if (recipientPhone.length === 11 && recipientPhone.startsWith("8")) {
+    recipientPhone = "7" + recipientPhone.slice(1);
+  }
   const chatId = `${recipientPhone}@c.us`;
 
   const headers: Record<string, string> = {

@@ -201,7 +201,7 @@ async function processJob(job: Awaited<ReturnType<typeof pickBatch>>[0]): Promis
     .where(eq(messageOutbox.id, job.outboxId));
 
   console.log(
-    `[OutboxWorker] RETRY scheduled for message ${job.messageId} (attempt ${attemptNumber}, next in ${Math.round(delayMs / 1000)}s)`
+    `[OutboxWorker] RETRY scheduled for message ${job.messageId} (attempt ${attemptNumber}, next in ${Math.round(delayMs / 1000)}s): ${result.errorCode} — ${result.error}`
   );
 }
 

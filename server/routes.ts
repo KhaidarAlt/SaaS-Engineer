@@ -3659,7 +3659,10 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
               const activeInstance = wahaInstancesList.find((i: any) => i.isActive && (i.status === "running" || i.status === "active"));
               
               if (activeInstance) {
-                const cleanPhone = orderData.customerPhone.replace(/\D/g, "");
+                let cleanPhone = orderData.customerPhone.replace(/\D/g, "");
+                if (cleanPhone.length === 11 && cleanPhone.startsWith("8")) {
+                  cleanPhone = "7" + cleanPhone.slice(1);
+                }
                 
                 await storage.updateOrderWithPayment(order.id, tenant.id, { status: "awaiting_payment" });
 
