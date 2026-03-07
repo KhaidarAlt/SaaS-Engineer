@@ -1,5 +1,5 @@
 import { useState, useCallback, useImperativeHandle, forwardRef, useRef, useEffect } from "react";
-import { Plus, X, Upload, AlertCircle, ImageIcon } from "lucide-react";
+import { Plus, X, Upload, AlertCircle, ImageIcon, Star, GripVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
@@ -42,7 +42,7 @@ async function uploadToPresignedUrl(uploadURL: string, blob: Blob): Promise<void
   }
 }
 
-async function saveImageRecords(productId: string, objectPaths: string[]): Promise<Response> {
+async function saveImageRecords(productId: string, objectPaths: string[]): Promise<any> {
   const response = await fetch(`/api/products/${productId}/images`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -57,7 +57,22 @@ async function saveImageRecords(productId: string, objectPaths: string[]): Promi
     throw new Error("Unauthorized");
   }
   
-  return response;
+  if (!response.ok) {
+    throw new Error("Save failed");
+  }
+
+  return response.json();
+}
+
+async function setMainImage(productId: string, imageId: string): Promise<void> {
+  const response = await fetch(`/api/products/${productId}/images/${imageId}/main`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+  });
+  if (!response.ok) {
+    throw new Error("Failed to set main image");
+  }
 }
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -65,6 +80,7 @@ const MAX_IMAGE_DIMENSION = 1920;
 const COMPRESSION_QUALITY = 0.85;
 
 interface PreviewImage {
+  id: string;
   file: File;
   preview: string;
   compressed: Blob | null;
@@ -145,18 +161,28 @@ function formatFileSize(bytes: number): string {
   return (bytes / (1024 * 1024)).toFixed(1) + " МБ";
 }
 
+let nextId = 0;
+function generateId() {
+  return `img_${Date.now()}_${nextId++}`;
+}
+
 export const InlineProductImages = forwardRef<InlineProductImagesRef, InlineProductImagesProps>(
   ({ onCompressionChange }, ref) => {
   const [isDragging, setIsDragging] = useState(false);
   const [previewImages, setPreviewImages] = useState<PreviewImage[]>([]);
+  const [mainImageId, setMainImageId] = useState<string | null>(null);
+  const [dragItemId, setDragItemId] = useState<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
   const { toast } = useToast();
   
   const previewImagesRef = useRef<PreviewImage[]>([]);
+  const mainImageIdRef = useRef<string | null>(null);
   const compressionResolversRef = useRef<(() => void)[]>([]);
   const prevCompressionStateRef = useRef<boolean>(false);
   
   useEffect(() => {
     previewImagesRef.current = previewImages;
+    mainImageIdRef.current = mainImageId;
     const isCompressing = previewImages.some(img => img.compressing);
     
     if (prevCompressionStateRef.current !== isCompressing) {
@@ -168,11 +194,12 @@ export const InlineProductImages = forwardRef<InlineProductImagesRef, InlineProd
       compressionResolversRef.current.forEach(resolve => resolve());
       compressionResolversRef.current = [];
     }
-  }, [previewImages, onCompressionChange]);
+  }, [previewImages, mainImageId, onCompressionChange]);
 
   useImperativeHandle(ref, () => ({
     uploadImages: async (productId: string) => {
-      const readyImages = previewImagesRef.current.filter(img => img.compressed && !img.error);
+      const images = previewImagesRef.current;
+      const readyImages = images.filter(img => img.compressed && !img.error);
       if (readyImages.length === 0) return;
 
       const objectPaths: string[] = [];
@@ -183,16 +210,26 @@ export const InlineProductImages = forwardRef<InlineProductImagesRef, InlineProd
         objectPaths.push(objectPath);
       }
 
-      const response = await saveImageRecords(productId, objectPaths);
+      const savedImages = await saveImageRecords(productId, objectPaths);
+      const savedArray = Array.isArray(savedImages) ? savedImages : [];
 
-      if (!response.ok) {
-        throw new Error("Upload failed");
+      const selectedMainId = mainImageIdRef.current;
+      if (selectedMainId && savedArray.length > 0) {
+        const mainIdx = readyImages.findIndex(img => img.id === selectedMainId);
+        if (mainIdx >= 0 && savedArray[mainIdx]?.id) {
+          if (mainIdx !== 0) {
+            await setMainImage(productId, savedArray[mainIdx].id);
+          }
+        } else if (mainIdx === -1) {
+          console.warn("[InlineProductImages] Selected main image was not in ready images (compression error?), defaulting to first");
+        }
       }
 
       setPreviewImages(prev => {
         prev.forEach(img => URL.revokeObjectURL(img.preview));
         return [];
       });
+      setMainImageId(null);
     },
     hasImages: () => previewImagesRef.current.filter(img => img.compressed && !img.error).length > 0,
     getImageCount: () => previewImagesRef.current.filter(img => img.compressed && !img.error).length,
@@ -224,6 +261,7 @@ export const InlineProductImages = forwardRef<InlineProductImagesRef, InlineProd
       }
 
       validFiles.push({
+        id: generateId(),
         file,
         preview: URL.createObjectURL(file),
         compressed: null,
@@ -231,14 +269,20 @@ export const InlineProductImages = forwardRef<InlineProductImagesRef, InlineProd
       });
     }
 
-    setPreviewImages(prev => [...prev, ...validFiles]);
+    setPreviewImages(prev => {
+      const updated = [...prev, ...validFiles];
+      if (prev.length === 0 && validFiles.length > 0) {
+        setMainImageId(validFiles[0].id);
+      }
+      return updated;
+    });
 
     for (let i = 0; i < validFiles.length; i++) {
       try {
         const compressed = await compressImage(validFiles[i].file);
         setPreviewImages(prev => 
           prev.map((img) => 
-            img.file === validFiles[i].file
+            img.id === validFiles[i].id
               ? { ...img, compressed, compressing: false }
               : img
           )
@@ -246,7 +290,7 @@ export const InlineProductImages = forwardRef<InlineProductImagesRef, InlineProd
       } catch {
         setPreviewImages(prev => 
           prev.map((img) => 
-            img.file === validFiles[i].file
+            img.id === validFiles[i].id
               ? { ...img, compressing: false, error: "Ошибка сжатия" }
               : img
           )
@@ -257,23 +301,29 @@ export const InlineProductImages = forwardRef<InlineProductImagesRef, InlineProd
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
-    setIsDragging(true);
-  }, []);
+    if (!dragItemId) {
+      setIsDragging(true);
+    }
+  }, [dragItemId]);
 
   const handleDragLeave = useCallback((e: React.DragEvent) => {
     e.preventDefault();
-    setIsDragging(false);
-  }, []);
+    if (!dragItemId) {
+      setIsDragging(false);
+    }
+  }, [dragItemId]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
     
+    if (dragItemId) return;
+
     const files = e.dataTransfer.files;
     if (files.length > 0) {
       processFiles(files);
     }
-  }, [processFiles]);
+  }, [processFiles, dragItemId]);
 
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -283,13 +333,63 @@ export const InlineProductImages = forwardRef<InlineProductImagesRef, InlineProd
     e.target.value = "";
   }, [processFiles]);
 
-  const removePreviewImage = useCallback((index: number) => {
+  const removePreviewImage = useCallback((id: string) => {
     setPreviewImages(prev => {
-      const removed = prev[index];
-      URL.revokeObjectURL(removed.preview);
-      const newImages = prev.filter((_, i) => i !== index);
+      const removed = prev.find(img => img.id === id);
+      if (removed) URL.revokeObjectURL(removed.preview);
+      const newImages = prev.filter(img => img.id !== id);
       return newImages;
     });
+    setMainImageId(prev => {
+      if (prev === id) {
+        const remaining = previewImagesRef.current.filter(img => img.id !== id);
+        return remaining.length > 0 ? remaining[0].id : null;
+      }
+      return prev;
+    });
+  }, []);
+
+  const handleItemDragStart = useCallback((e: React.DragEvent, id: string) => {
+    setDragItemId(id);
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", id);
+  }, []);
+
+  const handleItemDragOver = useCallback((e: React.DragEvent, id: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    if (dragItemId && dragItemId !== id) {
+      setDragOverId(id);
+    }
+  }, [dragItemId]);
+
+  const handleItemDrop = useCallback((e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!dragItemId || dragItemId === targetId) {
+      setDragItemId(null);
+      setDragOverId(null);
+      return;
+    }
+
+    setPreviewImages(prev => {
+      const dragIdx = prev.findIndex(img => img.id === dragItemId);
+      const targetIdx = prev.findIndex(img => img.id === targetId);
+      if (dragIdx === -1 || targetIdx === -1) return prev;
+
+      const newImages = [...prev];
+      const [moved] = newImages.splice(dragIdx, 1);
+      newImages.splice(targetIdx, 0, moved);
+      return newImages;
+    });
+
+    setDragItemId(null);
+    setDragOverId(null);
+  }, [dragItemId]);
+
+  const handleItemDragEnd = useCallback(() => {
+    setDragItemId(null);
+    setDragOverId(null);
   }, []);
 
   return (
@@ -317,7 +417,7 @@ export const InlineProductImages = forwardRef<InlineProductImagesRef, InlineProd
       >
         <Upload className="h-6 w-6 mx-auto text-muted-foreground mb-2" />
         <p className="text-sm text-muted-foreground mb-2">
-          Перетащите изображения или
+          Перетащите изображения сюда или
         </p>
         <label>
           <input
@@ -336,57 +436,113 @@ export const InlineProductImages = forwardRef<InlineProductImagesRef, InlineProd
           </Button>
         </label>
         <p className="text-xs text-muted-foreground mt-2">
-          До 10 МБ на файл, автосжатие до 1920px
+          JPG, PNG, GIF, WebP до 10 МБ • Авто-оптимизация: квадрат до 1920px
         </p>
       </div>
 
       {previewImages.length > 0 && (
-        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
-          {previewImages.map((img, index) => (
-            <div key={index} className="relative group">
-              <div className="aspect-square rounded-lg overflow-hidden bg-muted">
-                <img
-                  src={img.preview}
-                  alt={`Preview ${index + 1}`}
-                  className="w-full h-full object-cover"
-                />
-                {img.compressing && (
-                  <div className="absolute inset-0 bg-background/80 flex items-center justify-center">
-                    <div className="animate-spin rounded-full h-6 w-6 border-2 border-primary border-t-transparent" />
+        <>
+          <p className="text-xs text-muted-foreground">
+            Перетаскивайте фото для изменения порядка. Нажмите звёздочку для выбора главного фото.
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+            {previewImages.map((img) => {
+              const isMain = mainImageId === img.id;
+              const isDragTarget = dragOverId === img.id;
+              const isBeingDragged = dragItemId === img.id;
+
+              return (
+                <div
+                  key={img.id}
+                  draggable
+                  onDragStart={(e) => handleItemDragStart(e, img.id)}
+                  onDragOver={(e) => handleItemDragOver(e, img.id)}
+                  onDrop={(e) => handleItemDrop(e, img.id)}
+                  onDragEnd={handleItemDragEnd}
+                  className={`relative group cursor-grab active:cursor-grabbing transition-all ${
+                    isBeingDragged ? "opacity-40 scale-95" : ""
+                  } ${isDragTarget ? "ring-2 ring-primary ring-offset-2 rounded-lg" : ""}`}
+                  data-testid={`image-item-${img.id}`}
+                >
+                  <div className="aspect-square rounded-lg overflow-hidden bg-muted border">
+                    <img
+                      src={img.preview}
+                      alt=""
+                      className="w-full h-full object-cover pointer-events-none"
+                    />
+                    {img.compressing && (
+                      <div className="absolute inset-0 bg-background/80 flex items-center justify-center">
+                        <div className="text-center">
+                          <div className="animate-spin rounded-full h-6 w-6 border-2 border-primary border-t-transparent mx-auto" />
+                          <p className="text-xs text-muted-foreground mt-1">Сжатие...</p>
+                        </div>
+                      </div>
+                    )}
+                    {img.error && (
+                      <div className="absolute inset-0 bg-destructive/80 flex items-center justify-center">
+                        <AlertCircle className="h-6 w-6 text-destructive-foreground" />
+                      </div>
+                    )}
                   </div>
-                )}
-                {img.error && (
-                  <div className="absolute inset-0 bg-destructive/80 flex items-center justify-center">
-                    <AlertCircle className="h-6 w-6 text-destructive-foreground" />
+
+                  {isMain && (
+                    <div className="absolute top-1.5 left-1.5">
+                      <Badge variant="default" className="text-xs px-1.5 py-0.5">
+                        <Star className="h-3 w-3 mr-1 fill-current" />
+                        Главное
+                      </Badge>
+                    </div>
+                  )}
+
+                  <div className="absolute top-1 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <GripVertical className="h-5 w-5 text-white drop-shadow-md" />
                   </div>
-                )}
-              </div>
-              <Button
-                variant="destructive"
-                size="icon"
-                className="absolute -top-2 -right-2 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                onClick={() => removePreviewImage(index)}
-                data-testid={`button-remove-image-${index}`}
-              >
-                <X className="h-3 w-3" />
-              </Button>
-              <div className="absolute bottom-1 left-1 right-1">
-                <Badge variant="secondary" className="text-[10px] w-full justify-center">
-                  {img.compressed
-                    ? formatFileSize(img.compressed.size)
-                    : formatFileSize(img.file.size)}
-                </Badge>
-              </div>
-            </div>
-          ))}
-        </div>
+
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors rounded-lg flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
+                    {!isMain && !img.error && (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={(e) => { e.stopPropagation(); setMainImageId(img.id); }}
+                        title="Сделать главным"
+                        data-testid={`button-set-main-${img.id}`}
+                      >
+                        <Star className="h-4 w-4" />
+                      </Button>
+                    )}
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={(e) => { e.stopPropagation(); removePreviewImage(img.id); }}
+                      data-testid={`button-remove-image-${img.id}`}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+
+                  <div className="absolute bottom-1 left-1">
+                    <Badge variant="secondary" className="text-[10px]">
+                      {img.compressed
+                        ? formatFileSize(img.compressed.size)
+                        : formatFileSize(img.file.size)}
+                    </Badge>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
       )}
 
       {previewImages.length > 0 && (
         <p className="text-xs text-muted-foreground">
           {previewImages.some(img => img.compressing)
             ? "Сжатие изображений..."
-            : "Изображения будут загружены при сохранении товара"}
+            : `${previewImages.filter(img => img.compressed && !img.error).length} фото готовы к загрузке`}
         </p>
       )}
     </div>

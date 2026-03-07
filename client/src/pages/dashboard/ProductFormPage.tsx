@@ -520,7 +520,7 @@ export default function ProductFormPage() {
           </div>
         </motion.div>
 
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        <form id="product-form" onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
           <Card>
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">
@@ -1551,34 +1551,6 @@ export default function ProductFormPage() {
             </CardContent>
           </Card>
 
-          <div className="flex items-center justify-end gap-3">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setLocation("/dashboard/products")}
-              data-testid="button-cancel"
-            >
-              Отмена
-            </Button>
-            <Button type="submit" disabled={mutation.isPending || isCompressingImages || isUploadingVideo} data-testid="button-save">
-              {mutation.isPending ? (
-                <span className="flex items-center gap-2">
-                  <span className="animate-spin rounded-full h-4 w-4 border-2 border-primary-foreground border-t-transparent" />
-                  Сохранение...
-                </span>
-              ) : isCompressingImages ? (
-                <span className="flex items-center gap-2">
-                  <span className="animate-spin rounded-full h-4 w-4 border-2 border-primary-foreground border-t-transparent" />
-                  Сжатие изображений...
-                </span>
-              ) : (
-                <span className="flex items-center gap-2">
-                  <Save className="h-4 w-4" />
-                  {isEdit ? "Сохранить" : "Создать"}
-                </span>
-              )}
-            </Button>
-          </div>
         </form>
 
         {!isEdit && (
@@ -1598,6 +1570,40 @@ export default function ProductFormPage() {
             <ProductVariantsSection productId={productId} />
           </>
         )}
+
+        <div className="flex items-center justify-end gap-3 sticky bottom-4 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 p-4 rounded-lg border shadow-sm">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setLocation("/dashboard/products")}
+            data-testid="button-cancel"
+          >
+            Отмена
+          </Button>
+          <Button 
+            type="submit" 
+            form="product-form"
+            disabled={mutation.isPending || isCompressingImages || isUploadingVideo} 
+            data-testid="button-save"
+          >
+            {mutation.isPending ? (
+              <span className="flex items-center gap-2">
+                <span className="animate-spin rounded-full h-4 w-4 border-2 border-primary-foreground border-t-transparent" />
+                Сохранение...
+              </span>
+            ) : isCompressingImages ? (
+              <span className="flex items-center gap-2">
+                <span className="animate-spin rounded-full h-4 w-4 border-2 border-primary-foreground border-t-transparent" />
+                Сжатие изображений...
+              </span>
+            ) : (
+              <span className="flex items-center gap-2">
+                <Save className="h-4 w-4" />
+                {isEdit ? "Сохранить" : "Создать"}
+              </span>
+            )}
+          </Button>
+        </div>
       </div>
     </DashboardLayout>
   );
