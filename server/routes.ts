@@ -5678,10 +5678,20 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
     return Math.max(500, Math.round(baseDelay + randomOffset));
   }
 
+  const aiResponseCooldown = new Map<string, number>();
+  const AI_COOLDOWN_MS = 8000;
+
   async function processIncomingWhatsAppMessage(instance: any, from: string, text: string) {
     const { generateAiResponse, isOpenAiConfigured } = await import("./services/openai");
     
     const tenantId = instance.tenantId;
+    const cooldownKey = `${tenantId}_${from}`;
+    const now = Date.now();
+    const lastResponse = aiResponseCooldown.get(cooldownKey) || 0;
+    if (now - lastResponse < AI_COOLDOWN_MS) {
+      console.log(`[WAHA] Cooldown active for ${from}, skipping duplicate`);
+      return;
+    }
     
     // Check if tenant has AI enabled
     const tenant = await storage.getTenant(tenantId);
@@ -5719,6 +5729,13 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
       role: "user",
       content: text,
     });
+    
+    // Skip AI response for order notification messages sent by customer via wa.me link
+    const orderNotificationPattern = /Новый заказ №?\s*\d|новый заказ|Дата:.*\d{2}\.\d{2}\.\d{4}/i;
+    if (orderNotificationPattern.test(text) && text.includes("Контакт клиента")) {
+      console.log(`[WAHA] Skipping AI response for order notification from ${customerPhone}`);
+      return;
+    }
     
     // Check for payment confirmation before AI response
     const paymentKeywords = ["оплатил", "оплатила", "оплачено", "оплата произведена", "оплата прошла", "я оплатил", "я оплатила", "перевел", "перевела", "отправил оплату"];
@@ -5784,6 +5801,7 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
             skipPolicyCheck: true,
           });
           console.log(`[Payment] Customer ${customerPhone} confirmed payment for order #${pendingOrder.orderNumber}`);
+          aiResponseCooldown.set(`${tenantId}_${from}`, Date.now());
           return;
         }
       } catch (payErr) {
@@ -6065,6 +6083,7 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
         skipPolicyCheck: true,
       });
       console.log(`[WAHA] Enqueued AI reply to ${customerPhone} (msgId=${sendResult.messageId})`);
+      aiResponseCooldown.set(`${tenantId}_${from}`, Date.now());
       
     } catch (error) {
       console.error("[WAHA] Error generating/sending AI response:", error);
