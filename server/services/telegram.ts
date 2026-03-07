@@ -169,3 +169,34 @@ export function formatCustomerComplaintNotification(data: {
 
   return msg;
 }
+
+export function formatPaymentConfirmationNotification(data: {
+  orderNumber: string;
+  customerName?: string;
+  customerPhone: string;
+  total: string;
+  confirmationType: 'text' | 'receipt';
+  orderId?: string;
+  conversationId?: string;
+}): string {
+  let msg = `💳 <b>Клиент подтвердил оплату</b>\n`;
+  msg += `\n🛒 Заказ: #${escapeHtml(data.orderNumber)}`;
+  msg += `\n👤 Клиент: ${escapeHtml(data.customerName || 'Не указано')}`;
+  msg += `\n📞 Телефон: ${escapeHtml(data.customerPhone)}`;
+  msg += `\n💰 Сумма: ${formatPrice(data.total)} ₸`;
+  msg += `\n📝 Способ: ${data.confirmationType === 'receipt' ? 'Скриншот чека' : 'Текстом'}`;
+  msg += `\n\n⚡ Пожалуйста, проверьте оплату и подтвердите в CRM.`;
+
+  const links: string[] = [];
+  if (data.orderId) {
+    links.push(`<a href="${BASE_URL}/dashboard/orders/${encodeURIComponent(data.orderId)}">Открыть заказ</a>`);
+  }
+  if (data.conversationId) {
+    links.push(`<a href="${BASE_URL}/dashboard/ai/rop/analytics?dialog=${encodeURIComponent(data.conversationId)}">Открыть диалог</a>`);
+  }
+  if (links.length > 0) {
+    msg += `\n\n📎 ${links.join(' | ')}`;
+  }
+
+  return msg;
+}

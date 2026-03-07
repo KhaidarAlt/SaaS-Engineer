@@ -41,5 +41,9 @@ Key architectural decisions include:
     -   Google Generative AI.
 -   **File Storage**: Replit Object Storage (Google Cloud Storage).
 -   **Payment Processing**:
-    -   Kaspi Business (full integration with 3-step verification, invoice creation, payment status tracking).
+    -   Kaspi Business (full integration with 3-step verification, invoice creation, payment status tracking, automated WhatsApp payment flow).
+        -   Auto-sends Kaspi payment link via WhatsApp after order creation (uses auto-generated invoice URL when available, falls back to static kaspiPayLink).
+        -   Detects payment confirmation keywords ("оплатил", "оплатила", etc.) in WhatsApp messages before AI processing; updates order to `payment_verification` status and sends Telegram notification to manager.
+        -   Sends WhatsApp thank-you message when manager marks order as paid in CRM; auto-advances order to `in_progress`.
+        -   AI system prompt updated to defer to automated payment flow instead of manually sending links.
     -   Stripe (scaffolded).

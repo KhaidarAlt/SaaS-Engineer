@@ -2803,7 +2803,7 @@ export async function registerRoutes(
         });
       }
       
-      // If payment status changed to paid, trigger CRM sync and notifications
+      // If payment status changed to paid, trigger CRM sync, notifications, and WhatsApp confirmation
       if (newPaymentStatus === "paid" && oldPaymentStatus !== "paid") {
         const tenant = await storage.getTenant(tenantId);
         
@@ -2817,6 +2817,54 @@ export async function registerRoutes(
             chatId: tenant.telegramChatId,
             message,
           }).catch(err => console.error("Failed to send payment Telegram notification:", err));
+        }
+        
+        // Send WhatsApp confirmation to customer
+        if (order?.customerPhone && tenant) {
+          try {
+            const { wahaService } = await import("./services/waha");
+            const wahaInstancesList = await storage.getWahaInstances(tenantId);
+            const activeInstance = wahaInstancesList.find((i: any) => i.isActive && (i.status === "running" || i.status === "active"));
+            
+            if (activeInstance) {
+              const cleanPhone = order.customerPhone.replace(/\D/g, "");
+              const storeName = tenant.name || "SmartCatalog";
+              const thankYouMessage = `Спасибо за оплату! 🙏\n\nВаш заказ #${order.orderNumber} на сумму ${Number(order.total).toLocaleString('ru-RU')} ₸ в ${storeName} подтверждён и передан в работу.\n\nМы свяжемся с вами для уточнения деталей. Спасибо, что выбрали нас! ❤️`;
+              
+              // Save as AI message for conversation history
+              try {
+                const conv = await storage.getAiConversationByPhone(tenantId, cleanPhone, "whatsapp");
+                if (conv) {
+                  await storage.createAiMessage({
+                    conversationId: conv.id,
+                    role: "assistant",
+                    content: thankYouMessage,
+                  });
+                }
+              } catch {}
+              
+              const { sendMessage: coreSendConfirm } = await import("./messaging/core");
+              await coreSendConfirm({
+                tenantId,
+                channel: "whatsapp",
+                provider: "waha",
+                fromAddress: activeInstance.instanceName,
+                toAddress: cleanPhone,
+                messageType: "text",
+                content: { text: thankYouMessage, wahaSession: activeInstance.instanceName },
+                meta: { isPaymentConfirmation: true },
+                skipPolicyCheck: true,
+              });
+              console.log(`[Payment] Sent payment confirmation to ${cleanPhone} for order #${order.orderNumber}`);
+              
+              // Update order status to in_progress
+              if (order.status === "awaiting_payment" || order.status === "paid" || order.status === "new") {
+                await storage.updateOrderWithPayment(order.id, tenantId, { status: "in_progress" });
+              }
+            }
+          } catch (whatsappErr) {
+            console.error("[Payment] Failed to send WhatsApp payment confirmation:", whatsappErr);
+          }
         }
         
         // Sync with CRM if connected
@@ -3587,16 +3635,53 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
       let paymentUrl: string | null = null;
       try {
         const kaspiIntegration = await storage.getKaspiIntegration(tenant.id);
-        if (kaspiIntegration && kaspiIntegration.status === "connected" && kaspiIntegration.autoGenerateInvoice) {
-          const { createPaymentForOrder } = await import("./services/payments");
-          const paymentResult = await createPaymentForOrder({
-            order,
-            tenantId: tenant.id,
-            source: "catalog",
-          });
-          if (paymentResult.success && paymentResult.paymentUrl) {
-            paymentUrl = paymentResult.paymentUrl;
-            console.log(`[Payment] Auto-generated Kaspi invoice for order ${order.orderNumber}: ${paymentUrl}`);
+        if (kaspiIntegration && kaspiIntegration.status === "connected") {
+          const kaspiPayLink = kaspiIntegration.kaspiPayLink;
+          
+          if (kaspiIntegration.autoGenerateInvoice) {
+            const { createPaymentForOrder } = await import("./services/payments");
+            const paymentResult = await createPaymentForOrder({
+              order,
+              tenantId: tenant.id,
+              source: "catalog",
+            });
+            if (paymentResult.success && paymentResult.paymentUrl) {
+              paymentUrl = paymentResult.paymentUrl;
+              console.log(`[Payment] Auto-generated Kaspi invoice for order ${order.orderNumber}: ${paymentUrl}`);
+            }
+          }
+
+          // Send Kaspi payment link to customer via WhatsApp
+          const effectivePayLink = paymentUrl || kaspiPayLink;
+          if (effectivePayLink) {
+            try {
+              const wahaInstancesList = await storage.getWahaInstances(tenant.id);
+              const activeInstance = wahaInstancesList.find((i: any) => i.isActive && (i.status === "running" || i.status === "active"));
+              
+              if (activeInstance) {
+                const cleanPhone = orderData.customerPhone.replace(/\D/g, "");
+                
+                await storage.updateOrderWithPayment(order.id, tenant.id, { status: "awaiting_payment" });
+
+                const paymentMessage = `Ваш заказ #${order.orderNumber} оформлен! 🎉\n\nСумма к оплате: ${Number(subtotal).toLocaleString('ru-RU')} ₸\n\nОплатить через Kaspi:\n${effectivePayLink}\n\nВ комментарии к платежу укажите: Заказ #${order.orderNumber}\n\nПосле оплаты, пожалуйста, напишите "оплатил" или отправьте скриншот чека — мы сразу подтвердим вашу оплату! ✅`;
+                
+                const { sendMessage: coreSendMsg } = await import("./messaging/core");
+                await coreSendMsg({
+                  tenantId: tenant.id,
+                  channel: "whatsapp",
+                  provider: "waha",
+                  fromAddress: activeInstance.instanceName,
+                  toAddress: cleanPhone,
+                  messageType: "text",
+                  content: { text: paymentMessage, wahaSession: activeInstance.instanceName },
+                  meta: { isPaymentLink: true },
+                  skipPolicyCheck: true,
+                });
+                console.log(`[Payment] Sent Kaspi payment link to ${cleanPhone} for order ${order.orderNumber}`);
+              }
+            } catch (whatsappErr) {
+              console.error("[Payment] Failed to send WhatsApp payment link:", whatsappErr);
+            }
           }
         }
       } catch (paymentErr) {
@@ -5634,6 +5719,77 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
       role: "user",
       content: text,
     });
+    
+    // Check for payment confirmation before AI response
+    const paymentKeywords = ["оплатил", "оплатила", "оплачено", "оплата произведена", "оплата прошла", "я оплатил", "я оплатила", "перевел", "перевела", "отправил оплату"];
+    const textLower = text.toLowerCase().trim();
+    const isPaymentConfirmation = paymentKeywords.some(kw => textLower.includes(kw));
+    
+    if (isPaymentConfirmation) {
+      try {
+        const pendingOrder = await storage.getRecentOrderByPhone(tenantId, customerPhone);
+        if (pendingOrder) {
+          await storage.updateOrderWithPayment(pendingOrder.id, tenantId, { 
+            status: "payment_verification",
+            paymentSource: "customer_confirmed",
+          });
+          
+          // Send Telegram notification to manager
+          if (tenant.telegramBotToken && tenant.telegramChatId) {
+            const { sendTelegramMessage, formatPaymentConfirmationNotification } = await import("./services/telegram");
+            const notifMessage = formatPaymentConfirmationNotification({
+              orderNumber: pendingOrder.orderNumber,
+              customerName: pendingOrder.customerName || conversation.customerName || undefined,
+              customerPhone,
+              total: pendingOrder.total || "0",
+              confirmationType: "text",
+              orderId: pendingOrder.id,
+              conversationId: conversation.id,
+            });
+            sendTelegramMessage({
+              botToken: tenant.telegramBotToken,
+              chatId: tenant.telegramChatId,
+              message: notifMessage,
+            }).catch(err => console.error("[Payment] Failed to send payment notification:", err));
+          }
+          
+          // Send confirmation reply to customer
+          const confirmReply = `Спасибо! Ваша оплата по заказу #${pendingOrder.orderNumber} на сумму ${Number(pendingOrder.total).toLocaleString('ru-RU')} ₸ передана на проверку.\n\nМенеджер подтвердит оплату в ближайшее время. ⏳`;
+          
+          await storage.createAiMessage({
+            conversationId: conversation.id,
+            role: "assistant",
+            content: confirmReply,
+          });
+          
+          const typingMs = getTypingDelay(confirmReply);
+          const chatId = `${customerPhone}@c.us`;
+          try {
+            const { sendTypingStatus, stopTypingStatus } = await import("./messaging/providers/wahaWhatsAppAdapter");
+            await sendTypingStatus(instance.instanceName, chatId);
+            await new Promise(resolve => setTimeout(resolve, typingMs));
+            await stopTypingStatus(instance.instanceName, chatId);
+          } catch {}
+          
+          const { sendMessage: coreSendPayment } = await import("./messaging/core");
+          await coreSendPayment({
+            tenantId,
+            channel: "whatsapp",
+            provider: "waha",
+            fromAddress: instance.instanceName,
+            toAddress: customerPhone,
+            messageType: "text",
+            content: { text: confirmReply, wahaSession: instance.instanceName },
+            meta: { isPaymentConfirmation: true },
+            skipPolicyCheck: true,
+          });
+          console.log(`[Payment] Customer ${customerPhone} confirmed payment for order #${pendingOrder.orderNumber}`);
+          return;
+        }
+      } catch (payErr) {
+        console.error("[Payment] Error handling payment confirmation:", payErr);
+      }
+    }
     
     // Get conversation history
     const messages = await storage.getAiMessages(conversation.id);
