@@ -400,7 +400,7 @@ export default function ProductDetailPage() {
             animate={{ opacity: 1, x: 0 }}
             className="space-y-4"
           >
-            <div className="relative aspect-square rounded-xl overflow-hidden bg-muted">
+            <div className="relative aspect-[4/5] sm:aspect-square rounded-xl overflow-hidden bg-muted max-h-[65vh]">
               <AnimatePresence mode="wait">
                 {allImages.length > 0 ? (
                   videoUrl && allImages[currentImageIndex] === videoUrl ? (
