@@ -117,11 +117,19 @@ async function discoverContacts(instance: any): Promise<void> {
     if (newChatIds.length === 0) return;
 
     let addedCount = 0;
-    for (const chatId of newChatIds) {
-      const hasNew = await pollChatMessages(instance, chatId);
-      if (hasNew) {
-        markActive(tenantId, chatId);
-        addedCount++;
+    for (let i = 0; i < newChatIds.length; i += DISCOVERY_CONCURRENCY) {
+      const batch = newChatIds.slice(i, i + DISCOVERY_CONCURRENCY);
+      const results = await Promise.all(
+        batch.map(async (chatId) => {
+          const hasNew = await pollChatMessages(instance, chatId);
+          return { chatId, hasNew };
+        })
+      );
+      for (const { chatId, hasNew } of results) {
+        if (hasNew) {
+          markActive(tenantId, chatId);
+          addedCount++;
+        }
       }
     }
 
