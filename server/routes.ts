@@ -3574,7 +3574,12 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
           tenantId: tenant.id,
           orderNumber: generateOrderNumber(),
           customerName: orderData.customerName,
-          customerPhone: orderData.customerPhone,
+          customerPhone: (() => {
+            let phone = (orderData.customerPhone || "").replace(/\D/g, "");
+            if (!phone) return orderData.customerPhone || "";
+            if (phone.startsWith("8") && phone.length === 11) phone = "7" + phone.slice(1);
+            return `+${phone}`;
+          })(),
           customerEmail: orderData.customerEmail || null,
           deliveryAddress: orderData.deliveryAddress || null,
           comment: orderData.comment || null,
@@ -4681,13 +4686,15 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
             ? `https://${(tenant as any).customDomain}`
             : `https://${tenant?.slug}.${metaPlatformDomain}`;
 
+          const cleanWpPhone = customerPhone ? customerPhone.replace(/\D/g, "") : "";
+          const wpSuffix = cleanWpPhone ? `?wp=${cleanWpPhone}` : "";
           let metaContextProducts = products.slice(0, 20).map(p => ({
             name: p.name,
             price: Number(p.price),
             description: p.description || undefined,
             category: p.categoryId ? categoryMap.get(p.categoryId) : undefined,
             imageUrl: p.mainImageUrl || undefined,
-            productUrl: `${metaCatalogBaseUrl}/product/${p.id}`,
+            productUrl: `${metaCatalogBaseUrl}/product/${p.id}${wpSuffix}`,
           }));
 
           if (metaSemanticProducts.length > 0) {
@@ -4698,7 +4705,7 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
               description: sp.description || undefined,
               category: sp.categoryId ? categoryMap.get(sp.categoryId) : undefined,
               imageUrl: sp.mainImageUrl || undefined,
-              productUrl: `${metaCatalogBaseUrl}/product/${sp.id}`,
+              productUrl: `${metaCatalogBaseUrl}/product/${sp.id}${wpSuffix}`,
             }));
             const restProducts = products.filter(p => !metaSemanticIds.has(p.id)).slice(0, 20 - semanticMapped.length).map(p => ({
               name: p.name,
@@ -4706,7 +4713,7 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
               description: p.description || undefined,
               category: p.categoryId ? categoryMap.get(p.categoryId) : undefined,
               imageUrl: p.mainImageUrl || undefined,
-              productUrl: `${metaCatalogBaseUrl}/product/${p.id}`,
+              productUrl: `${metaCatalogBaseUrl}/product/${p.id}${wpSuffix}`,
             }));
             metaContextProducts = [...semanticMapped, ...restProducts];
           }
@@ -4763,6 +4770,7 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
               productName: d.scope === 'product' && d.scopeId ? products.find(p => p.id === d.scopeId)?.name : undefined,
             })),
             contactPhone: tenant?.contactPhone || undefined,
+            customerWhatsAppPhone: customerPhone || undefined,
             aiLanguages: (tenant as any).aiLanguages || ["ru"],
             aiSystemPrompt: (tenant as any).aiSystemPrompt || undefined,
             paymentOptions: kaspiIntegration && kaspiIntegration.status === "connected" ? {

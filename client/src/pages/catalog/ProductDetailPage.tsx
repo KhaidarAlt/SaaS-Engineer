@@ -76,6 +76,14 @@ export default function ProductDetailPage() {
   const { slug, basePath } = useCatalogSlug("/c/:slug/product/:id");
   const productId = routeParams?.id || rootRouteParams?.id || "";
   const [quantity, setQuantity] = useState(1);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const wp = params.get("wp");
+    if (wp) {
+      sessionStorage.setItem("whatsappPhone", wp.replace(/\D/g, ""));
+    }
+  }, []);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [addedToCart, setAddedToCart] = useState(false);
   const [selectedSize, setSelectedSize] = useState<string | null>(null);

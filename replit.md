@@ -29,6 +29,7 @@ Key architectural decisions include:
 -   **Pricing & Billing**: Implements a Founder's Edition plan, dialog-based billing with credit rollover, purchasable dialog packages, a 14-day refund policy, and a 2-day free trial.
 -   **Visual Product Delivery**: AI system prompts are configured to display product images using Markdown format `![name](url)` with price and catalog links for relevant queries.
 -   **Payment Confirmation Flow**: AI system prompt rule #9 explicitly forbids AI from confirming payments. Only managers can confirm payments via CRM. Payment keyword detection searches by WhatsApp sender phone AND conversation phone as fallback. Order status filter includes `payment_verification` to prevent re-processing.
+-   **WhatsApp Phone Auto-Fill in Checkout**: AI appends `?wp=PHONE` (digits only) to all catalog and product URLs sent via WhatsApp. The catalog frontend captures the `wp` query parameter on page load and stores it in `sessionStorage`. The checkout form pre-fills the phone field with the WhatsApp number (formatted as `+7 XXX XXX XX XX`) and makes it read-only. The Email field has been removed from the checkout form. Phone numbers are normalized to `+7XXXXXXXXXX` format on order creation (with `8→7` prefix conversion for Kazakhstan/Russia numbers).
 
 ## External Dependencies
 -   **Database**: PostgreSQL (with `pgvector` extension for semantic search)

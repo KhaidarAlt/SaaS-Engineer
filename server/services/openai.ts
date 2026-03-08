@@ -69,6 +69,7 @@ interface TenantContext {
   tagRules?: TagRule[];
   tone?: string;
   currentStage?: string;
+  customerWhatsAppPhone?: string;
   aiLanguages?: string[];
   aiSystemPrompt?: string;
   paymentOptions?: {
@@ -100,9 +101,11 @@ export async function generateAiResponse(
   context: TenantContext
 ): Promise<AiResponseResult> {
   const platformDomain = process.env.PLATFORM_DOMAIN || "botfactory.kz";
-  const catalogUrl = (context.customDomain && context.domainVerified)
+  const cleanWpPhone = context.customerWhatsAppPhone ? context.customerWhatsAppPhone.replace(/\D/g, "") : "";
+  const wpParam = cleanWpPhone ? `?wp=${cleanWpPhone}` : "";
+  const catalogUrl = ((context.customDomain && context.domainVerified)
     ? `https://${context.customDomain}`
-    : `https://${context.slug}.${platformDomain}`;
+    : `https://${context.slug}.${platformDomain}`) + wpParam;
   
   // Check for handoff request first
   if (isHandoffRequest(userMessage)) {

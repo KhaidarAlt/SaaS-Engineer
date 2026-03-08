@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import CatalogHome from "./CatalogHome";
@@ -25,6 +26,14 @@ interface CatalogData {
 
 export default function CatalogRouter() {
   const { slug, basePath } = useCatalogSlug("/c/:slug");
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const wp = params.get("wp");
+    if (wp) {
+      sessionStorage.setItem("whatsappPhone", wp.replace(/\D/g, ""));
+    }
+  }, []);
 
   const { data, isLoading, error } = useQuery<CatalogData>({
     queryKey: ["/api/catalog", slug],

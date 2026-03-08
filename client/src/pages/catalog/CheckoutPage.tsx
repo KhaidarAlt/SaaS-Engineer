@@ -85,12 +85,28 @@ export default function CheckoutPage() {
     return null;
   })();
 
+  const whatsappPhone = (() => {
+    const params = new URLSearchParams(window.location.search);
+    const wp = params.get("wp");
+    if (wp) return wp.replace(/\D/g, "");
+    return sessionStorage.getItem("whatsappPhone") || null;
+  })();
+
+  const formatPhoneDisplay = (phone: string) => {
+    if (phone.length === 11 && phone.startsWith("7")) {
+      return `+7 ${phone.slice(1, 4)} ${phone.slice(4, 7)} ${phone.slice(7, 9)} ${phone.slice(9)}`;
+    }
+    return `+${phone}`;
+  };
+
+  const phoneFromWhatsApp = whatsappPhone ? formatPhoneDisplay(whatsappPhone) : null;
+
   const form = useForm<CheckoutInput>({
     resolver: zodResolver(checkoutSchema),
     defaultValues: {
       customerName: savedCustomer?.customerName || "",
-      customerPhone: savedCustomer?.customerPhone || "",
-      customerEmail: savedCustomer?.customerEmail || "",
+      customerPhone: phoneFromWhatsApp || savedCustomer?.customerPhone || "",
+      customerEmail: "",
       deliveryAddress: savedCustomer?.deliveryAddress || "",
       comment: "",
     },
@@ -400,24 +416,18 @@ export default function CheckoutPage() {
                       type="tel"
                       placeholder="+7 (777) 123-45-67"
                       {...form.register("customerPhone")}
+                      readOnly={!!phoneFromWhatsApp}
+                      className={phoneFromWhatsApp ? "bg-muted cursor-not-allowed" : ""}
                       data-testid="input-phone"
                     />
+                    {phoneFromWhatsApp && (
+                      <p className="text-xs text-muted-foreground">Номер определён из WhatsApp</p>
+                    )}
                     {form.formState.errors.customerPhone && (
                       <p className="text-sm text-destructive">
                         {form.formState.errors.customerPhone.message}
                       </p>
                     )}
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="customerEmail">Email</Label>
-                    <Input
-                      id="customerEmail"
-                      type="email"
-                      placeholder="email@example.com"
-                      {...form.register("customerEmail")}
-                      data-testid="input-email"
-                    />
                   </div>
 
                   <div className="space-y-2">
