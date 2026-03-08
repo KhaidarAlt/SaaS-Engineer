@@ -11,11 +11,11 @@ import type { NormalizedOutbound } from "./types";
 const BATCH_SIZE = 10;
 const POLL_INTERVAL_MS = 3000;
 const BACKOFF_SCHEDULE_MS = [
+  5_000,        // 5 sec
+  15_000,       // 15 sec
+  30_000,       // 30 sec
   60_000,       // 1 min
-  300_000,      // 5 min
-  900_000,      // 15 min
-  3_600_000,    // 60 min
-  21_600_000,   // 6 hours
+  120_000,      // 2 min
 ];
 
 let workerTimer: ReturnType<typeof setInterval> | null = null;

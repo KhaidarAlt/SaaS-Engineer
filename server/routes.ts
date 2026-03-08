@@ -5663,7 +5663,7 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
   }
 
   const aiResponseCooldown = new Map<string, number>();
-  const AI_COOLDOWN_MS = 30000;
+  const AI_COOLDOWN_MS = 5000;
   const recentlyProcessedMessages = new Map<string, number>();
   const MSG_DEDUP_TTL_MS = 120000;
   const lidToPhoneCache = new Map<string, string>();
@@ -5816,15 +5816,6 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
                   content: paymentMessage,
                 });
                 
-                const typingMs = getTypingDelay(paymentMessage);
-                const chatId = `${customerPhone}@c.us`;
-                try {
-                  const { sendTypingStatus, stopTypingStatus } = await import("./messaging/providers/wahaWhatsAppAdapter");
-                  await sendTypingStatus(instance.instanceName, chatId);
-                  await new Promise(resolve => setTimeout(resolve, typingMs));
-                  await stopTypingStatus(instance.instanceName, chatId);
-                } catch {}
-                
                 const { sendMessage: coreSendPayLink } = await import("./messaging/core");
                 await coreSendPayLink({
                   tenantId,
@@ -5899,15 +5890,6 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
             role: "assistant",
             content: confirmReply,
           });
-          
-          const typingMs = getTypingDelay(confirmReply);
-          const chatId = `${customerPhone}@c.us`;
-          try {
-            const { sendTypingStatus, stopTypingStatus } = await import("./messaging/providers/wahaWhatsAppAdapter");
-            await sendTypingStatus(instance.instanceName, chatId);
-            await new Promise(resolve => setTimeout(resolve, typingMs));
-            await stopTypingStatus(instance.instanceName, chatId);
-          } catch {}
           
           const { sendMessage: coreSendPayment } = await import("./messaging/core");
           await coreSendPayment({
@@ -6175,20 +6157,6 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
             message,
           }).catch(err => console.error("Failed to send Telegram unknown notification:", err));
         }
-      }
-      
-      const typingDelayMs = getTypingDelay(aiResult.content);
-      const chatId = `${customerPhone}@c.us`;
-      try {
-        const { sendTypingStatus, stopTypingStatus } = await import("./messaging/providers/wahaWhatsAppAdapter");
-        await sendTypingStatus(instance.instanceName, chatId);
-        try {
-          await new Promise(resolve => setTimeout(resolve, typingDelayMs));
-        } finally {
-          await stopTypingStatus(instance.instanceName, chatId);
-        }
-      } catch (typingErr) {
-        // Non-critical
       }
       
       const { sendMessage: coreSendMessage } = await import("./messaging/core");
