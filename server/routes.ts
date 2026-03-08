@@ -5543,6 +5543,13 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
         const text = payload?.body;
         const fromMe = payload?.fromMe;
         
+        if (from && !fromMe) {
+          addWatchedChatId(instance.tenantId, from);
+        }
+        if (payload?.to && fromMe) {
+          addWatchedChatId(instance.tenantId, payload.to);
+        }
+
         console.log(`[WAHA] Event=${event} from=${from} fromMe=${fromMe} text=${text?.substring?.(0, 50)}`);
         
         if (from && text && !fromMe) {

@@ -70,20 +70,26 @@ export const wahaService = {
   },
 
   async createSession(sessionName: string, webhookUrl?: string): Promise<WahaSession> {
-    const body: WahaSessionConfig = {
+    const body: any = {
       name: sessionName,
       start: true,
+      config: {
+        noweb: {
+          store: {
+            enabled: true,
+            fullSync: false,
+          },
+        },
+      },
     };
 
     if (webhookUrl) {
-      body.config = {
-        webhooks: [
-          {
-            url: webhookUrl,
-            events: ["message", "message.any", "message.ack", "session.status", "message.waiting"],
-          },
-        ],
-      };
+      body.config.webhooks = [
+        {
+          url: webhookUrl,
+          events: ["message", "message.any", "message.ack", "session.status", "message.waiting"],
+        },
+      ];
     }
 
     return wahaRequest("POST", "/api/sessions", body);
@@ -180,6 +186,12 @@ export const wahaService = {
     return wahaRequest("PUT", `/api/sessions/${sessionName}`, {
       name: sessionName,
       config: {
+        noweb: {
+          store: {
+            enabled: true,
+            fullSync: false,
+          },
+        },
         webhooks: [
           {
             url: webhookUrl,
