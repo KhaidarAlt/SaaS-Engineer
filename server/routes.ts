@@ -2827,13 +2827,21 @@ export async function registerRoutes(
             const activeInstance = wahaInstancesList.find((i: any) => i.isActive && (i.status === "running" || i.status === "active"));
             
             if (activeInstance) {
-              const cleanPhone = order.customerPhone.replace(/\D/g, "");
+              const orderPhone = order.customerPhone.replace(/\D/g, "");
               const storeName = tenant.name || "SmartCatalog";
               const thankYouMessage = `Спасибо за оплату! 🙏\n\nВаш заказ #${order.orderNumber} на сумму ${Number(order.total).toLocaleString('ru-RU')} ₸ в ${storeName} подтверждён и передан в работу.\n\nМы свяжемся с вами для уточнения деталей. Спасибо, что выбрали нас! ❤️`;
               
-              // Save as AI message for conversation history
+              let sendToPhone = orderPhone;
+              let conv: any = null;
               try {
-                const conv = await storage.getAiConversationByPhone(tenantId, cleanPhone, "whatsapp");
+                conv = await storage.getAiConversationByPhone(tenantId, orderPhone, "whatsapp");
+                if (!conv) {
+                  conv = await storage.findConversationByOrderNumber(tenantId, order.orderNumber);
+                  if (conv && conv.customerPhone && conv.customerPhone !== orderPhone) {
+                    sendToPhone = conv.customerPhone.replace(/\D/g, "");
+                    console.log(`[Payment] Order phone ${orderPhone} differs from WhatsApp phone ${sendToPhone}, using WhatsApp phone`);
+                  }
+                }
                 if (conv) {
                   await storage.createAiMessage({
                     conversationId: conv.id,
@@ -2849,13 +2857,13 @@ export async function registerRoutes(
                 channel: "whatsapp",
                 provider: "waha",
                 fromAddress: activeInstance.instanceName,
-                toAddress: cleanPhone,
+                toAddress: sendToPhone,
                 messageType: "text",
                 content: { text: thankYouMessage, wahaSession: activeInstance.instanceName },
                 meta: { isPaymentConfirmation: true },
                 skipPolicyCheck: true,
               });
-              console.log(`[Payment] Sent payment confirmation to ${cleanPhone} for order #${order.orderNumber}`);
+              console.log(`[Payment] Sent payment confirmation to ${sendToPhone} for order #${order.orderNumber}`);
               
               // Update order status to in_progress
               if (order.status === "awaiting_payment" || order.status === "paid" || order.status === "new") {

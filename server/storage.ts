@@ -175,6 +175,7 @@ export interface IStorage {
   getOrders(tenantId: string): Promise<Order[]>;
   getOrder(id: string, tenantId: string): Promise<(Order & { items?: OrderItem[] }) | undefined>;
   getRecentOrderByPhone(tenantId: string, phone: string): Promise<(Order & { items?: OrderItem[] }) | undefined>;
+  findConversationByOrderNumber(tenantId: string, orderNumber: string): Promise<AiConversation | undefined>;
   getOrderByOrderNumber(tenantId: string, orderNumber: string): Promise<(Order & { items?: OrderItem[] }) | undefined>;
   createOrder(order: InsertOrder, items: InsertOrderItem[]): Promise<Order>;
   updateOrderStatus(id: string, tenantId: string, status: string): Promise<Order | undefined>;
@@ -1526,6 +1527,21 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(aiConversations.updatedAt))
       .limit(1);
     return conv;
+  }
+
+  async findConversationByOrderNumber(tenantId: string, orderNumber: string): Promise<AiConversation | undefined> {
+    const results = await db
+      .select({ conv: aiConversations })
+      .from(aiMessages)
+      .innerJoin(aiConversations, eq(aiMessages.conversationId, aiConversations.id))
+      .where(and(
+        eq(aiConversations.tenantId, tenantId),
+        eq(aiConversations.channel, "whatsapp"),
+        sql`${aiMessages.content} LIKE ${'%' + orderNumber + '%'}`,
+      ))
+      .orderBy(desc(aiMessages.createdAt))
+      .limit(1);
+    return results.length > 0 ? results[0].conv : undefined;
   }
 
   async createAiConversation(data: InsertAiConversation): Promise<AiConversation> {
