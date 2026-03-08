@@ -363,7 +363,7 @@ export default function SettingsPage() {
 
   const { data: wahaInstances, refetch: refetchWahaInstances } = useQuery<WahaInstance[]>({
     queryKey: ["/api/waha/instances"],
-    refetchInterval: showWhatsAppQr ? 3000 : 10000,
+    refetchInterval: showWhatsAppQr ? 3000 : false,
   });
 
   const connectedInstance = wahaInstances?.find(i => i.status === "running");
