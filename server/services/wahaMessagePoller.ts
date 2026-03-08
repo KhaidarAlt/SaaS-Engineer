@@ -1,18 +1,19 @@
 import { wahaService } from "./waha";
 
 const POLL_INTERVAL_MS = 5000;
-const DISCOVERY_INTERVAL_MS = 30000;
-const MAX_MESSAGES_PER_CHAT = 10;
+const DISCOVERY_INTERVAL_MS = 15000;
+const MAX_MESSAGES_PER_CHAT = 5;
 const ACTIVE_TTL_MS = 30 * 60 * 1000;
-const DISCOVERY_CONCURRENCY = 10;
+const DISCOVERY_CONCURRENCY = 20;
 
 const processedMessageIds = new Set<string>();
 const recentContentHashes = new Map<string, number>();
 const MAX_PROCESSED_IDS = 10000;
 const MESSAGE_AGE_LIMIT_S = 300;
-const CONTENT_DEDUP_TTL_MS = 60000;
+const CONTENT_DEDUP_TTL_MS = 120000;
 
 const activeChatIds = new Map<string, Map<string, number>>();
+const scannedEmptyContacts = new Map<string, Set<string>>();
 
 let storage: any = null;
 let processMessageFn: ((instance: any, from: string, text: string) => Promise<void>) | null = null;
@@ -21,6 +22,7 @@ let discoveryIntervalHandle: ReturnType<typeof setInterval> | null = null;
 let isPollRunning = false;
 let isDiscoveryRunning = false;
 let initialWarmupDone = new Set<string>();
+let fullScanDone = new Set<string>();
 
 function contentHash(from: string, text: string): string {
   return `${from}::${text.trim().substring(0, 100)}`;
@@ -142,7 +144,6 @@ function processMessage(instance: any, msg: any): boolean {
   processedMessageIds.add(msgId);
 
   if (isContentDuplicate(from, text)) {
-    console.log(`[WahaPoller] Content duplicate skipped: from=${from} text="${text.substring(0, 30)}"`);
     return false;
   }
 
@@ -156,10 +157,10 @@ function processMessage(instance: any, msg: any): boolean {
   return true;
 }
 
-async function pollChatMessages(instance: any, chatId: string): Promise<boolean> {
+async function pollChatMessages(instance: any, chatId: string, limit?: number): Promise<boolean> {
   let foundNew = false;
   try {
-    const messages = await wahaService.getChatMessages(instance.instanceName, chatId, MAX_MESSAGES_PER_CHAT);
+    const messages = await wahaService.getChatMessages(instance.instanceName, chatId, limit || MAX_MESSAGES_PER_CHAT);
     if (!messages || messages.length === 0) return false;
 
     for (const msg of messages) {
@@ -217,7 +218,7 @@ async function pollTick() {
   }
 }
 
-// ─── BACKGROUND DISCOVERY LOOP: finds new senders every 30s ───
+// ─── BACKGROUND DISCOVERY LOOP: finds new senders every 15s ───
 
 async function discoveryTick() {
   if (isDiscoveryRunning) return;
@@ -249,71 +250,69 @@ async function discoveryTick() {
 
         const knownChatIds = await getKnownChatIds(tenantId);
 
-        let allChatIds: string[] = [];
-        let discoverySource = "none";
+        if (!scannedEmptyContacts.has(key)) {
+          scannedEmptyContacts.set(key, new Set());
+        }
+        const scannedEmpty = scannedEmptyContacts.get(key)!;
+
+        let allContactIds: string[] = [];
 
         try {
-          const chats = await wahaService.getChatsOverview(sessionName, 100);
-          if (chats && chats.length > 0) {
-            allChatIds = chats
-              .filter(c => c.id.endsWith("@c.us"))
+          const contacts = await wahaService.getAllContacts(sessionName);
+          if (contacts && contacts.length > 0) {
+            allContactIds = contacts
+              .filter(c => c.isUser && !c.isMe && !c.isGroup && c.id.endsWith("@c.us"))
               .map(c => c.id);
-            discoverySource = "chats";
-            console.log(`[WahaPoller] Discovery via chats API: ${allChatIds.length} personal chats from ${chats.length} total`);
+            console.log(`[WahaPoller] Discovery: ${allContactIds.length} personal contacts from ${contacts.length} total`);
           } else {
-            console.log(`[WahaPoller] Chats API returned empty, trying contacts`);
+            console.log(`[WahaPoller] Contacts API returned empty`);
           }
-        } catch (chatErr: any) {
-          console.log(`[WahaPoller] Chats API failed: ${chatErr?.message?.substring(0, 80)}, trying contacts`);
+        } catch (err: any) {
+          console.log(`[WahaPoller] Contacts API failed: ${err?.message?.substring(0, 80)}`);
         }
 
-        if (allChatIds.length === 0) {
-          try {
-            const contacts = await wahaService.getAllContacts(sessionName);
-            if (contacts && contacts.length > 0) {
-              allChatIds = contacts
-                .filter(c => c.isUser && !c.isMe && !c.isGroup && c.id.endsWith("@c.us"))
-                .map(c => c.id);
-              discoverySource = "contacts";
-              console.log(`[WahaPoller] Discovery via contacts API: ${allChatIds.length} personal from ${contacts.length} total`);
-            } else {
-              console.log(`[WahaPoller] Contacts API returned empty`);
-            }
-          } catch (contactErr: any) {
-            console.log(`[WahaPoller] Contacts API failed: ${contactErr?.message?.substring(0, 80)}`);
-          }
+        if (allContactIds.length === 0) continue;
+
+        const newChatIds = allContactIds.filter(id => !knownChatIds.has(id) && !scannedEmpty.has(id));
+
+        if (!fullScanDone.has(key)) {
+          console.log(`[WahaPoller] First full scan: ${newChatIds.length} contacts to check`);
         }
 
-        if (allChatIds.length === 0) {
-          console.log(`[WahaPoller] Discovery: no sources available for ${sessionName}`);
+        if (newChatIds.length === 0) {
+          if (fullScanDone.has(key)) {
+            scannedEmpty.clear();
+            console.log(`[WahaPoller] Discovery: all contacts scanned, cleared cache for next cycle`);
+          }
           continue;
         }
 
-        const newChatIds = allChatIds.filter(id => !knownChatIds.has(id));
-        console.log(`[WahaPoller] Discovery (${discoverySource}): ${knownChatIds.size} known, ${newChatIds.length} new to check`);
-
-        if (newChatIds.length === 0) continue;
-
         let addedCount = 0;
+        let checkedCount = 0;
         for (let i = 0; i < newChatIds.length; i += DISCOVERY_CONCURRENCY) {
           const batch = newChatIds.slice(i, i + DISCOVERY_CONCURRENCY);
           const results = await Promise.all(
             batch.map(async (chatId) => {
-              const hasNew = await pollChatMessages(instance, chatId);
+              const hasNew = await pollChatMessages(instance, chatId, 3);
               return { chatId, hasNew };
             })
           );
+          checkedCount += batch.length;
           for (const { chatId, hasNew } of results) {
             if (hasNew) {
               markActive(tenantId, chatId);
               addedCount++;
+            } else {
+              scannedEmpty.add(chatId);
             }
           }
         }
 
-        if (addedCount > 0) {
-          console.log(`[WahaPoller] Discovery: ${addedCount} active chats from ${newChatIds.length} new contacts (tenant ${tenantId.substring(0, 8)})`);
+        if (!fullScanDone.has(key)) {
+          fullScanDone.add(key);
         }
+
+        console.log(`[WahaPoller] Discovery complete: checked ${checkedCount}, found ${addedCount} active (${scannedEmpty.size} cached empty)`);
       } catch (err) {
         console.error(`[WahaPoller] Discovery error for ${sessionName}:`, err);
       }

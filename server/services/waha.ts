@@ -209,7 +209,7 @@ export const wahaService = {
 
   async getAllContacts(sessionName: string): Promise<Array<{ id: string; number: string | null; isUser: boolean; isMe: boolean; isGroup: boolean; name?: string; pushname?: string }>> {
     try {
-      const contacts = await wahaRequest("GET", `/api/contacts/all?session=${sessionName}&limit=1000`);
+      const contacts = await wahaRequest("GET", `/api/contacts/all?session=${sessionName}&limit=10000`);
       return Array.isArray(contacts) ? contacts : [];
     } catch {
       return [];
