@@ -397,7 +397,7 @@ export async function sendMessage(params: SendMessageParams): Promise<SendMessag
         tenantId,
         status: "PENDING",
         attempts: 0,
-        maxAttempts: 6,
+        maxAttempts: 2,
       })
       .returning({ id: messageOutbox.id });
 

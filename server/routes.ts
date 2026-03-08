@@ -5856,7 +5856,13 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
     
     if (isPaymentConfirmation) {
       try {
-        const pendingOrder = await storage.getRecentOrderByPhone(tenantId, customerPhone);
+        let pendingOrder = await storage.getRecentOrderByPhone(tenantId, customerPhone);
+        if (!pendingOrder) {
+          const convPhone = conversation.customerPhone;
+          if (convPhone && convPhone !== customerPhone) {
+            pendingOrder = await storage.getRecentOrderByPhone(tenantId, convPhone);
+          }
+        }
         if (pendingOrder) {
           await storage.updateOrderWithPayment(pendingOrder.id, tenantId, { 
             status: "payment_verification",

@@ -1,5 +1,5 @@
 import { db } from "../db";
-import { eq, and, lte, sql, inArray } from "drizzle-orm";
+import { eq, and, lte, lt, sql, inArray } from "drizzle-orm";
 import {
   messageOutbox,
   messagingMessages,
@@ -264,8 +264,31 @@ async function tick(): Promise<void> {
   }
 }
 
-export function startOutboxWorker(): void {
+export async function startOutboxWorker(): Promise<void> {
   if (workerTimer) return;
+
+  try {
+    const cleaned = await db
+      .update(messageOutbox)
+      .set({
+        status: "FAILED",
+        failReason: "Cleared stuck entry on startup",
+        completedAt: new Date(),
+        updatedAt: new Date(),
+        lockedAt: null,
+        lockedBy: null,
+      })
+      .where(
+        and(
+          inArray(messageOutbox.status, ["RETRY", "PROCESSING"]),
+          lt(messageOutbox.updatedAt, new Date(Date.now() - 5 * 60 * 1000))
+        )
+      );
+    console.log("[OutboxWorker] Cleaned stuck entries on startup");
+  } catch (e) {
+    console.error("[OutboxWorker] Failed to clean stuck entries:", e);
+  }
+
   workerTimer = setInterval(tick, POLL_INTERVAL_MS);
   console.log(`[OutboxWorker] Started (every ${POLL_INTERVAL_MS / 1000}s)`);
 }

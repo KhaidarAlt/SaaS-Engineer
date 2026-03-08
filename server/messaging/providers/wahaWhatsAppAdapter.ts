@@ -244,7 +244,7 @@ export async function sendOutbound(req: NormalizedOutbound): Promise<ProviderSen
           file: { url: req.content.url },
           caption: req.content.caption || undefined,
         }),
-        signal: AbortSignal.timeout(15000),
+        signal: AbortSignal.timeout(45000),
       });
 
       if (!response.ok) {
@@ -265,7 +265,7 @@ export async function sendOutbound(req: NormalizedOutbound): Promise<ProviderSen
         chatId,
         text: textBody,
       }),
-      signal: AbortSignal.timeout(15000),
+      signal: AbortSignal.timeout(45000),
     });
 
     if (!response.ok) {
@@ -277,7 +277,7 @@ export async function sendOutbound(req: NormalizedOutbound): Promise<ProviderSen
     return { success: true, providerMessageId: data?.id, retryable: false };
   } catch (err: any) {
     if (err.name === "AbortError" || err.name === "TimeoutError") {
-      return { success: false, error: "Request timed out", errorCode: "TIMEOUT", retryable: true };
+      return { success: false, error: "Request timed out", errorCode: "TIMEOUT", retryable: false };
     }
     return { success: false, error: err.message || "Network error", errorCode: "NETWORK_ERROR", retryable: true };
   }

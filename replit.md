@@ -25,10 +25,10 @@ Key architectural decisions include:
     -   **Audience**: Manages auto-syncing contacts via WAHA/Meta, provides contact filtering, and allows segment management.
     -   **Scenarios**: Offers 20 pre-seeded scenario templates across various niches and types for campaign creation.
     -   **Anti-ban Circuit Breaker**: Automatically pauses campaigns if the fail rate exceeds 30%.
--   **Canonical Messaging Layer**: Provides channel-agnostic inbound message normalization, deduplication, dialog resolution, and persistent storage. It includes adapters for Meta WhatsApp Cloud and WAHA, a provider registry, and a core system for processing and sending messages with policy gates. An outbound pipeline with an outbox worker handles message delivery with exponential backoff and retry policies.
+-   **Canonical Messaging Layer**: Provides channel-agnostic inbound message normalization, deduplication, dialog resolution, and persistent storage. It includes adapters for Meta WhatsApp Cloud and WAHA, a provider registry, and a core system for processing and sending messages with policy gates. An outbound pipeline with an outbox worker handles message delivery. TIMEOUT errors are non-retryable (message likely already delivered). Network errors retry once (maxAttempts=2). WAHA API timeout is 45s. Startup cleanup fails stuck outbox entries older than 5 minutes. AI cooldown between responses is 5 seconds.
 -   **Pricing & Billing**: Implements a Founder's Edition plan, dialog-based billing with credit rollover, purchasable dialog packages, a 14-day refund policy, and a 2-day free trial.
 -   **Visual Product Delivery**: AI system prompts are configured to display product images using Markdown format `![name](url)` with price and catalog links for relevant queries.
--   **Typing Simulation**: Simulates human-like typing delays based on message length, with `startTyping`/`stopTyping` statuses sent via the WAHA adapter.
+-   **Payment Confirmation Flow**: AI system prompt rule #9 explicitly forbids AI from confirming payments. Only managers can confirm payments via CRM. Payment keyword detection searches by WhatsApp sender phone AND conversation phone as fallback. Order status filter includes `payment_verification` to prevent re-processing.
 
 ## External Dependencies
 -   **Database**: PostgreSQL (with `pgvector` extension for semantic search)

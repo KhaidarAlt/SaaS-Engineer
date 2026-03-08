@@ -899,7 +899,7 @@ export class DatabaseStorage implements IStorage {
       .where(and(
         eq(orders.tenantId, tenantId),
         sql`REPLACE(${orders.customerPhone}, '+', '') LIKE ${'%' + cleanPhone.slice(-10)}`,
-        inArray(orders.status, ["new", "awaiting_payment"]),
+        inArray(orders.status, ["new", "awaiting_payment", "payment_verification"]),
       ))
       .orderBy(desc(orders.createdAt))
       .limit(1);
