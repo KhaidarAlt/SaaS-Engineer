@@ -5539,9 +5539,11 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
       }
 
       if (event === "message" || event === "message.any") {
-        const from = payload?.from;
+        const rawFrom = payload?.from;
         const text = payload?.body;
         const fromMe = payload?.fromMe;
+        
+        const from = rawFrom ? resolveLidToPhone(rawFrom, payload) : rawFrom;
         
         if (from && !fromMe) {
           addWatchedChatId(instance.tenantId, from);
@@ -5664,6 +5666,45 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
   const AI_COOLDOWN_MS = 30000;
   const recentlyProcessedMessages = new Map<string, number>();
   const MSG_DEDUP_TTL_MS = 120000;
+  const lidToPhoneCache = new Map<string, string>();
+
+  function resolveLidToPhone(from: string, payload: any): string {
+    if (!from.endsWith("@lid")) return from;
+
+    const cached = lidToPhoneCache.get(from);
+    if (cached) {
+      console.log(`[WAHA] LID resolved from cache: ${from} → ${cached}`);
+      return cached;
+    }
+
+    const data = payload?._data;
+    if (data) {
+      const remoteJid = data.remoteJid || data.chatId || data.from;
+      if (remoteJid && typeof remoteJid === "string") {
+        const phonePart = remoteJid.replace(/@.*$/, "").replace(/[^0-9]/g, "");
+        if (phonePart.length >= 10 && phonePart.length <= 15) {
+          const resolved = `${phonePart}@c.us`;
+          lidToPhoneCache.set(from, resolved);
+          console.log(`[WAHA] LID resolved: ${from} → ${resolved} (from _data.remoteJid)`);
+          return resolved;
+        }
+      }
+
+      const notifyJid = data.notifyName || data.author;
+      if (notifyJid && typeof notifyJid === "string") {
+        const phonePart = notifyJid.replace(/@.*$/, "").replace(/[^0-9]/g, "");
+        if (phonePart.length >= 10 && phonePart.length <= 15) {
+          const resolved = `${phonePart}@c.us`;
+          lidToPhoneCache.set(from, resolved);
+          console.log(`[WAHA] LID resolved: ${from} → ${resolved} (from _data.notifyName)`);
+          return resolved;
+        }
+      }
+    }
+
+    console.log(`[WAHA] LID not resolved for ${from}, _data keys: ${data ? Object.keys(data).join(",") : "none"}`);
+    return from;
+  }
 
   async function processIncomingWhatsAppMessage(instance: any, from: string, text: string) {
     const { generateAiResponse, isOpenAiConfigured } = await import("./services/openai");
@@ -5706,8 +5747,8 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
       return;
     }
     
-    // Normalize phone number (remove @c.us suffix if present)
-    const customerPhone = from.replace("@c.us", "").replace("@s.whatsapp.net", "");
+    // Normalize phone number (remove @c.us / @lid suffix if present)
+    const customerPhone = from.replace("@c.us", "").replace("@s.whatsapp.net", "").replace("@lid", "");
     
     // Find or create conversation
     let conversation = await storage.getAiConversationByPhone(tenantId, customerPhone, "whatsapp");
