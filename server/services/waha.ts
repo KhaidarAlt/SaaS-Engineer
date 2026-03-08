@@ -77,7 +77,7 @@ export const wahaService = {
         noweb: {
           store: {
             enabled: true,
-            fullSync: false,
+            fullSync: true,
           },
         },
       },
@@ -189,7 +189,7 @@ export const wahaService = {
         noweb: {
           store: {
             enabled: true,
-            fullSync: false,
+            fullSync: true,
           },
         },
         webhooks: [
