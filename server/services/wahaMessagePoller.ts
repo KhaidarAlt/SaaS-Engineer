@@ -1,8 +1,8 @@
 import { wahaService } from "./waha";
 
 const POLL_INTERVAL_MS = 5000;
+const DISCOVERY_INTERVAL_MS = 30000;
 const MAX_MESSAGES_PER_CHAT = 10;
-const DISCOVERY_INTERVAL_TICKS = 6;
 const ACTIVE_TTL_MS = 30 * 60 * 1000;
 const DISCOVERY_CONCURRENCY = 10;
 
@@ -14,9 +14,10 @@ const activeChatIds = new Map<string, Map<string, number>>();
 
 let storage: any = null;
 let processMessageFn: ((instance: any, from: string, text: string) => Promise<void>) | null = null;
-let intervalHandle: ReturnType<typeof setInterval> | null = null;
-let isRunning = false;
-let tickCounter = 0;
+let pollIntervalHandle: ReturnType<typeof setInterval> | null = null;
+let discoveryIntervalHandle: ReturnType<typeof setInterval> | null = null;
+let isPollRunning = false;
+let isDiscoveryRunning = false;
 let initialWarmupDone = new Set<string>();
 
 function cleanupProcessedIds() {
@@ -91,56 +92,6 @@ async function warmupChatIds(sessionName: string, chatIds: string[]) {
   }
 }
 
-async function discoverContacts(instance: any): Promise<void> {
-  const sessionName = instance.instanceName;
-  const tenantId = instance.tenantId;
-  const key = `${tenantId}_${sessionName}`;
-
-  try {
-    const contacts = await wahaService.getAllContacts(sessionName);
-    if (!contacts || contacts.length === 0) return;
-
-    const personalChatIds = contacts
-      .filter(c => c.isUser && !c.isMe && !c.isGroup && c.id.endsWith("@c.us"))
-      .map(c => c.id);
-
-    const knownChatIds = await getKnownChatIds(tenantId);
-    const newChatIds = personalChatIds.filter(id => !knownChatIds.has(id));
-
-    if (!initialWarmupDone.has(key)) {
-      initialWarmupDone.add(key);
-      const knownList = [...knownChatIds];
-      await warmupChatIds(sessionName, knownList);
-      console.log(`[WahaPoller] Initial warmup: ${knownList.length} known chats, ${processedMessageIds.size} messages marked seen`);
-    }
-
-    if (newChatIds.length === 0) return;
-
-    let addedCount = 0;
-    for (let i = 0; i < newChatIds.length; i += DISCOVERY_CONCURRENCY) {
-      const batch = newChatIds.slice(i, i + DISCOVERY_CONCURRENCY);
-      const results = await Promise.all(
-        batch.map(async (chatId) => {
-          const hasNew = await pollChatMessages(instance, chatId);
-          return { chatId, hasNew };
-        })
-      );
-      for (const { chatId, hasNew } of results) {
-        if (hasNew) {
-          markActive(tenantId, chatId);
-          addedCount++;
-        }
-      }
-    }
-
-    if (addedCount > 0) {
-      console.log(`[WahaPoller] Discovery: ${addedCount} active chats found out of ${newChatIds.length} new contacts for tenant ${tenantId.substring(0, 8)}`);
-    }
-  } catch (err) {
-    console.error(`[WahaPoller] Discovery error for ${sessionName}:`, err);
-  }
-}
-
 async function pollChatMessages(instance: any, chatId: string): Promise<boolean> {
   let foundNew = false;
   try {
@@ -182,31 +133,11 @@ async function pollChatMessages(instance: any, chatId: string): Promise<boolean>
   return foundNew;
 }
 
-async function pollSessionMessages(instance: any) {
-  const tenantId = instance.tenantId;
-
-  try {
-    const tenant = await storage.getTenant(tenantId);
-    if (!tenant || !tenant.aiEnabled) return;
-
-    const chatIds = await getKnownChatIds(tenantId);
-    if (chatIds.size === 0) return;
-
-    for (const chatId of chatIds) {
-      const hasNew = await pollChatMessages(instance, chatId);
-      if (hasNew) {
-        markActive(tenantId, chatId);
-      }
-    }
-  } catch (err) {
-    console.error(`[WahaPoller] Error polling session ${instance.instanceName}:`, err);
-  }
-}
+// ─── FAST POLL LOOP: polls only known/active chats every 5s ───
 
 async function pollTick() {
-  if (isRunning) return;
-  isRunning = true;
-  tickCounter++;
+  if (isPollRunning) return;
+  isPollRunning = true;
 
   try {
     const instances = await storage.getActiveWahaInstances?.();
@@ -216,35 +147,120 @@ async function pollTick() {
       (i: any) => i.isActive && i.status === "running"
     );
 
-    const isDiscoveryTick = tickCounter % DISCOVERY_INTERVAL_TICKS === 1;
-
     for (const instance of runningInstances) {
-      const key = `${instance.tenantId}_${instance.instanceName}`;
+      const tenantId = instance.tenantId;
+      const key = `${tenantId}_${instance.instanceName}`;
 
-      if (!initialWarmupDone.has(key) || isDiscoveryTick) {
-        await discoverContacts(instance);
+      if (!initialWarmupDone.has(key)) continue;
+
+      try {
+        const tenant = await storage.getTenant(tenantId);
+        if (!tenant || !tenant.aiEnabled) continue;
+
+        const chatIds = await getKnownChatIds(tenantId);
+        if (chatIds.size === 0) continue;
+
+        for (const chatId of chatIds) {
+          const hasNew = await pollChatMessages(instance, chatId);
+          if (hasNew) {
+            markActive(tenantId, chatId);
+          }
+        }
+      } catch (err) {
+        console.error(`[WahaPoller] Poll error for ${instance.instanceName}:`, err);
       }
-
-      await pollSessionMessages(instance);
-    }
-
-    if (tickCounter % DISCOVERY_INTERVAL_TICKS === 0) {
-      pruneInactiveChats();
     }
 
     cleanupProcessedIds();
   } catch (err) {
-    console.error("[WahaPoller] Tick error:", err);
+    console.error("[WahaPoller] Poll tick error:", err);
   } finally {
-    isRunning = false;
+    isPollRunning = false;
   }
 }
+
+// ─── BACKGROUND DISCOVERY LOOP: finds new contacts every 30s ───
+
+async function discoveryTick() {
+  if (isDiscoveryRunning) return;
+  isDiscoveryRunning = true;
+
+  try {
+    const instances = await storage.getActiveWahaInstances?.();
+    if (!instances || !Array.isArray(instances)) return;
+
+    const runningInstances = instances.filter(
+      (i: any) => i.isActive && i.status === "running"
+    );
+
+    for (const instance of runningInstances) {
+      const sessionName = instance.instanceName;
+      const tenantId = instance.tenantId;
+      const key = `${tenantId}_${sessionName}`;
+
+      try {
+        const tenant = await storage.getTenant(tenantId);
+        if (!tenant || !tenant.aiEnabled) continue;
+
+        if (!initialWarmupDone.has(key)) {
+          initialWarmupDone.add(key);
+          const knownList = [...(await getKnownChatIds(tenantId))];
+          await warmupChatIds(sessionName, knownList);
+          console.log(`[WahaPoller] Initial warmup: ${knownList.length} known chats, ${processedMessageIds.size} messages marked seen`);
+        }
+
+        const contacts = await wahaService.getAllContacts(sessionName);
+        if (!contacts || contacts.length === 0) continue;
+
+        const personalChatIds = contacts
+          .filter(c => c.isUser && !c.isMe && !c.isGroup && c.id.endsWith("@c.us"))
+          .map(c => c.id);
+
+        const knownChatIds = await getKnownChatIds(tenantId);
+        const newChatIds = personalChatIds.filter(id => !knownChatIds.has(id));
+
+        if (newChatIds.length === 0) continue;
+
+        let addedCount = 0;
+        for (let i = 0; i < newChatIds.length; i += DISCOVERY_CONCURRENCY) {
+          const batch = newChatIds.slice(i, i + DISCOVERY_CONCURRENCY);
+          const results = await Promise.all(
+            batch.map(async (chatId) => {
+              const hasNew = await pollChatMessages(instance, chatId);
+              return { chatId, hasNew };
+            })
+          );
+          for (const { chatId, hasNew } of results) {
+            if (hasNew) {
+              markActive(tenantId, chatId);
+              addedCount++;
+            }
+          }
+        }
+
+        if (addedCount > 0) {
+          console.log(`[WahaPoller] Discovery: ${addedCount} active chats from ${newChatIds.length} new contacts (tenant ${tenantId.substring(0, 8)})`);
+        }
+      } catch (err) {
+        console.error(`[WahaPoller] Discovery error for ${sessionName}:`, err);
+      }
+    }
+
+    pruneInactiveChats();
+  } catch (err) {
+    console.error("[WahaPoller] Discovery tick error:", err);
+  } finally {
+    isDiscoveryRunning = false;
+  }
+}
+
+// ─── START / STOP ───
 
 export function startWahaMessagePoller(
   storageInstance: any,
   processMessage: (instance: any, from: string, text: string) => Promise<void>
 ): void {
-  if (intervalHandle) {
+  if (pollIntervalHandle) {
     console.log("[WahaPoller] Already running, skipping duplicate start");
     return;
   }
@@ -252,15 +268,24 @@ export function startWahaMessagePoller(
   storage = storageInstance;
   processMessageFn = processMessage;
 
-  intervalHandle = setInterval(pollTick, POLL_INTERVAL_MS);
-  console.log(`[WahaPoller] Started (every ${POLL_INTERVAL_MS / 1000}s, discovery every ${DISCOVERY_INTERVAL_TICKS * POLL_INTERVAL_MS / 1000}s)`);
+  pollIntervalHandle = setInterval(pollTick, POLL_INTERVAL_MS);
+  discoveryIntervalHandle = setInterval(discoveryTick, DISCOVERY_INTERVAL_MS);
+
+  setTimeout(discoveryTick, 2000);
+
+  console.log(`[WahaPoller] Started (poll every ${POLL_INTERVAL_MS / 1000}s, discovery every ${DISCOVERY_INTERVAL_MS / 1000}s)`);
 }
 
 export function stopWahaMessagePoller(): void {
-  if (intervalHandle) {
-    clearInterval(intervalHandle);
-    intervalHandle = null;
-    isRunning = false;
-    console.log("[WahaPoller] Stopped");
+  if (pollIntervalHandle) {
+    clearInterval(pollIntervalHandle);
+    pollIntervalHandle = null;
   }
+  if (discoveryIntervalHandle) {
+    clearInterval(discoveryIntervalHandle);
+    discoveryIntervalHandle = null;
+  }
+  isPollRunning = false;
+  isDiscoveryRunning = false;
+  console.log("[WahaPoller] Stopped");
 }

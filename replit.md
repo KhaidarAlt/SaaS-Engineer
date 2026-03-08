@@ -33,7 +33,7 @@ Key architectural decisions include:
 ## External Dependencies
 -   **Database**: PostgreSQL (with `pgvector` extension for semantic search)
 -   **Messaging Integrations**:
-    -   WAHA (Self-hosted WhatsApp API) — WebJS engine bug prevents `message` webhook events. Workaround: `WahaMessagePoller` polls `GET /api/messages` every 5s. Auto-discovery via `GET /api/contacts/all` every 60s finds new contacts automatically. Manual fallback: `GET /api/waha/watch-phone/:phone`.
+    -   WAHA (Self-hosted WhatsApp API) — WebJS engine bug prevents `message` webhook events. Workaround: `WahaMessagePoller` uses two independent loops: (1) Fast poll loop every 5s polls only known/active chats for instant response; (2) Background discovery loop every 30s scans new contacts via `GET /api/contacts/all` without blocking fast poll. `pollTick` is gated on `initialWarmupDone` to prevent processing old messages as new. Manual fallback: `GET /api/waha/watch-phone/:phone`.
     -   Meta WhatsApp Cloud API (full integration including OAuth, template management, warm-up logic, webhook verification, broadcast support).
     -   Instagram Direct (full integration including OAuth, Facebook Page linking, webhook handling).
 -   **AI Services**:
