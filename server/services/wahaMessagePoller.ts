@@ -250,27 +250,47 @@ async function discoveryTick() {
         const knownChatIds = await getKnownChatIds(tenantId);
 
         let allChatIds: string[] = [];
+        let discoverySource = "none";
 
-        const chats = await wahaService.getChatsOverview(sessionName, 100);
-        if (chats && chats.length > 0) {
-          allChatIds = chats
-            .filter(c => c.id.endsWith("@c.us"))
-            .map(c => c.id);
-          console.log(`[WahaPoller] Discovery via chats API: ${allChatIds.length} personal chats`);
+        try {
+          const chats = await wahaService.getChatsOverview(sessionName, 100);
+          if (chats && chats.length > 0) {
+            allChatIds = chats
+              .filter(c => c.id.endsWith("@c.us"))
+              .map(c => c.id);
+            discoverySource = "chats";
+            console.log(`[WahaPoller] Discovery via chats API: ${allChatIds.length} personal chats from ${chats.length} total`);
+          } else {
+            console.log(`[WahaPoller] Chats API returned empty, trying contacts`);
+          }
+        } catch (chatErr: any) {
+          console.log(`[WahaPoller] Chats API failed: ${chatErr?.message?.substring(0, 80)}, trying contacts`);
         }
 
         if (allChatIds.length === 0) {
-          const contacts = await wahaService.getAllContacts(sessionName);
-          if (contacts && contacts.length > 0) {
-            allChatIds = contacts
-              .filter(c => c.isUser && !c.isMe && !c.isGroup && c.id.endsWith("@c.us"))
-              .map(c => c.id);
+          try {
+            const contacts = await wahaService.getAllContacts(sessionName);
+            if (contacts && contacts.length > 0) {
+              allChatIds = contacts
+                .filter(c => c.isUser && !c.isMe && !c.isGroup && c.id.endsWith("@c.us"))
+                .map(c => c.id);
+              discoverySource = "contacts";
+              console.log(`[WahaPoller] Discovery via contacts API: ${allChatIds.length} personal from ${contacts.length} total`);
+            } else {
+              console.log(`[WahaPoller] Contacts API returned empty`);
+            }
+          } catch (contactErr: any) {
+            console.log(`[WahaPoller] Contacts API failed: ${contactErr?.message?.substring(0, 80)}`);
           }
         }
 
-        if (allChatIds.length === 0) continue;
+        if (allChatIds.length === 0) {
+          console.log(`[WahaPoller] Discovery: no sources available for ${sessionName}`);
+          continue;
+        }
 
         const newChatIds = allChatIds.filter(id => !knownChatIds.has(id));
+        console.log(`[WahaPoller] Discovery (${discoverySource}): ${knownChatIds.size} known, ${newChatIds.length} new to check`);
 
         if (newChatIds.length === 0) continue;
 

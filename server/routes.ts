@@ -5654,14 +5654,31 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
   }
 
   const aiResponseCooldown = new Map<string, number>();
-  const AI_COOLDOWN_MS = 8000;
+  const AI_COOLDOWN_MS = 30000;
+  const recentlyProcessedMessages = new Map<string, number>();
+  const MSG_DEDUP_TTL_MS = 120000;
 
   async function processIncomingWhatsAppMessage(instance: any, from: string, text: string) {
     const { generateAiResponse, isOpenAiConfigured } = await import("./services/openai");
     
     const tenantId = instance.tenantId;
-    const cooldownKey = `${tenantId}_${from}`;
+
+    const contentKey = `${tenantId}_${from}_${text.trim().substring(0, 100)}`;
+    const contentLastSeen = recentlyProcessedMessages.get(contentKey) || 0;
     const now = Date.now();
+    if (now - contentLastSeen < MSG_DEDUP_TTL_MS) {
+      console.log(`[WAHA] Content dedup: skipping duplicate from ${from}`);
+      return;
+    }
+    recentlyProcessedMessages.set(contentKey, now);
+
+    if (recentlyProcessedMessages.size > 500) {
+      for (const [k, t] of recentlyProcessedMessages) {
+        if (now - t > MSG_DEDUP_TTL_MS * 2) recentlyProcessedMessages.delete(k);
+      }
+    }
+
+    const cooldownKey = `${tenantId}_${from}`;
     const lastResponse = aiResponseCooldown.get(cooldownKey) || 0;
     if (now - lastResponse < AI_COOLDOWN_MS) {
       console.log(`[WAHA] Cooldown active for ${from}, skipping duplicate`);
