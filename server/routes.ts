@@ -5552,7 +5552,7 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
 
         console.log(`[WAHA] Event=${event} from=${from} fromMe=${fromMe} text=${text?.substring?.(0, 50)}`);
         
-        if (from && text && !fromMe) {
+        if (event === "message" && from && text && !fromMe) {
           console.log(`[WAHA] Processing message from ${from}: ${text}`);
           
           processIncomingWhatsAppMessage(instance, from, text).catch(err => {
