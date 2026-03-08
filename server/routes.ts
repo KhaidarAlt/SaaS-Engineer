@@ -5679,8 +5679,30 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
 
     const data = payload?._data;
     if (data) {
+      const keyRemoteJid = data.key?.remoteJid;
+      if (keyRemoteJid && typeof keyRemoteJid === "string" && !keyRemoteJid.endsWith("@lid")) {
+        const phonePart = keyRemoteJid.replace(/@.*$/, "").replace(/[^0-9]/g, "");
+        if (phonePart.length >= 10 && phonePart.length <= 15) {
+          const resolved = `${phonePart}@c.us`;
+          lidToPhoneCache.set(from, resolved);
+          console.log(`[WAHA] LID resolved: ${from} → ${resolved} (from _data.key.remoteJid=${keyRemoteJid})`);
+          return resolved;
+        }
+      }
+
+      const keyParticipant = data.key?.participant;
+      if (keyParticipant && typeof keyParticipant === "string" && !keyParticipant.endsWith("@lid")) {
+        const phonePart = keyParticipant.replace(/@.*$/, "").replace(/[^0-9]/g, "");
+        if (phonePart.length >= 10 && phonePart.length <= 15) {
+          const resolved = `${phonePart}@c.us`;
+          lidToPhoneCache.set(from, resolved);
+          console.log(`[WAHA] LID resolved: ${from} → ${resolved} (from _data.key.participant=${keyParticipant})`);
+          return resolved;
+        }
+      }
+
       const remoteJid = data.remoteJid || data.chatId || data.from;
-      if (remoteJid && typeof remoteJid === "string") {
+      if (remoteJid && typeof remoteJid === "string" && !remoteJid.endsWith("@lid")) {
         const phonePart = remoteJid.replace(/@.*$/, "").replace(/[^0-9]/g, "");
         if (phonePart.length >= 10 && phonePart.length <= 15) {
           const resolved = `${phonePart}@c.us`;
@@ -5689,20 +5711,9 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
           return resolved;
         }
       }
-
-      const notifyJid = data.notifyName || data.author;
-      if (notifyJid && typeof notifyJid === "string") {
-        const phonePart = notifyJid.replace(/@.*$/, "").replace(/[^0-9]/g, "");
-        if (phonePart.length >= 10 && phonePart.length <= 15) {
-          const resolved = `${phonePart}@c.us`;
-          lidToPhoneCache.set(from, resolved);
-          console.log(`[WAHA] LID resolved: ${from} → ${resolved} (from _data.notifyName)`);
-          return resolved;
-        }
-      }
     }
 
-    console.log(`[WAHA] LID not resolved for ${from}, _data keys: ${data ? Object.keys(data).join(",") : "none"}`);
+    console.log(`[WAHA] LID not resolved for ${from}, _data.key keys: ${data?.key ? Object.keys(data.key).join(",") : "none"}, _data keys: ${data ? Object.keys(data).join(",") : "none"}`);
     return from;
   }
 
