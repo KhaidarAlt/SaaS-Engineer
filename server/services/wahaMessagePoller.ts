@@ -7,8 +7,10 @@ const ACTIVE_TTL_MS = 30 * 60 * 1000;
 const DISCOVERY_CONCURRENCY = 10;
 
 const processedMessageIds = new Set<string>();
+const recentContentHashes = new Map<string, number>();
 const MAX_PROCESSED_IDS = 10000;
 const MESSAGE_AGE_LIMIT_S = 300;
+const CONTENT_DEDUP_TTL_MS = 60000;
 
 const activeChatIds = new Map<string, Map<string, number>>();
 
@@ -20,11 +22,32 @@ let isPollRunning = false;
 let isDiscoveryRunning = false;
 let initialWarmupDone = new Set<string>();
 
+function contentHash(from: string, text: string): string {
+  return `${from}::${text.trim().substring(0, 100)}`;
+}
+
+function isContentDuplicate(from: string, text: string): boolean {
+  const hash = contentHash(from, text);
+  const now = Date.now();
+  const lastSeen = recentContentHashes.get(hash);
+  if (lastSeen && now - lastSeen < CONTENT_DEDUP_TTL_MS) {
+    return true;
+  }
+  recentContentHashes.set(hash, now);
+  return false;
+}
+
 function cleanupProcessedIds() {
   if (processedMessageIds.size > MAX_PROCESSED_IDS) {
     const idsArray = Array.from(processedMessageIds);
     const toRemove = idsArray.slice(0, idsArray.length - MAX_PROCESSED_IDS / 2);
     toRemove.forEach(id => processedMessageIds.delete(id));
+  }
+  const now = Date.now();
+  for (const [hash, ts] of recentContentHashes) {
+    if (now - ts > CONTENT_DEDUP_TTL_MS * 2) {
+      recentContentHashes.delete(hash);
+    }
   }
 }
 
@@ -86,10 +109,51 @@ async function warmupChatIds(sessionName: string, chatIds: string[]) {
         for (const msg of messages) {
           const msgId = msg.id?._serialized || msg.id?.id || `${msg.timestamp}_${msg.from}`;
           if (msgId) processedMessageIds.add(msgId);
+          if (msg.from && msg.body) {
+            recentContentHashes.set(contentHash(msg.from, msg.body), Date.now());
+          }
         }
       }
     } catch {}
   }
+}
+
+function processMessage(instance: any, msg: any): boolean {
+  const msgId = msg.id?._serialized || msg.id?.id || `${msg.timestamp}_${msg.from}`;
+  if (!msgId || processedMessageIds.has(msgId)) return false;
+  if (msg.fromMe) {
+    processedMessageIds.add(msgId);
+    return false;
+  }
+
+  const messageAge = Date.now() / 1000 - (msg.timestamp || 0);
+  if (messageAge > MESSAGE_AGE_LIMIT_S) {
+    processedMessageIds.add(msgId);
+    return false;
+  }
+
+  const from = msg.from;
+  const text = msg.body;
+  if (!from || !text) {
+    processedMessageIds.add(msgId);
+    return false;
+  }
+
+  processedMessageIds.add(msgId);
+
+  if (isContentDuplicate(from, text)) {
+    console.log(`[WahaPoller] Content duplicate skipped: from=${from} text="${text.substring(0, 30)}"`);
+    return false;
+  }
+
+  console.log(`[WahaPoller] New message: from=${from} text="${text.substring(0, 50)}" age=${Math.round(messageAge)}s`);
+
+  if (processMessageFn) {
+    processMessageFn(instance, from, text).catch(err => {
+      console.error(`[WahaPoller] Error processing message from ${from}:`, err);
+    });
+  }
+  return true;
 }
 
 async function pollChatMessages(instance: any, chatId: string): Promise<boolean> {
@@ -99,34 +163,8 @@ async function pollChatMessages(instance: any, chatId: string): Promise<boolean>
     if (!messages || messages.length === 0) return false;
 
     for (const msg of messages) {
-      const msgId = msg.id?._serialized || msg.id?.id || `${msg.timestamp}_${msg.from}`;
-      if (!msgId || processedMessageIds.has(msgId)) continue;
-      if (msg.fromMe) {
-        processedMessageIds.add(msgId);
-        continue;
-      }
-
-      const messageAge = Date.now() / 1000 - (msg.timestamp || 0);
-      if (messageAge > MESSAGE_AGE_LIMIT_S) {
-        processedMessageIds.add(msgId);
-        continue;
-      }
-
-      const from = msg.from;
-      const text = msg.body;
-      if (!from || !text) {
-        processedMessageIds.add(msgId);
-        continue;
-      }
-
-      processedMessageIds.add(msgId);
-      foundNew = true;
-      console.log(`[WahaPoller] New message: from=${from} text="${text.substring(0, 50)}" age=${Math.round(messageAge)}s`);
-
-      if (processMessageFn) {
-        processMessageFn(instance, from, text).catch(err => {
-          console.error(`[WahaPoller] Error processing message from ${from}:`, err);
-        });
+      if (processMessage(instance, msg)) {
+        foundNew = true;
       }
     }
   } catch {}
@@ -179,7 +217,7 @@ async function pollTick() {
   }
 }
 
-// ─── BACKGROUND DISCOVERY LOOP: finds new contacts every 30s ───
+// ─── BACKGROUND DISCOVERY LOOP: finds new senders every 30s ───
 
 async function discoveryTick() {
   if (isDiscoveryRunning) return;
@@ -203,21 +241,36 @@ async function discoveryTick() {
         if (!tenant || !tenant.aiEnabled) continue;
 
         if (!initialWarmupDone.has(key)) {
-          initialWarmupDone.add(key);
           const knownList = [...(await getKnownChatIds(tenantId))];
           await warmupChatIds(sessionName, knownList);
           console.log(`[WahaPoller] Initial warmup: ${knownList.length} known chats, ${processedMessageIds.size} messages marked seen`);
+          initialWarmupDone.add(key);
         }
 
-        const contacts = await wahaService.getAllContacts(sessionName);
-        if (!contacts || contacts.length === 0) continue;
-
-        const personalChatIds = contacts
-          .filter(c => c.isUser && !c.isMe && !c.isGroup && c.id.endsWith("@c.us"))
-          .map(c => c.id);
-
         const knownChatIds = await getKnownChatIds(tenantId);
-        const newChatIds = personalChatIds.filter(id => !knownChatIds.has(id));
+
+        let allChatIds: string[] = [];
+
+        const chats = await wahaService.getChatsOverview(sessionName, 100);
+        if (chats && chats.length > 0) {
+          allChatIds = chats
+            .filter(c => c.id.endsWith("@c.us"))
+            .map(c => c.id);
+          console.log(`[WahaPoller] Discovery via chats API: ${allChatIds.length} personal chats`);
+        }
+
+        if (allChatIds.length === 0) {
+          const contacts = await wahaService.getAllContacts(sessionName);
+          if (contacts && contacts.length > 0) {
+            allChatIds = contacts
+              .filter(c => c.isUser && !c.isMe && !c.isGroup && c.id.endsWith("@c.us"))
+              .map(c => c.id);
+          }
+        }
+
+        if (allChatIds.length === 0) continue;
+
+        const newChatIds = allChatIds.filter(id => !knownChatIds.has(id));
 
         if (newChatIds.length === 0) continue;
 

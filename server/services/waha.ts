@@ -216,6 +216,20 @@ export const wahaService = {
     }
   },
 
+  async getChatsOverview(sessionName: string, limit: number = 50): Promise<Array<{ id: string; timestamp?: number; name?: string }>> {
+    try {
+      const chats = await wahaRequest("GET", `/api/${sessionName}/chats?limit=${limit}&sortBy=messageTimestamp&sortOrder=desc`);
+      return Array.isArray(chats) ? chats : [];
+    } catch {
+      try {
+        const chats = await wahaRequest("GET", `/api/chats?session=${sessionName}&limit=${limit}`);
+        return Array.isArray(chats) ? chats : [];
+      } catch {
+        return [];
+      }
+    }
+  },
+
   generateInstanceName(tenantId: string): string {
     const shortId = tenantId.substring(0, 8);
     const timestamp = Date.now().toString(36);
