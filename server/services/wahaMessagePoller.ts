@@ -137,13 +137,7 @@ async function pollChatMessages(instance: any, chatId: string): Promise<boolean>
       }
 
       foundNew = true;
-      console.log(`[WahaPoller] Fallback: new message from=${from} text="${text.substring(0, 50)}" age=${Math.round(messageAge)}s`);
-
-      if (processMessageFn) {
-        processMessageFn(instance, from, text).catch(err => {
-          console.error(`[WahaPoller] Error processing message from ${from}:`, err);
-        });
-      }
+      console.log(`[WahaPoller] Fallback: detected message from=${from} text="${text.substring(0, 50)}" age=${Math.round(messageAge)}s (webhook-only processing)`);
     }
   } catch {}
   return foundNew;

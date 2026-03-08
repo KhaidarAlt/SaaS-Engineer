@@ -5668,6 +5668,13 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
   const MSG_DEDUP_TTL_MS = 120000;
   const lidToPhoneCache = new Map<string, string>();
 
+  function extractPhoneFromJid(jid: string): string | null {
+    if (!jid || jid.endsWith("@lid") || jid.endsWith("@g.us")) return null;
+    const phonePart = jid.replace(/@.*$/, "").replace(/[^0-9]/g, "");
+    if (phonePart.length >= 10 && phonePart.length <= 15) return phonePart;
+    return null;
+  }
+
   function resolveLidToPhone(from: string, payload: any): string {
     if (!from.endsWith("@lid")) return from;
 
@@ -5679,41 +5686,32 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
 
     const data = payload?._data;
     if (data) {
-      const keyRemoteJid = data.key?.remoteJid;
-      if (keyRemoteJid && typeof keyRemoteJid === "string" && !keyRemoteJid.endsWith("@lid")) {
-        const phonePart = keyRemoteJid.replace(/@.*$/, "").replace(/[^0-9]/g, "");
-        if (phonePart.length >= 10 && phonePart.length <= 15) {
-          const resolved = `${phonePart}@c.us`;
-          lidToPhoneCache.set(from, resolved);
-          console.log(`[WAHA] LID resolved: ${from} → ${resolved} (from _data.key.remoteJid=${keyRemoteJid})`);
-          return resolved;
+      const candidates = [
+        { field: "_data.key.remoteJidAlt", value: data.key?.remoteJidAlt },
+        { field: "_data.key.remoteJid", value: data.key?.remoteJid },
+        { field: "_data.key.participant", value: data.key?.participant },
+        { field: "_data.remoteJid", value: data.remoteJid },
+        { field: "_data.chatId", value: data.chatId },
+        { field: "_data.from", value: data.from },
+      ];
+
+      for (const { field, value } of candidates) {
+        if (value && typeof value === "string") {
+          const phone = extractPhoneFromJid(value);
+          if (phone) {
+            const resolved = `${phone}@c.us`;
+            lidToPhoneCache.set(from, resolved);
+            console.log(`[WAHA] LID resolved: ${from} → ${resolved} (from ${field}=${value})`);
+            return resolved;
+          }
         }
       }
 
-      const keyParticipant = data.key?.participant;
-      if (keyParticipant && typeof keyParticipant === "string" && !keyParticipant.endsWith("@lid")) {
-        const phonePart = keyParticipant.replace(/@.*$/, "").replace(/[^0-9]/g, "");
-        if (phonePart.length >= 10 && phonePart.length <= 15) {
-          const resolved = `${phonePart}@c.us`;
-          lidToPhoneCache.set(from, resolved);
-          console.log(`[WAHA] LID resolved: ${from} → ${resolved} (from _data.key.participant=${keyParticipant})`);
-          return resolved;
-        }
-      }
-
-      const remoteJid = data.remoteJid || data.chatId || data.from;
-      if (remoteJid && typeof remoteJid === "string" && !remoteJid.endsWith("@lid")) {
-        const phonePart = remoteJid.replace(/@.*$/, "").replace(/[^0-9]/g, "");
-        if (phonePart.length >= 10 && phonePart.length <= 15) {
-          const resolved = `${phonePart}@c.us`;
-          lidToPhoneCache.set(from, resolved);
-          console.log(`[WAHA] LID resolved: ${from} → ${resolved} (from _data.remoteJid)`);
-          return resolved;
-        }
-      }
+      console.log(`[WAHA] LID not resolved for ${from}, _data.key: ${JSON.stringify(data.key)}, _data keys: ${Object.keys(data).join(",")}`);
+    } else {
+      console.log(`[WAHA] LID not resolved for ${from}, no _data in payload`);
     }
 
-    console.log(`[WAHA] LID not resolved for ${from}, _data.key keys: ${data?.key ? Object.keys(data.key).join(",") : "none"}, _data keys: ${data ? Object.keys(data).join(",") : "none"}`);
     return from;
   }
 
