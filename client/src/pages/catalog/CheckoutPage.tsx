@@ -409,26 +409,25 @@ export default function CheckoutPage() {
                     )}
                   </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="customerPhone">Телефон *</Label>
-                    <Input
-                      id="customerPhone"
-                      type="tel"
-                      placeholder="+7 (777) 123-45-67"
-                      {...form.register("customerPhone")}
-                      readOnly={!!phoneFromWhatsApp}
-                      className={phoneFromWhatsApp ? "bg-muted cursor-not-allowed" : ""}
-                      data-testid="input-phone"
-                    />
-                    {phoneFromWhatsApp && (
-                      <p className="text-xs text-muted-foreground">Номер определён из WhatsApp</p>
-                    )}
-                    {form.formState.errors.customerPhone && (
-                      <p className="text-sm text-destructive">
-                        {form.formState.errors.customerPhone.message}
-                      </p>
-                    )}
-                  </div>
+                  {phoneFromWhatsApp ? (
+                    <input type="hidden" {...form.register("customerPhone")} />
+                  ) : (
+                    <div className="space-y-2">
+                      <Label htmlFor="customerPhone">Телефон *</Label>
+                      <Input
+                        id="customerPhone"
+                        type="tel"
+                        placeholder="+7 (777) 123-45-67"
+                        {...form.register("customerPhone")}
+                        data-testid="input-phone"
+                      />
+                      {form.formState.errors.customerPhone && (
+                        <p className="text-sm text-destructive">
+                          {form.formState.errors.customerPhone.message}
+                        </p>
+                      )}
+                    </div>
+                  )}
 
                   <div className="space-y-2">
                     <Label htmlFor="deliveryAddress">Адрес доставки</Label>
