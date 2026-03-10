@@ -22,6 +22,9 @@ import {
   Package,
   Calendar,
   ChevronDown,
+  Percent,
+  Wallet,
+  Banknote,
 } from "lucide-react";
 import { SiWhatsapp } from "react-icons/si";
 import { Button } from "@/components/ui/button";
@@ -64,17 +67,20 @@ import type { Order } from "@shared/schema";
 
 const dealStatusOptions = [
   { value: "new", label: "Новый", color: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200", bgColor: "bg-blue-50 dark:bg-blue-950/30" },
-  { value: "in_progress", label: "В работе", color: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200", bgColor: "bg-yellow-50 dark:bg-yellow-950/30" },
-  { value: "awaiting_payment", label: "Ожидает оплаты", color: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200", bgColor: "bg-orange-50 dark:bg-orange-950/30" },
-  { value: "paid", label: "Оплачен", color: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200", bgColor: "bg-green-50 dark:bg-green-950/30" },
-  { value: "completed", label: "Выполнен", color: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200", bgColor: "bg-purple-50 dark:bg-purple-950/30" },
+  { value: "confirmed", label: "Подтверждён", color: "bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-200", bgColor: "bg-cyan-50 dark:bg-cyan-950/30" },
+  { value: "assembling", label: "Сборка", color: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200", bgColor: "bg-yellow-50 dark:bg-yellow-950/30" },
+  { value: "delivering", label: "Доставка", color: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200", bgColor: "bg-orange-50 dark:bg-orange-950/30" },
+  { value: "completed", label: "Выполнен", color: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200", bgColor: "bg-green-50 dark:bg-green-950/30" },
   { value: "cancelled", label: "Отменён", color: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200", bgColor: "bg-red-50 dark:bg-red-950/30" },
 ];
 
 const paymentStatusOptions = [
-  { value: "pending", label: "Ожидает", icon: Clock, color: "text-yellow-600" },
-  { value: "paid", label: "Оплачен", icon: CheckCircle, color: "text-green-600" },
-  { value: "cancelled", label: "Отменён", icon: XCircle, color: "text-red-600" },
+  { value: "pending", label: "Ожидает оплаты", icon: Clock, color: "text-yellow-600", badgeColor: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200" },
+  { value: "prepayment", label: "Предоплата", icon: Percent, color: "text-amber-600", badgeColor: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200" },
+  { value: "paid", label: "Оплачено", icon: CheckCircle, color: "text-green-600", badgeColor: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" },
+  { value: "installment", label: "Рассрочка", icon: Wallet, color: "text-teal-600", badgeColor: "bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200" },
+  { value: "credit", label: "Кредит", icon: Banknote, color: "text-blue-600", badgeColor: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200" },
+  { value: "kaspi_red", label: "Kaspi RED", icon: CreditCard, color: "text-red-600", badgeColor: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200" },
 ];
 
 type ViewMode = "table" | "kanban";
@@ -114,8 +120,8 @@ export default function CRMPage() {
   });
 
   const updatePaymentMutation = useMutation({
-    mutationFn: async ({ id, paymentStatus }: { id: string; paymentStatus: string }) => {
-      return apiRequest("PATCH", `/api/orders/${id}`, { paymentStatus });
+    mutationFn: async ({ id, paymentStatus, prepaymentPercentage }: { id: string; paymentStatus: string; prepaymentPercentage?: number }) => {
+      return apiRequest("PATCH", `/api/orders/${id}`, { paymentStatus, prepaymentPercentage });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
@@ -148,7 +154,8 @@ export default function CRMPage() {
   };
 
   const getStatusBadge = (status: string) => {
-    const option = dealStatusOptions.find((s) => s.value === status);
+    const mapped = mapLegacyStatus(status);
+    const option = dealStatusOptions.find((s) => s.value === mapped);
     return option || { label: status, color: "bg-gray-100 text-gray-800" };
   };
 
@@ -184,8 +191,18 @@ export default function CRMPage() {
     new Date(o.createdAt).getTime() < Date.now() - 60 * 60 * 1000
   );
 
+  const mapLegacyStatus = (status: string) => {
+    const legacyMap: Record<string, string> = {
+      in_progress: "confirmed",
+      awaiting_payment: "confirmed",
+      paid: "confirmed",
+      payment_verification: "confirmed",
+    };
+    return legacyMap[status] || status;
+  };
+
   const ordersByStatus = dealStatusOptions.reduce((acc, status) => {
-    acc[status.value] = filteredOrders?.filter((o) => o.status === status.value) || [];
+    acc[status.value] = filteredOrders?.filter((o) => mapLegacyStatus(o.status) === status.value) || [];
     return acc;
   }, {} as Record<string, Order[]>);
 
@@ -365,18 +382,28 @@ export default function CRMPage() {
                         <TableCell>
                           <Select
                             value={order.paymentStatus || "pending"}
-                            onValueChange={(paymentStatus) =>
-                              updatePaymentMutation.mutate({ id: order.id, paymentStatus })
-                            }
+                            onValueChange={(paymentStatus) => {
+                              if (paymentStatus === "prepayment") {
+                                const pct = prompt("Введите процент предоплаты (1-100):", "30");
+                                if (pct) {
+                                  updatePaymentMutation.mutate({ id: order.id, paymentStatus, prepaymentPercentage: Number(pct) });
+                                }
+                              } else {
+                                updatePaymentMutation.mutate({ id: order.id, paymentStatus });
+                              }
+                            }}
                           >
-                            <SelectTrigger className="w-32 h-8">
+                            <SelectTrigger className="w-40 h-8">
                               {(() => {
                                 const badge = getPaymentBadge(order.paymentStatus);
                                 const Icon = badge.icon;
+                                const label = order.paymentStatus === "prepayment" && (order as any).prepaymentPercentage
+                                  ? `${badge.label} ${(order as any).prepaymentPercentage}%`
+                                  : badge.label;
                                 return (
                                   <div className={`flex items-center gap-1.5 ${badge.color}`}>
                                     <Icon className="h-3.5 w-3.5" />
-                                    <span className="text-sm">{badge.label}</span>
+                                    <span className="text-sm">{label}</span>
                                   </div>
                                 );
                               })()}
@@ -542,7 +569,15 @@ export default function CRMPage() {
                             {(() => {
                               const badge = getPaymentBadge(order.paymentStatus);
                               const Icon = badge.icon;
-                              return <Icon className={`h-4 w-4 ${badge.color}`} />;
+                              const label = order.paymentStatus === "prepayment" && (order as any).prepaymentPercentage
+                                ? `${(order as any).prepaymentPercentage}%`
+                                : null;
+                              return (
+                                <Badge className={`text-[10px] px-1.5 py-0 ${badge.badgeColor || ""}`}>
+                                  <Icon className="h-3 w-3 mr-0.5" />
+                                  {label || badge.label}
+                                </Badge>
+                              );
                             })()}
                           </div>
                           <div className="flex items-center gap-1 mt-2 pt-2 border-t">

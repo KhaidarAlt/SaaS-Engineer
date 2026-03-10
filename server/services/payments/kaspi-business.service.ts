@@ -222,8 +222,8 @@ ${kaspiPayLink}
       paymentSource: "manual",
     };
 
-    if (kaspiIntegration.updateOrderStatus) {
-      updateData.status = "paid";
+    if (kaspiIntegration.updateOrderStatus && order.status === "new") {
+      updateData.status = "confirmed";
     }
 
     await storage.updateOrderWithPayment(order.id, tenantId, updateData);
@@ -231,7 +231,7 @@ ${kaspiPayLink}
     await storage.logOrderStatusChange({
       orderId: order.id,
       oldStatus: order.status,
-      newStatus: kaspiIntegration.updateOrderStatus ? "paid" : order.status,
+      newStatus: (updateData.status as string) || order.status,
       oldPaymentStatus: order.paymentStatus || "pending",
       newPaymentStatus: "paid",
       changedBy: confirmedBy,

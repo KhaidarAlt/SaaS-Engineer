@@ -398,8 +398,9 @@ export const orders = pgTable("orders", {
   subtotal: decimal("subtotal", { precision: 12, scale: 2 }).notNull(),
   discountTotal: decimal("discount_total", { precision: 12, scale: 2 }).notNull().default("0"),
   total: decimal("total", { precision: 12, scale: 2 }).notNull(),
-  status: text("status").notNull().default("new"), // new, in_progress, awaiting_payment, paid, completed, cancelled
-  paymentStatus: text("payment_status").default("pending"), // pending, paid, cancelled
+  status: text("status").notNull().default("new"), // new, confirmed, assembling, delivering, completed, cancelled
+  paymentStatus: text("payment_status").default("pending"), // pending, prepayment, paid, installment, credit, kaspi_red
+  prepaymentPercentage: integer("prepayment_percentage"),
   paymentId: text("payment_id"),
   paymentProvider: text("payment_provider"), // kaspi, manual, etc
   paidAt: timestamp("paid_at"),

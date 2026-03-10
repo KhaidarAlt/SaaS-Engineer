@@ -51,8 +51,8 @@ SmartCatalog — это мультитенантная SaaS-платформа �
 - **Сортировка**: drag-and-drop порядок отображения
 
 ### Заказы
-- **Статусы заказа**: new (новый), awaiting_payment (ожидает оплаты), paid (оплачен), in_progress (в работе), completed (завершён), cancelled (отменён)
-- **Статусы оплаты**: pending, paid, failed, expired, manual
+- **Статусы заказа (воронка)**: new (новый), confirmed (подтверждён), assembling (сборка), delivering (доставка), completed (выполнен), cancelled (отменён)
+- **Статусы оплаты**: pending (ожидает), prepayment (предоплата с %), paid (оплачено), installment (рассрочка), credit (кредит), kaspi_red (Kaspi RED)
 - **Уведомления**: автоматическая отправка в WhatsApp при создании заказа
 
 ### Платежи (Kaspi Business)

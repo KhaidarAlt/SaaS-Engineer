@@ -22,6 +22,9 @@ import {
   Mail,
   Tag,
   FileText,
+  Percent,
+  Wallet,
+  Banknote,
 } from "lucide-react";
 import { SiWhatsapp } from "react-icons/si";
 import { Button } from "@/components/ui/button";
@@ -52,17 +55,20 @@ import type { Order, OrderItem } from "@shared/schema";
 
 const dealStatusOptions = [
   { value: "new", label: "Новый", variant: "default" as const },
-  { value: "in_progress", label: "В работе", variant: "secondary" as const },
-  { value: "awaiting_payment", label: "Ожидает оплаты", variant: "outline" as const },
-  { value: "paid", label: "Оплачен", variant: "default" as const },
+  { value: "confirmed", label: "Подтверждён", variant: "secondary" as const },
+  { value: "assembling", label: "Сборка", variant: "outline" as const },
+  { value: "delivering", label: "Доставка", variant: "default" as const },
   { value: "completed", label: "Выполнен", variant: "secondary" as const },
   { value: "cancelled", label: "Отменён", variant: "destructive" as const },
 ];
 
 const paymentStatusOptions = [
-  { value: "pending", label: "Ожидает", icon: Clock, color: "text-yellow-600" },
-  { value: "paid", label: "Оплачен", icon: CheckCircle, color: "text-green-600" },
-  { value: "cancelled", label: "Отменён", icon: XCircle, color: "text-red-600" },
+  { value: "pending", label: "Ожидает оплаты", icon: Clock, color: "text-yellow-600" },
+  { value: "prepayment", label: "Предоплата", icon: Percent, color: "text-amber-600" },
+  { value: "paid", label: "Оплачено", icon: CheckCircle, color: "text-green-600" },
+  { value: "installment", label: "Рассрочка", icon: Wallet, color: "text-teal-600" },
+  { value: "credit", label: "Кредит", icon: Banknote, color: "text-blue-600" },
+  { value: "kaspi_red", label: "Kaspi RED", icon: CreditCard, color: "text-red-600" },
 ];
 
 const messageTemplates = [
@@ -112,8 +118,8 @@ export default function OrderDetailPage() {
   });
 
   const updatePaymentMutation = useMutation({
-    mutationFn: async (paymentStatus: string) => {
-      return apiRequest("PATCH", `/api/orders/${id}`, { paymentStatus });
+    mutationFn: async ({ paymentStatus, prepaymentPercentage }: { paymentStatus: string; prepaymentPercentage?: number }) => {
+      return apiRequest("PATCH", `/api/orders/${id}`, { paymentStatus, prepaymentPercentage });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/orders", id] });
@@ -478,7 +484,16 @@ export default function OrderDetailPage() {
                 })()}
                 <Select
                   value={order.paymentStatus || "pending"}
-                  onValueChange={(paymentStatus) => updatePaymentMutation.mutate(paymentStatus)}
+                  onValueChange={(paymentStatus) => {
+                    if (paymentStatus === "prepayment") {
+                      const pct = prompt("Введите процент предоплаты (1-100):", "30");
+                      if (pct) {
+                        updatePaymentMutation.mutate({ paymentStatus, prepaymentPercentage: Number(pct) });
+                      }
+                    } else {
+                      updatePaymentMutation.mutate({ paymentStatus });
+                    }
+                  }}
                 >
                   <SelectTrigger data-testid="select-payment-status">
                     <SelectValue placeholder="Изменить оплату" />

@@ -39,8 +39,9 @@ import type { Order } from "@shared/schema";
 
 const statusOptions = [
   { value: "new", label: "Новый", variant: "default" as const },
-  { value: "awaiting_payment", label: "Ожидает оплаты", variant: "secondary" as const },
-  { value: "in_progress", label: "В работе", variant: "secondary" as const },
+  { value: "confirmed", label: "Подтверждён", variant: "secondary" as const },
+  { value: "assembling", label: "Сборка", variant: "secondary" as const },
+  { value: "delivering", label: "Доставка", variant: "outline" as const },
   { value: "completed", label: "Выполнен", variant: "outline" as const },
   { value: "cancelled", label: "Отменён", variant: "destructive" as const },
 ];

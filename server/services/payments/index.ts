@@ -64,7 +64,6 @@ export async function createPaymentForOrder(options: CreatePaymentOptions): Prom
   });
 
   await storage.updateOrderWithPayment(order.id, tenantId, {
-    status: "awaiting_payment",
     paymentStatus: "pending",
     paymentId: payment.id,
     paymentProvider: "kaspi",
@@ -141,7 +140,6 @@ export async function createKaspiBusinessInvoice(
   });
 
   await storage.updateOrderWithPayment(order.id, tenantId, {
-    status: "awaiting_payment",
     paymentStatus: "pending",
     paymentId: payment.id,
     paymentProvider: "kaspi",

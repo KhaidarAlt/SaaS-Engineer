@@ -2618,10 +2618,14 @@ export async function registerRoutes(
       const stats = {
         total: orders.length,
         new: orders.filter(o => o.status === "new").length,
+        confirmed: orders.filter(o => o.status === "confirmed").length,
+        assembling: orders.filter(o => o.status === "assembling").length,
+        delivering: orders.filter(o => o.status === "delivering").length,
+        completed: orders.filter(o => o.status === "completed").length,
+        cancelled: orders.filter(o => o.status === "cancelled").length,
         inProgress: orders.filter(o => o.status === "in_progress").length,
         awaitingPayment: orders.filter(o => o.status === "awaiting_payment").length,
         paid: orders.filter(o => o.status === "paid").length,
-        completed: orders.filter(o => o.status === "completed").length,
       };
       res.json(stats);
     } catch (error) {
@@ -2776,7 +2780,7 @@ export async function registerRoutes(
 
   app.patch("/api/orders/:id", requireAuth, async (req, res) => {
     try {
-      const { status: newStatus, paymentStatus: newPaymentStatus, paymentSource } = req.body;
+      const { status: newStatus, paymentStatus: newPaymentStatus, paymentSource, prepaymentPercentage } = req.body;
       const tenantId = req.user!.tenantId!;
       const userId = req.user!.id;
       
@@ -2801,13 +2805,18 @@ export async function registerRoutes(
         }
       }
       
-      // Prepare update data
       const updateData: Record<string, unknown> = {};
       if (newStatus) updateData.status = newStatus;
       if (newPaymentStatus) updateData.paymentStatus = newPaymentStatus;
       
-      // If marking as paid manually
-      if (newStatus === "paid" || newPaymentStatus === "paid") {
+      if (newPaymentStatus === "prepayment" && prepaymentPercentage !== undefined) {
+        updateData.prepaymentPercentage = Math.max(1, Math.min(100, Number(prepaymentPercentage) || 0));
+      }
+      if (newPaymentStatus && newPaymentStatus !== "prepayment") {
+        updateData.prepaymentPercentage = null;
+      }
+      
+      if (newPaymentStatus === "paid") {
         updateData.paymentSource = paymentSource || "manual";
         if (!currentOrder.paidAt) {
           updateData.paidAt = new Date();
@@ -2895,9 +2904,8 @@ export async function registerRoutes(
               });
               console.log(`[Payment] Sent payment confirmation to ${sendToPhone} for order #${order.orderNumber}`);
               
-              // Update order status to in_progress
-              if (order.status === "awaiting_payment" || order.status === "paid" || order.status === "new") {
-                await storage.updateOrderWithPayment(order.id, tenantId, { status: "in_progress" });
+              if (order.status === "new" || order.status === "awaiting_payment" || order.status === "paid") {
+                await storage.updateOrderWithPayment(order.id, tenantId, { status: "confirmed" });
               }
             }
           } catch (whatsappErr) {
@@ -3698,7 +3706,7 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
           // (handled in WAHA message processing below)
           const effectivePayLink = paymentUrl || kaspiPayLink;
           if (effectivePayLink) {
-            await storage.updateOrderWithPayment(order.id, tenant.id, { status: "awaiting_payment" });
+            await storage.updateOrderWithPayment(order.id, tenant.id, { paymentStatus: "pending" });
             console.log(`[Payment] Kaspi link ready for order ${order.orderNumber}: ${effectivePayLink}`);
           }
         }
@@ -5836,7 +5844,7 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
         const orderNumber = orderNumMatch[1];
         try {
           const matchedOrder = await storage.getOrderByOrderNumber(tenantId, orderNumber);
-          if (matchedOrder && (matchedOrder.status === "awaiting_payment" || matchedOrder.status === "new")) {
+          if (matchedOrder && (matchedOrder.status === "new" || matchedOrder.status === "confirmed" || matchedOrder.status === "awaiting_payment")) {
             // Find Kaspi payment link for this order
             const kaspiIntegration = await storage.getKaspiIntegration(tenantId);
             if (kaspiIntegration && kaspiIntegration.status === "connected") {
@@ -5875,8 +5883,8 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
                   skipPolicyCheck: true,
                 });
                 
-                if (matchedOrder.status === "new") {
-                  await storage.updateOrderWithPayment(matchedOrder.id, tenantId, { status: "awaiting_payment" });
+                if (matchedOrder.paymentStatus === "pending" || !matchedOrder.paymentStatus) {
+                  await storage.updateOrderWithPayment(matchedOrder.id, tenantId, { paymentStatus: "pending" });
                 }
                 
                 console.log(`[Payment] Sent Kaspi payment link to ${customerPhone} for order #${orderNumber}`);
@@ -5895,10 +5903,37 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
       return;
     }
     
-    // Check for payment confirmation before AI response
     const paymentKeywords = ["оплатил", "оплатила", "оплачено", "оплата произведена", "оплата прошла", "я оплатил", "я оплатила", "перевел", "перевела", "отправил оплату"];
     const textLower = text.toLowerCase().trim();
     const isPaymentConfirmation = paymentKeywords.some(kw => textLower.includes(kw));
+
+    const prepaymentMatch = textLower.match(/(?:предоплат[аы]|аванс|залог|задаток)\s*(\d{1,3})\s*%/i)
+      || textLower.match(/(\d{1,3})\s*%\s*(?:предоплат[аы]|аванс|залог|задаток)/i)
+      || textLower.match(/договорились\s+(?:на\s+)?(\d{1,3})\s*%/i);
+    if (prepaymentMatch && !isPaymentConfirmation) {
+      const pct = Math.max(1, Math.min(100, parseInt(prepaymentMatch[1])));
+      try {
+        let pendingOrder = await storage.getRecentOrderByPhone(tenantId, customerPhone);
+        if (!pendingOrder) {
+          const convPhone = conversation.customerPhone;
+          if (convPhone && convPhone !== customerPhone) {
+            pendingOrder = await storage.getRecentOrderByPhone(tenantId, convPhone);
+          }
+        }
+        if (pendingOrder) {
+          await storage.updateOrderWithPayment(pendingOrder.id, tenantId, {
+            paymentStatus: "prepayment",
+            prepaymentPercentage: pct,
+            paymentSource: "ai_detected",
+          });
+          console.log(`[AI Prepayment] Order #${pendingOrder.orderNumber} set to prepayment ${pct}%`);
+        }
+      } catch (err) {
+        console.error("[AI Prepayment] Error:", err);
+      }
+    }
+
+    // Check for payment confirmation before AI response
     
     if (isPaymentConfirmation) {
       try {
