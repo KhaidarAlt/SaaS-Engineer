@@ -274,6 +274,7 @@ async function ensureDefaultPlans() {
   const hasStart = allPlans.some(p => p.name === "Start");
   const hasBusiness = allPlans.some(p => p.name === "Business");
   const hasScale = allPlans.some(p => p.name === "Scale");
+  const hasFounder = allPlans.some(p => p.name === "Founder's Edition");
   
   if (!hasFree) {
     await storage.createPlan({
@@ -353,6 +354,35 @@ async function ensureDefaultPlans() {
       isActive: true,
     });
     console.log("Created plan: Scale");
+  }
+
+  if (!hasFounder) {
+    await storage.createPlan({
+      name: "Founder's Edition",
+      price: 360000,
+      currency: "KZT",
+      periodDays: 365,
+      maxProducts: 10000,
+      maxCategories: 500,
+      maxPromotions: 200,
+      maxDiscountRules: 500,
+      maxManagers: 20,
+      maxWahaInstances: 5,
+      aiMessagesLimit: 500,
+      hasAiAccess: true,
+      features: [
+        "Полный доступ ко всей платформе",
+        "AI-продавец + Growth Engine",
+        "Self-Learning AI Coach",
+        "Мультиканал (WA, IG, TG)",
+        "Свой домен, CRM интеграции",
+        "500 диалогов/мес с переносом",
+        "Custom Development",
+        "14-Day Refund",
+      ],
+      isActive: true,
+    });
+    console.log("Created plan: Founder's Edition");
   }
 }
 
