@@ -19,6 +19,22 @@ import {
   Sparkles, Loader2, AlertTriangle, CheckCircle,
 } from "lucide-react";
 
+const CAMPAIGN_TYPE_LABELS: Record<string, string> = {
+  REACTIVATION: "Реактивация",
+  UPSELL: "Допродажа",
+  ABANDONED: "Брошенные корзины",
+  REMINDER: "Напоминание",
+  NPS: "Оценка (NPS)",
+};
+
+const CAMPAIGN_AUDIENCE_DESC: Record<string, string> = {
+  REACTIVATION: "Контакты, неактивные 30+ дней — подходят для возврата клиентов.",
+  UPSELL: "Только успешные сделки — клиенты, которые уже оплатили заказ.",
+  ABANDONED: "Неудачные диалоги и брошенные корзины — клиенты, не завершившие покупку.",
+  REMINDER: "Контакты, неактивные 14+ дней — мягкое напоминание о себе.",
+  NPS: "Успешные сделки — запрос оценки и отзыва у довольных клиентов.",
+};
+
 interface Props {
   campaign: GrowthCampaign;
   onUpdate: () => void;
@@ -41,7 +57,9 @@ export function CampaignBuilder({ campaign, onUpdate, readOnly = false }: Props)
   const safetyRules = (campaign.safetyRules || {}) as Record<string, any>;
   const scheduleRules = (campaign.scheduleRules || {}) as Record<string, any>;
 
-  const [inactiveDays, setInactiveDays] = useState<string>(String(audienceRules.inactiveDays || "14"));
+  const [inactiveDays, setInactiveDays] = useState<string>(String(audienceRules.inactiveDays || "0"));
+  const [dealStatusFilter, setDealStatusFilter] = useState<string>(audienceRules.dealStatus || "");
+  const [includeTags, setIncludeTags] = useState<string[]>(audienceRules.tags || []);
   const [requirePriorInbound, setRequirePriorInbound] = useState<boolean>(safetyRules.requirePriorInbound !== false);
   const [respectOptOut, setRespectOptOut] = useState<boolean>(safetyRules.respectOptOut !== false);
   const [messageText, setMessageText] = useState<string>(messageRules.text || "Здравствуйте, {name}!");
@@ -54,18 +72,25 @@ export function CampaignBuilder({ campaign, onUpdate, readOnly = false }: Props)
   const [preview, setPreview] = useState<PreviewResult | null>(null);
 
   const saveMut = useMutation({
-    mutationFn: () => updateCampaign(campaign.id, {
-      channelPolicy: channelPolicy as any,
-      audienceRules: { inactiveDays: parseInt(inactiveDays) || 14 },
-      messageRules: { text: messageText },
-      safetyRules: { requirePriorInbound, respectOptOut },
-      scheduleRules: {
-        dailyCap: parseInt(dailyCap) || 100,
-        quietHoursStart: parseInt(quietStart) || 22,
-        quietHoursEnd: parseInt(quietEnd) || 8,
-        timezone: "Asia/Almaty",
-      },
-    }),
+    mutationFn: () => {
+      const rules: Record<string, any> = {};
+      const days = parseInt(inactiveDays);
+      if (days > 0) rules.inactiveDays = days;
+      if (dealStatusFilter) rules.dealStatus = dealStatusFilter;
+      if (includeTags.length > 0) rules.tags = includeTags;
+      return updateCampaign(campaign.id, {
+        channelPolicy: channelPolicy as any,
+        audienceRules: rules,
+        messageRules: { text: messageText },
+        safetyRules: { requirePriorInbound, respectOptOut },
+        scheduleRules: {
+          dailyCap: parseInt(dailyCap) || 100,
+          quietHoursStart: parseInt(quietStart) || 22,
+          quietHoursEnd: parseInt(quietEnd) || 8,
+          timezone: "Asia/Almaty",
+        },
+      });
+    },
     onSuccess: () => {
       onUpdate();
       toast({ title: "Сохранено" });
@@ -152,14 +177,53 @@ export function CampaignBuilder({ campaign, onUpdate, readOnly = false }: Props)
           <CardContent className="p-5 space-y-4">
             <h3 className="text-sm font-semibold">Аудитория</h3>
 
+            {campaign.type && (
+              <div className="rounded-md border bg-muted/30 p-3 space-y-1">
+                <p className="text-xs font-medium">Автоматические правила для типа «{CAMPAIGN_TYPE_LABELS[campaign.type] || campaign.type}»:</p>
+                <p className="text-xs text-muted-foreground">{CAMPAIGN_AUDIENCE_DESC[campaign.type] || "Настройте вручную"}</p>
+              </div>
+            )}
+
             <div className="space-y-2">
-              <Label>Неактивны дней</Label>
+              <Label>Статус сделки</Label>
+              <Select value={dealStatusFilter || "any"} onValueChange={(v) => setDealStatusFilter(v === "any" ? "" : v)} disabled={readOnly}>
+                <SelectTrigger data-testid="select-deal-status">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="any">Любой</SelectItem>
+                  <SelectItem value="successful">Успешные сделки</SelectItem>
+                  <SelectItem value="in_progress">В процессе</SelectItem>
+                  <SelectItem value="failed">Не закрытые</SelectItem>
+                  <SelectItem value="abandoned">Брошенные</SelectItem>
+                  <SelectItem value="failed,abandoned">Неудачные + Брошенные</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Неактивны дней (0 = не фильтровать)</Label>
               <Input
-                type="number" min="1" value={inactiveDays}
+                type="number" min="0" value={inactiveDays}
                 onChange={(e) => setInactiveDays(e.target.value)}
                 disabled={readOnly}
                 data-testid="input-inactive-days"
               />
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Switch
+                checked={includeTags.includes("abandoned_cart")}
+                onCheckedChange={(checked) => {
+                  setIncludeTags(checked
+                    ? [...includeTags.filter(t => t !== "abandoned_cart"), "abandoned_cart"]
+                    : includeTags.filter(t => t !== "abandoned_cart")
+                  );
+                }}
+                disabled={readOnly}
+                data-testid="switch-abandoned-cart"
+              />
+              <Label className="text-xs">Только с брошенными корзинами</Label>
             </div>
 
             {estimate && (

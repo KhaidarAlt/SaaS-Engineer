@@ -98,13 +98,22 @@ export function registerGrowthRoutes(
       const userId = req.user!.id!;
       const body = req.body;
 
+      const campaignType = body.type || "REACTIVATION";
+      const defaultAudienceRules: Record<string, any> = {
+        REACTIVATION: { inactiveDays: 30 },
+        UPSELL: { dealStatus: "successful" },
+        ABANDONED: { dealStatus: "failed,abandoned", tags: ["abandoned_cart"] },
+        REMINDER: { inactiveDays: 14 },
+        NPS: { dealStatus: "successful" },
+      };
+
       const [campaign] = await db.insert(growthCampaigns).values({
         tenantId,
-        type: body.type || "REACTIVATION",
+        type: campaignType,
         name: body.name || "Новая кампания",
         status: "DRAFT",
         channelPolicy: body.channelPolicy || "AUTO",
-        audienceRules: body.audienceRules || {},
+        audienceRules: body.audienceRules || defaultAudienceRules[campaignType] || {},
         messageRules: body.messageRules || {},
         scheduleRules: body.scheduleRules || { quietHoursStart: 22, quietHoursEnd: 8, timezone: "Asia/Almaty", dailyCap: 100 },
         safetyRules: body.safetyRules || { requirePriorInbound: true, respectOptOut: true },
@@ -576,7 +585,7 @@ export function registerGrowthRoutes(
   app.get("/api/ai-rop/growth/audience", requireAuth, requireAiAccess, async (req: Request, res: Response) => {
     try {
       const tenantId = req.user!.tenantId!;
-      const { inactiveDays, abandoned, active, hasInbound, source, limit: rawLimit, offset: rawOffset } = req.query;
+      const { inactiveDays, abandoned, active, hasInbound, source, dealStatus, hidePersonal, limit: rawLimit, offset: rawOffset } = req.query;
       const limitNum = Math.max(1, Math.min(Number(rawLimit) || 50, 200));
       const offsetNum = Math.max(0, Number(rawOffset) || 0);
 
@@ -596,6 +605,23 @@ export function registerGrowthRoutes(
         }
       }
 
+      if (dealStatus && typeof dealStatus === "string") {
+        const allowed = ["successful", "in_progress", "failed", "abandoned", "no_deal", "personal"];
+        if (dealStatus.includes(",")) {
+          const statuses = dealStatus.split(",").filter(s => allowed.includes(s));
+          if (statuses.length > 0) {
+            const statusSql = sql.join(statuses.map(s => sql`${s}`), sql`, `);
+            filters.push(sql`meta->'analysis'->>'dealStatus' IN (${statusSql})`);
+          }
+        } else if (allowed.includes(dealStatus)) {
+          filters.push(sql`meta->'analysis'->>'dealStatus' = ${dealStatus}`);
+        }
+      }
+
+      if (hidePersonal !== "false") {
+        filters.push(sql`(meta->'analysis'->>'dealStatus' IS NULL OR meta->'analysis'->>'dealStatus' != 'personal')`);
+      }
+
       if (inactiveDays) {
         const days = Math.max(1, Math.min(Number(inactiveDays) || 30, 365));
         filters.push(sql`last_inbound_at IS NOT NULL`);
@@ -603,9 +629,7 @@ export function registerGrowthRoutes(
       }
 
       if (abandoned === "true") {
-        filters.push(sql`last_inbound_at IS NOT NULL`);
-        filters.push(sql`last_inbound_at <= NOW() - INTERVAL '3 days'`);
-        filters.push(sql`(outbound_count = 0 OR outbound_count IS NULL OR outbound_count < inbound_count)`);
+        filters.push(sql`(meta->'analysis'->>'dealStatus' IN ('failed', 'abandoned') OR tags @> ARRAY['abandoned_cart']::text[])`);
       }
 
       if (active === "true") {
@@ -884,6 +908,22 @@ async function buildAudience(tenantId: string, campaign: any): Promise<any[]> {
     threshold.setDate(threshold.getDate() - rules.inactiveDays);
     conditions.push(lte(growthContacts.lastInboundAt, threshold));
   }
+
+  if (rules.dealStatus) {
+    const dealStatusStr = String(rules.dealStatus);
+    const allowedStatuses = ["successful", "in_progress", "failed", "abandoned", "no_deal", "personal"];
+    if (dealStatusStr.includes(",")) {
+      const statuses = dealStatusStr.split(",").filter((s: string) => allowedStatuses.includes(s));
+      if (statuses.length > 0) {
+        const statusSql = sql.join(statuses.map((s: string) => sql`${s}`), sql`, `);
+        conditions.push(sql`${growthContacts.meta}->'analysis'->>'dealStatus' IN (${statusSql})`);
+      }
+    } else if (allowedStatuses.includes(dealStatusStr)) {
+      conditions.push(sql`${growthContacts.meta}->'analysis'->>'dealStatus' = ${dealStatusStr}`);
+    }
+  }
+
+  conditions.push(sql`(${growthContacts.meta}->'analysis'->>'dealStatus' IS NULL OR ${growthContacts.meta}->'analysis'->>'dealStatus' != 'personal')`);
 
   if (rules.tags && rules.tags.length > 0) {
     conditions.push(sql`${growthContacts.tags} && ARRAY[${sql.join(rules.tags.map((t: string) => sql`${t}`), sql`, `)}]::text[]`);

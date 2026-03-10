@@ -22,17 +22,19 @@ import type { GrowthContact, GrowthSyncRun, GrowthSegment, ProviderInfo, Audienc
 import {
   RefreshCw, Users, Filter, Plus, Trash2, Clock, CheckCircle2,
   AlertCircle, Loader2, Phone, MessageSquare, ArrowDownUp, Save,
+  ShoppingCart, TrendingUp, XCircle, HelpCircle, User,
 } from "lucide-react";
 
-type FilterPreset = "all" | "whatsapp" | "inactive" | "abandoned" | "active" | "hasInbound";
+type FilterPreset = "all" | "successful" | "in_progress" | "failed" | "abandoned" | "inactive" | "active";
 
 const FILTER_LABELS: Record<FilterPreset, string> = {
   all: "Все контакты",
-  whatsapp: "Только WhatsApp",
+  successful: "Успешные сделки",
+  in_progress: "В процессе",
+  failed: "Неудачные",
+  abandoned: "Брошенные",
   inactive: "Неактивные (30+ дн)",
-  abandoned: "Брошенные диалоги",
   active: "Активные (7 дн)",
-  hasInbound: "С входящими",
 };
 
 export function AudiencePage() {
@@ -43,11 +45,12 @@ export function AudiencePage() {
 
   const filterParams = (): Record<string, string> => {
     switch (filter) {
-      case "whatsapp": return { source: "whatsapp" };
-      case "inactive": return { inactiveDays: "30" };
+      case "successful": return { dealStatus: "successful" };
+      case "in_progress": return { dealStatus: "in_progress" };
+      case "failed": return { dealStatus: "failed" };
       case "abandoned": return { abandoned: "true" };
+      case "inactive": return { inactiveDays: "30" };
       case "active": return { active: "true" };
-      case "hasInbound": return { hasInbound: "true" };
       default: return {};
     }
   };
@@ -149,7 +152,7 @@ export function AudiencePage() {
 
       <div className="flex items-center gap-2 flex-wrap">
         <Select value={filter} onValueChange={(v) => setFilter(v as FilterPreset)}>
-          <SelectTrigger className="w-[200px]" data-testid="select-audience-filter">
+          <SelectTrigger className="w-[220px]" data-testid="select-audience-filter">
             <Filter className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
             <SelectValue />
           </SelectTrigger>
@@ -210,7 +213,7 @@ export function AudiencePage() {
             </div>
             <h3 className="font-semibold">Нет контактов</h3>
             <p className="text-sm text-muted-foreground max-w-md mx-auto">
-              Нажмите «Синхронизировать» чтобы загрузить контакты из WhatsApp, или они появятся автоматически при входящих диалогах.
+              Нажмите «Синхронизировать» чтобы загрузить контакты из WhatsApp и проанализировать переписки.
             </p>
           </CardContent>
         </Card>
@@ -255,16 +258,26 @@ export function AudiencePage() {
 }
 
 function SyncStatusBanner({ sync }: { sync: GrowthSyncRun }) {
+  const stats = sync.statsJson as Record<string, any> | null;
   const iconMap = {
     PENDING: <Loader2 className="h-4 w-4 animate-spin text-blue-500" />,
     RUNNING: <Loader2 className="h-4 w-4 animate-spin text-blue-500" />,
     SUCCESS: <CheckCircle2 className="h-4 w-4 text-green-500" />,
     FAILED: <AlertCircle className="h-4 w-4 text-red-500" />,
   };
+
+  const getSuccessLabel = () => {
+    const parts: string[] = [];
+    parts.push(`${stats?.contactsUpserted || sync.contactsCreated || 0} контактов`);
+    if (stats?.analyzed) parts.push(`${stats.analyzed} проанализировано`);
+    if (stats?.cleaned) parts.push(`${stats.cleaned} удалено`);
+    return parts.join(", ");
+  };
+
   const labelMap = {
     PENDING: "Ожидание синхронизации...",
-    RUNNING: "Синхронизация...",
-    SUCCESS: `Синхронизировано: ${sync.contactsFound} найдено, ${sync.contactsCreated} новых, ${sync.contactsUpdated} обновлено`,
+    RUNNING: "Синхронизация и анализ...",
+    SUCCESS: getSuccessLabel(),
     FAILED: `Ошибка: ${sync.error ?? "неизвестно"}`,
   };
 
@@ -284,41 +297,56 @@ function SyncStatusBanner({ sync }: { sync: GrowthSyncRun }) {
   );
 }
 
-function ContactRow({ contact }: { contact: GrowthContact }) {
-  const sourceConfig: Record<string, { label: string; variant: "default" | "secondary" | "outline" | "destructive" }> = {
-    whatsapp: { label: "WhatsApp", variant: "default" },
-    waha_sync: { label: "WhatsApp", variant: "default" },
-    meta_warm: { label: "Meta", variant: "secondary" },
-    order_form: { label: "Форма заказа", variant: "outline" },
-    db_sync: { label: "Авто", variant: "secondary" },
-    csv_import: { label: "CSV", variant: "secondary" },
-    crm_import: { label: "CRM", variant: "secondary" },
-    organic: { label: "Органик", variant: "secondary" },
-  };
+const DEAL_STATUS_CONFIG: Record<string, { label: string; color: string; icon: typeof CheckCircle2 }> = {
+  successful: { label: "Успешная сделка", color: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400", icon: CheckCircle2 },
+  in_progress: { label: "В процессе", color: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400", icon: TrendingUp },
+  failed: { label: "Не закрыта", color: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400", icon: XCircle },
+  abandoned: { label: "Брошено", color: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400", icon: ShoppingCart },
+  no_deal: { label: "Без сделки", color: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400", icon: HelpCircle },
+  personal: { label: "Личное", color: "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-500", icon: User },
+};
 
-  const src = sourceConfig[contact.source || ""] || { label: contact.source, variant: "secondary" as const };
-  const isOrderOnly = contact.tags?.includes("order_only");
+function ContactRow({ contact }: { contact: GrowthContact }) {
+  const meta = (contact.meta || {}) as Record<string, any>;
+  const analysis = meta.analysis as Record<string, any> | undefined;
+  const dealStatus = analysis?.dealStatus as string | undefined;
+  const dealSummary = analysis?.dealSummary as string | undefined;
+  const dealConfig = dealStatus ? DEAL_STATUS_CONFIG[dealStatus] : null;
+  const DealIcon = dealConfig?.icon;
 
   return (
     <Card className="hover-elevate" data-testid={`contact-row-${contact.id}`}>
       <CardContent className="px-4 py-3 flex items-center gap-3 flex-wrap">
         <div className="flex-1 min-w-[140px]">
-          <p className="text-sm font-medium truncate" data-testid={`text-contact-name-${contact.id}`}>
-            {contact.name || contact.phone || "Без имени"}
-          </p>
+          <div className="flex items-center gap-2">
+            <p className="text-sm font-medium truncate" data-testid={`text-contact-name-${contact.id}`}>
+              {contact.name || contact.phone || "Без имени"}
+            </p>
+          </div>
           {contact.phone && (
             <p className="text-xs text-muted-foreground flex items-center gap-1">
               <Phone className="h-3 w-3" />
               {contact.phone}
             </p>
           )}
+          {dealSummary && (
+            <p className="text-xs text-muted-foreground mt-0.5 truncate max-w-[300px]" title={dealSummary} data-testid={`text-summary-${contact.id}`}>
+              {dealSummary}
+            </p>
+          )}
         </div>
 
-        <div className="flex items-center gap-3 text-xs text-muted-foreground">
-          {contact.source && (
-            <Badge variant={src.variant} className={`text-[10px] ${isOrderOnly ? "opacity-60" : ""}`} data-testid={`badge-source-${contact.id}`}>
-              {src.label}
-            </Badge>
+        <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
+          {dealConfig && DealIcon && (
+            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${dealConfig.color}`} data-testid={`badge-deal-${contact.id}`}>
+              <DealIcon className="h-3 w-3" />
+              {dealConfig.label}
+            </span>
+          )}
+          {!dealConfig && analysis === undefined && (
+            <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium bg-muted text-muted-foreground">
+              Не анализирован
+            </span>
           )}
           <span className="flex items-center gap-0.5" title="Входящие / Исходящие">
             <ArrowDownUp className="h-3 w-3" />
@@ -331,12 +359,6 @@ function ContactRow({ contact }: { contact: GrowthContact }) {
             </span>
           )}
         </div>
-
-        {contact.lastMessagePreview && (
-          <p className="w-full text-xs text-muted-foreground truncate mt-1" data-testid={`text-preview-${contact.id}`}>
-            {contact.lastMessagePreview}
-          </p>
-        )}
       </CardContent>
     </Card>
   );

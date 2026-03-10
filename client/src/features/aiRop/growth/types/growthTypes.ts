@@ -133,6 +133,7 @@ export interface GrowthSyncRun {
   startedAt: string | null;
   finishedAt: string | null;
   createdAt: string;
+  statsJson: Record<string, any> | null;
 }
 
 export interface GrowthSegment {
@@ -182,6 +183,7 @@ export interface GrowthContact {
   outboundCount: number;
   lastMessagePreview: string | null;
   lastChannelProvider: string | null;
+  meta: Record<string, any> | null;
   createdAt: string;
   updatedAt: string;
 }
