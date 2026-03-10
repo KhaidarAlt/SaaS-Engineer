@@ -1585,7 +1585,7 @@ async function backfillConversationSuccess(pool: any, tenantId: string, from: Da
         AND EXISTS (
           SELECT 1 FROM orders o
           WHERE o.tenant_id = $1
-            AND o.payment_status IN ('paid', 'prepayment', 'installment', 'credit', 'kaspi_red')
+            AND (o.payment_status IN ('paid', 'prepayment', 'installment', 'credit', 'kaspi_red') OR o.status = 'completed')
             AND (
               o.customer_phone = ai_conversations.customer_phone
               OR REGEXP_REPLACE(o.customer_phone, '[^0-9]', '', 'g') = REGEXP_REPLACE(ai_conversations.customer_phone, '[^0-9]', '', 'g')

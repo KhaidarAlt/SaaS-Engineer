@@ -286,7 +286,28 @@ async function deriveDialogsFromTesting(tenantId: string): Promise<number> {
   return derived;
 }
 
+const reanalysisCompleted = new Set<string>();
+
 async function analyzeProductionDialogs(tenantId: string): Promise<number> {
+  if (!reanalysisCompleted.has(tenantId)) {
+    reanalysisCompleted.add(tenantId);
+    try {
+      await db.update(aiDialogs).set({ outcome: "UNKNOWN", updatedAt: new Date() })
+        .where(and(
+          eq(aiDialogs.tenantId, tenantId),
+          ne(aiDialogs.source, "TESTING"),
+          ne(aiDialogs.outcome, "SUCCESS"),
+          or(
+            eq(aiDialogs.outcome, "ABANDONED"),
+            eq(aiDialogs.outcome, "FAILED"),
+            eq(aiDialogs.outcome, "HANDOVER"),
+          ),
+        ));
+    } catch (err) {
+      console.error("[AnalyzeDialogs] Re-analysis reset error:", err);
+    }
+  }
+
   const [settingsRow] = await db.select().from(aiSettings).where(eq(aiSettings.tenantId, tenantId));
   const goal = settingsRow?.goal || "CLOSE_DEAL";
 
@@ -348,6 +369,7 @@ async function analyzeProductionDialogs(tenantId: string): Promise<number> {
       const matchingOrders = await db.select({
         id: orders.id,
         paymentStatus: orders.paymentStatus,
+        orderStatus: orders.status,
         total: orders.total,
         createdAt: orders.createdAt,
       }).from(orders)
@@ -364,22 +386,17 @@ async function analyzeProductionDialogs(tenantId: string): Promise<number> {
           o.paymentStatus === "paid" || o.paymentStatus === "prepayment" ||
           o.paymentStatus === "installment" || o.paymentStatus === "credit" || o.paymentStatus === "kaspi_red"
         );
+        const completedOrder = matchingOrders.find(o => o.orderStatus === "completed");
         if (paidOrder) {
-          result = {
-            outcome: "SUCCESS",
-            successReason: "ORDER_PAID",
-            dropoffStage: undefined,
-            dropoffReason: undefined,
-          };
+          result = { outcome: "SUCCESS", successReason: "ORDER_PAID", dropoffStage: undefined, dropoffReason: undefined };
+          if (!stages.includes("CLOSE")) stages.push("CLOSE");
+          if (!stages.includes("SUCCESS")) stages.push("SUCCESS");
+        } else if (completedOrder) {
+          result = { outcome: "SUCCESS", successReason: "ORDER_COMPLETED", dropoffStage: undefined, dropoffReason: undefined };
           if (!stages.includes("CLOSE")) stages.push("CLOSE");
           if (!stages.includes("SUCCESS")) stages.push("SUCCESS");
         } else {
-          result = {
-            outcome: "SUCCESS",
-            successReason: "ORDER_PLACED",
-            dropoffStage: undefined,
-            dropoffReason: undefined,
-          };
+          result = { outcome: "SUCCESS", successReason: "ORDER_PLACED", dropoffStage: undefined, dropoffReason: undefined };
           if (!stages.includes("CLOSE")) stages.push("CLOSE");
           if (!stages.includes("SUCCESS")) stages.push("SUCCESS");
         }
@@ -464,18 +481,21 @@ function normalizePhoneVariants(phone: string): string[] {
 
 async function getOrderRevenue(tenantId: string, contactPhone: string, dialogStart: Date): Promise<number> {
   const normalizedPhones = normalizePhoneVariants(contactPhone);
+  const attributionEnd = new Date(dialogStart.getTime() + 7 * 24 * 60 * 60 * 1000);
   const matchingOrders = await db.select({ total: orders.total })
     .from(orders)
     .where(and(
       eq(orders.tenantId, tenantId),
       or(...normalizedPhones.map(p => eq(orders.customerPhone, p))),
       gte(orders.createdAt, dialogStart),
+      lte(orders.createdAt, attributionEnd),
       or(
         eq(orders.paymentStatus, "paid"),
         eq(orders.paymentStatus, "prepayment"),
         eq(orders.paymentStatus, "installment"),
         eq(orders.paymentStatus, "credit"),
         eq(orders.paymentStatus, "kaspi_red"),
+        eq(orders.status, "completed"),
       ),
     ));
 
