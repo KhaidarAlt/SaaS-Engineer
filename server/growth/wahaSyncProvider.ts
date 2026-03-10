@@ -71,6 +71,8 @@ export async function runWahaHistorySync(tenantId: string, syncRunId: string) {
       }
     }
 
+    console.log(`[WahaSync] WAHA API phase done: ${chatsScanned} chats, ${contactsUpserted} contacts. Starting local DB sync...`);
+
     const dbResult = await syncFromLocalData(tenantId);
     contactsUpserted += dbResult.upserted;
     chatsScanned += dbResult.scanned;
@@ -82,7 +84,7 @@ export async function runWahaHistorySync(tenantId: string, syncRunId: string) {
       statsJson: { chatsScanned, contactsUpserted, errors },
     }).where(eq(growthSyncRuns.id, syncRunId));
 
-    console.log(`[WahaSync] Completed for tenant ${tenantId}: ${contactsUpserted} contacts from ${chatsScanned} sources`);
+    console.log(`[WahaSync] Completed for tenant ${tenantId}: ${contactsUpserted} contacts from ${chatsScanned} sources (errors: ${errors})`);
   } catch (err: any) {
     await db.update(growthSyncRuns).set({
       status: "FAILED",
@@ -95,10 +97,43 @@ export async function runWahaHistorySync(tenantId: string, syncRunId: string) {
   }
 }
 
+interface PhoneEntry {
+  name: string | null;
+  channel: string;
+  success: boolean | null;
+  convStatus: string;
+  firstSeen: Date;
+  lastSeen: Date;
+  msgCount: number;
+}
+
+interface OrderEntry {
+  name: string | null;
+  hasOrder: boolean;
+  isPaid: boolean;
+  isCompleted: boolean;
+  totalRevenue: number;
+  orderCount: number;
+  lastOrder: Date;
+}
+
+interface MsgEntry {
+  inbound: number;
+  outbound: number;
+  lastInbound: Date | null;
+  lastPreview: string | null;
+}
+
 async function syncFromLocalData(tenantId: string): Promise<{ scanned: number; upserted: number; errors: number }> {
   let scanned = 0;
   let upserted = 0;
   let errors = 0;
+
+  console.log(`[WahaSync/DB] Starting local data sync for tenant ${tenantId}`);
+
+  const phoneMap = new Map<string, PhoneEntry>();
+  const orderMap = new Map<string, OrderEntry>();
+  const msgMap = new Map<string, MsgEntry>();
 
   try {
     const convResult = await db.execute(sql`
@@ -122,16 +157,7 @@ async function syncFromLocalData(tenantId: string): Promise<{ scanned: number; u
     `);
 
     const convRows = (convResult as any).rows || convResult;
-
-    const phoneMap = new Map<string, {
-      name: string | null;
-      channel: string;
-      success: boolean | null;
-      convStatus: string;
-      firstSeen: Date;
-      lastSeen: Date;
-      msgCount: number;
-    }>();
+    console.log(`[WahaSync/DB] ai_conversations query: ${convRows.length} rows`);
 
     for (const row of convRows) {
       const phone = normalizePhone(String(row.phone));
@@ -151,7 +177,12 @@ async function syncFromLocalData(tenantId: string): Promise<{ scanned: number; u
         });
       }
     }
+  } catch (err) {
+    errors++;
+    console.error(`[WahaSync/DB] ai_conversations query FAILED:`, err);
+  }
 
+  try {
     const orderResult = await db.execute(sql`
       SELECT
         customer_phone AS phone,
@@ -170,26 +201,20 @@ async function syncFromLocalData(tenantId: string): Promise<{ scanned: number; u
     `);
 
     const orderRows = (orderResult as any).rows || orderResult;
-
-    const orderMap = new Map<string, {
-      name: string | null;
-      hasOrder: boolean;
-      isPaid: boolean;
-      isCompleted: boolean;
-      totalRevenue: number;
-      orderCount: number;
-      lastOrder: Date;
-    }>();
+    console.log(`[WahaSync/DB] orders query: ${orderRows.length} rows`);
 
     for (const row of orderRows) {
       const phone = normalizePhone(String(row.phone));
       if (!phone || phone.length < 7) continue;
 
+      const rowIsPaid = row.is_paid === true || row.is_paid === "true" || row.is_paid === "t";
+      const rowIsCompleted = row.is_completed === true || row.is_completed === "true" || row.is_completed === "t";
+
       orderMap.set(phone, {
         name: row.name || null,
         hasOrder: true,
-        isPaid: row.is_paid === true || row.is_paid === "true",
-        isCompleted: row.is_completed === true || row.is_completed === "true",
+        isPaid: rowIsPaid,
+        isCompleted: rowIsCompleted,
         totalRevenue: parseFloat(row.total_revenue) || 0,
         orderCount: row.order_count || 0,
         lastOrder: new Date(row.last_order),
@@ -200,7 +225,7 @@ async function syncFromLocalData(tenantId: string): Promise<{ scanned: number; u
         phoneMap.set(phone, {
           name: row.name || null,
           channel: "whatsapp",
-          success: isPaid || isCompleted ? true : null,
+          success: rowIsPaid || rowIsCompleted ? true : null,
           convStatus: "open",
           firstSeen: new Date(row.first_order || Date.now()),
           lastSeen: new Date(row.last_order || Date.now()),
@@ -208,19 +233,18 @@ async function syncFromLocalData(tenantId: string): Promise<{ scanned: number; u
         });
       }
     }
+  } catch (err) {
+    errors++;
+    console.error(`[WahaSync/DB] orders query FAILED:`, err);
+  }
 
+  try {
     const msgResult = await db.execute(sql`
       SELECT
         sub.phone,
         sub.inbound_count,
         sub.outbound_count,
-        sub.last_inbound,
-        (SELECT content->>'text' FROM messaging_messages m2
-         WHERE m2.tenant_id = ${tenantId}
-           AND m2.direction = 'inbound'
-           AND m2.from_address = sub.phone
-         ORDER BY m2.received_at DESC LIMIT 1
-        ) AS last_preview
+        sub.last_inbound
       FROM (
         SELECT
           CASE WHEN direction = 'inbound' THEN from_address ELSE to_address END AS phone,
@@ -236,7 +260,7 @@ async function syncFromLocalData(tenantId: string): Promise<{ scanned: number; u
     `);
 
     const msgRows = (msgResult as any).rows || msgResult;
-    const msgMap = new Map<string, { inbound: number; outbound: number; lastInbound: Date | null; lastPreview: string | null }>();
+    console.log(`[WahaSync/DB] messaging_messages query: ${msgRows.length} rows`);
 
     for (const row of msgRows) {
       const phone = normalizePhone(String(row.phone));
@@ -245,59 +269,60 @@ async function syncFromLocalData(tenantId: string): Promise<{ scanned: number; u
         inbound: row.inbound_count || 0,
         outbound: row.outbound_count || 0,
         lastInbound: row.last_inbound ? new Date(row.last_inbound) : null,
-        lastPreview: row.last_preview?.substring(0, 200) || null,
+        lastPreview: null,
       });
     }
-
-    for (const [phone, conv] of phoneMap) {
-      try {
-        const order = orderMap.get(phone);
-        const msg = msgMap.get(phone);
-
-        const tags: string[] = [];
-        if (order?.hasOrder) tags.push("has_order");
-        if (order?.isPaid || order?.isCompleted) tags.push("paid");
-        if (conv.success) tags.push("successful");
-        const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-        if (conv.lastSeen > thirtyDaysAgo) tags.push("active");
-        if (conv.convStatus === "handoff") tags.push("handoff");
-
-        await upsertContact(tenantId, phone, {
-          name: conv.name || order?.name || null,
-          source: "db_sync",
-          lastInboundAt: msg?.lastInbound || conv.lastSeen,
-          lastChannel: "whatsapp",
-          lastChannelProvider: "whatsapp:waha",
-          lastMessagePreview: msg?.lastPreview || null,
-          firstSeenAt: conv.firstSeen,
-          inboundCount: msg?.inbound || 0,
-          outboundCount: msg?.outbound || 0,
-          tags,
-          meta: order ? {
-            orderCount: order.orderCount,
-            totalRevenue: order.totalRevenue,
-            isPaid: order.isPaid,
-            isCompleted: order.isCompleted,
-          } : undefined,
-        });
-        upserted++;
-      } catch (err) {
-        errors++;
-        console.error(`[WahaSync/DB] Error upserting contact ${phone}:`, err);
-      }
-    }
-
-    console.log(`[WahaSync/DB] Local sync for tenant ${tenantId}: ${upserted} contacts from ${scanned} local records`);
   } catch (err) {
-    console.error(`[WahaSync/DB] Local data sync error:`, err);
+    errors++;
+    console.error(`[WahaSync/DB] messaging_messages query FAILED:`, err);
   }
 
+  console.log(`[WahaSync/DB] Data collected: ${phoneMap.size} unique phones, ${orderMap.size} with orders, ${msgMap.size} with messages`);
+
+  for (const [phone, conv] of phoneMap) {
+    try {
+      const order = orderMap.get(phone);
+      const msg = msgMap.get(phone);
+
+      const tags: string[] = [];
+      if (order?.hasOrder) tags.push("has_order");
+      if (order?.isPaid || order?.isCompleted) tags.push("paid");
+      if (conv.success) tags.push("successful");
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      if (conv.lastSeen > thirtyDaysAgo) tags.push("active");
+      if (conv.convStatus === "handoff") tags.push("handoff");
+
+      await upsertContact(tenantId, phone, {
+        name: conv.name || order?.name || null,
+        source: "db_sync",
+        lastInboundAt: msg?.lastInbound || conv.lastSeen,
+        lastChannel: "whatsapp",
+        lastChannelProvider: "whatsapp:waha",
+        lastMessagePreview: msg?.lastPreview || null,
+        firstSeenAt: conv.firstSeen,
+        inboundCount: msg?.inbound || 0,
+        outboundCount: msg?.outbound || 0,
+        tags,
+        meta: order ? {
+          orderCount: order.orderCount,
+          totalRevenue: order.totalRevenue,
+          isPaid: order.isPaid,
+          isCompleted: order.isCompleted,
+        } : undefined,
+      });
+      upserted++;
+    } catch (err) {
+      errors++;
+      console.error(`[WahaSync/DB] Error upserting contact ${phone}:`, err);
+    }
+  }
+
+  console.log(`[WahaSync/DB] Local sync done for tenant ${tenantId}: ${upserted} upserted from ${scanned} scanned (errors: ${errors})`);
   return { scanned, upserted, errors };
 }
 
 function normalizePhone(phone: string): string {
-  let cleaned = phone.replace(/@c\.us$|@s\.whatsapp\.net$|@lid$/, "").replace(/[^0-9+]/g, "");
-  if (cleaned.startsWith("+")) cleaned = cleaned.substring(1);
+  let cleaned = phone.replace(/@c\.us$|@s\.whatsapp\.net$|@lid$/, "").replace(/[^0-9]/g, "");
   return cleaned;
 }
 
