@@ -1,36 +1,51 @@
 import type { Express, Request, Response } from "express";
 import { db } from "./db";
-import { eq, and, desc, gte, lte, count, sql, inArray } from "drizzle-orm";
+import { eq, and, desc, gte, lte, count, sql, inArray, isNull, or, ne } from "drizzle-orm";
 import {
   aiDialogs, aiDialogEvents, aiAnalyticsAuditRuns, aiAuditFindings,
   aiTestingSessions, aiTestingMessages, aiTriggers, aiAntiPatterns,
   knowledgeItems, aiTrainingEvents, aiSettings, products, categories,
-  tenants,
+  tenants, orders, messagingMessages,
 } from "@shared/schema";
 
 const FUNNEL_STAGES = ["GREETING", "NEEDS", "OFFER", "OBJECTION", "CLOSE", "SUCCESS", "HANDOVER", "DROP"] as const;
 type FunnelStage = typeof FUNNEL_STAGES[number];
 
 const OBJECTION_KEYWORDS: Record<string, string[]> = {
-  PRICE: ["дорого", "цена", "скидк", "дешевле", "дороговато", "сколько стоит"],
-  COMPARE: ["конкурент", "у других", "сравниваю", "в другом месте"],
-  TRUST: ["гарант", "оригинал", "поддел", "сертификат", "отзывы"],
-  DELIVERY: ["доставка", "самовывоз", "когда привез", "срок"],
-  PAYMENT: ["оплата", "kaspi", "рассроч", "перевод"],
-  STOCK: ["в наличии", "есть?", "нет?", "под заказ"],
+  PRICE: ["дорого", "цена", "скидк", "дешевле", "дороговато", "сколько стоит", "почему так дорого", "слишком дорого", "не по карману"],
+  COMPARE: ["конкурент", "у других", "сравниваю", "в другом месте", "на kaspi.kz", "на каспи"],
+  TRUST: ["гарант", "оригинал", "поддел", "сертификат", "отзывы", "надежн", "проверен"],
+  DELIVERY: ["доставка", "самовывоз", "когда привез", "срок", "как получить", "куда доставля", "привезти"],
+  PAYMENT: ["оплата", "kaspi", "рассроч", "перевод", "каспи", "как оплатить", "способ оплат"],
+  STOCK: ["в наличии", "есть?", "нет?", "под заказ", "когда будет", "закончил"],
 };
 
 const STAGE_KEYWORDS = {
-  NEEDS: ["нужно", "ищу", "хочу", "подбер", "посоветуй", "какой", "какая"],
-  OFFER: ["₸", "тг", "тенге", "цена:", "стоит", "рекомендую", "предлагаю", "вариант"],
-  CLOSE: ["оформим", "оплатить", "оставьте номер", "подтвердите", "заказ", "оформля"],
-  HANDOVER: ["менеджер", "передаю", "подключу", "специалист"],
-  PAYMENT_OFFERED: ["ссылка", "kaspi pay", "оплатить", "оплата по"],
-  PAYMENT_CONFIRMED: ["оплатил", "оплатила", "готов оплатить", "оплачен"],
+  NEEDS: ["нужно", "ищу", "хочу", "подбер", "посоветуй", "какой", "какая",
+    "подскажите", "расскажите", "интересует", "покажите", "есть ли", "какие есть",
+    "выбираю", "присмотрел", "что у вас", "подобрать", "помогите выбрать", "мне нужн",
+    "нужна", "нужен", "ищем", "хотим", "хотела бы", "можно ли", "а есть"],
+  NEEDS_ASSISTANT: ["что ищете", "чем помочь", "какой размер", "что вас интересует",
+    "могу предложить", "помогу подобрать", "какую модель", "что именно"],
+  OFFER: ["₸", "тг", "тенге", "цена:", "стоит", "рекомендую", "предлагаю", "вариант",
+    "руб", "стоимость", "артикул", "http", "https", "![", "botfactory.kz",
+    "в наличии по цене", "по цене", "от ", " тенге", "catalog"],
+  CLOSE: ["оформим", "оплатить", "оставьте номер", "подтвердите", "заказ", "оформля",
+    "в корзину", "хочу заказать", "оформить заказ", "wa.me", "добавить в корзину",
+    "перейдите по ссылке", "для оформления", "оформите"],
+  HANDOVER: ["менеджер", "передаю", "подключу", "специалист", "оператор", "живой человек"],
+  PAYMENT_OFFERED: ["ссылка", "kaspi pay", "оплатить", "оплата по", "ссылка на оплату",
+    "kaspi.kz/pay", "оплатите по ссылке", "к оплате"],
+  PAYMENT_CONFIRMED: ["оплатил", "оплатила", "готов оплатить", "оплачен",
+    "перевел", "перевела", "скинул", "отправил", "отправила", "чек", "оплата прошла",
+    "я оплатил", "я оплатила", "оплата произведена", "отправил оплату"],
   LEAD_CAPTURE: ["\\+7\\s?\\d{3}", "\\d{10,11}", "мой номер", "позвоните"],
-  ORDER_CREATED: ["заказ оформлен", "заказ создан", "заказ принят"],
-  SUCCESS_INTENT: ["беру", "давайте этот", "оформляем", "согласен", "хорошо, беру"],
-  REFUSAL: ["не надо", "передумал", "неинтересно", "отказ", "не буду"],
+  ORDER_CREATED: ["заказ оформлен", "заказ создан", "заказ принят", "заказ №", "новый заказ", "заказ получен"],
+  SUCCESS_INTENT: ["беру", "давайте этот", "оформляем", "согласен", "хорошо, беру",
+    "возьму", "заказываю", "да, хочу", "подходит", "устраивает", "буду брать",
+    "да, заказываю", "мне подходит", "забираю", "хочу купить", "покупаю",
+    "отлично, беру", "заверните", "давайте оформим"],
+  REFUSAL: ["не надо", "передумал", "неинтересно", "отказ", "не буду", "не хочу", "не нужно", "отмена"],
 };
 
 function parsePeriod(period: string, from?: string, to?: string): { start: Date; end: Date } {
@@ -56,6 +71,9 @@ function detectStages(messages: { role: string; content: string }[]): FunnelStag
   for (const msg of messages) {
     const lower = msg.content.toLowerCase();
     if (msg.role === "user" && STAGE_KEYWORDS.NEEDS.some(k => lower.includes(k)) && !stages.includes("NEEDS")) {
+      stages.push("NEEDS");
+    }
+    if (msg.role === "assistant" && STAGE_KEYWORDS.NEEDS_ASSISTANT.some(k => lower.includes(k)) && !stages.includes("NEEDS")) {
       stages.push("NEEDS");
     }
     if (msg.role === "assistant" && STAGE_KEYWORDS.OFFER.some(k => lower.includes(k)) && !stages.includes("OFFER")) {
@@ -268,6 +286,202 @@ async function deriveDialogsFromTesting(tenantId: string): Promise<number> {
   return derived;
 }
 
+async function analyzeProductionDialogs(tenantId: string): Promise<number> {
+  const [settingsRow] = await db.select().from(aiSettings).where(eq(aiSettings.tenantId, tenantId));
+  const goal = settingsRow?.goal || "CLOSE_DEAL";
+
+  const unanalyzedDialogs = await db.select().from(aiDialogs)
+    .where(and(
+      eq(aiDialogs.tenantId, tenantId),
+      or(eq(aiDialogs.outcome, "UNKNOWN"), isNull(aiDialogs.outcome)),
+      ne(aiDialogs.source, "TESTING"),
+    ))
+    .limit(100);
+
+  if (unanalyzedDialogs.length === 0) return 0;
+
+  const STALE_HOURS = 24;
+  const staleThreshold = new Date(Date.now() - STALE_HOURS * 60 * 60 * 1000);
+
+  let analyzed = 0;
+
+  for (const dialog of unanalyzedDialogs) {
+    const messages = await db.select({
+      direction: messagingMessages.direction,
+      content: messagingMessages.content,
+      createdAt: messagingMessages.createdAt,
+    }).from(messagingMessages)
+      .where(eq(messagingMessages.dialogId, dialog.id))
+      .orderBy(messagingMessages.createdAt);
+
+    const msgPairs = messages.map(m => ({
+      role: m.direction === "inbound" ? "user" : "assistant",
+      content: (m.content as any)?.text || (m.content as any)?.body || JSON.stringify(m.content || {}),
+    }));
+
+    if (msgPairs.length < 2) {
+      if (dialog.lastMessageAt && dialog.lastMessageAt < staleThreshold) {
+        await db.update(aiDialogs).set({
+          status: "CLOSED",
+          outcome: "ABANDONED",
+          dropoffStage: "GREETING",
+          dropoffReason: "NO_RESPONSE",
+          updatedAt: new Date(),
+        }).where(eq(aiDialogs.id, dialog.id));
+        analyzed++;
+      }
+      continue;
+    }
+
+    const stages = detectStages(msgPairs);
+    const events = detectEvents(msgPairs);
+    const objections = detectObjections(msgPairs);
+    let result = computeOutcome(goal, stages, events, msgPairs);
+
+    const contactPhone = (dialog.meta as any)?.contactPhone;
+    if (contactPhone && result.outcome !== "SUCCESS") {
+      const normalizedPhones = normalizePhoneVariants(contactPhone);
+
+      const dialogStart = dialog.createdAt || new Date(0);
+      const attributionWindow = new Date(dialogStart.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+      const matchingOrders = await db.select({
+        id: orders.id,
+        paymentStatus: orders.paymentStatus,
+        total: orders.total,
+        createdAt: orders.createdAt,
+      }).from(orders)
+        .where(and(
+          eq(orders.tenantId, tenantId),
+          or(...normalizedPhones.map(p => eq(orders.customerPhone, p))),
+          gte(orders.createdAt, dialogStart),
+          lte(orders.createdAt, attributionWindow),
+        ))
+        .limit(5);
+
+      if (matchingOrders.length > 0) {
+        const paidOrder = matchingOrders.find(o =>
+          o.paymentStatus === "paid" || o.paymentStatus === "prepayment" ||
+          o.paymentStatus === "installment" || o.paymentStatus === "credit" || o.paymentStatus === "kaspi_red"
+        );
+        if (paidOrder) {
+          result = {
+            outcome: "SUCCESS",
+            successReason: "ORDER_PAID",
+            dropoffStage: undefined,
+            dropoffReason: undefined,
+          };
+          if (!stages.includes("CLOSE")) stages.push("CLOSE");
+          if (!stages.includes("SUCCESS")) stages.push("SUCCESS");
+        } else {
+          result = {
+            outcome: "SUCCESS",
+            successReason: "ORDER_PLACED",
+            dropoffStage: undefined,
+            dropoffReason: undefined,
+          };
+          if (!stages.includes("CLOSE")) stages.push("CLOSE");
+          if (!stages.includes("SUCCESS")) stages.push("SUCCESS");
+        }
+      }
+    }
+
+    const isStale = dialog.lastMessageAt && dialog.lastMessageAt < staleThreshold;
+    const newStatus = (isStale || result.outcome === "SUCCESS" || result.outcome === "FAILED") ? "CLOSED" : dialog.status;
+
+    const revenueAmount = result.outcome === "SUCCESS" && contactPhone ? await getOrderRevenue(tenantId, contactPhone, dialog.createdAt || new Date(0)) : undefined;
+
+    await db.update(aiDialogs).set({
+      status: newStatus,
+      outcome: result.outcome,
+      successReason: result.successReason,
+      dropoffStage: result.dropoffStage,
+      dropoffReason: result.dropoffReason,
+      goal,
+      revenueAmount: revenueAmount ? String(revenueAmount) : undefined,
+      handoverReason: events.some(e => e.type === "HANDOVER_TRIGGERED") ? "AI_TRIGGERED" : undefined,
+      leadCaptured: events.some(e => e.type === "LEAD_CAPTURED"),
+      updatedAt: new Date(),
+    }).where(eq(aiDialogs.id, dialog.id));
+
+    const existingEvents = await db.select({ eventValue: aiDialogEvents.eventValue })
+      .from(aiDialogEvents)
+      .where(and(eq(aiDialogEvents.dialogId, dialog.id), eq(aiDialogEvents.eventType, "STAGE_ENTERED")));
+    const existingStageSet = new Set(existingEvents.map(e => e.eventValue));
+
+    for (const stage of stages) {
+      if (!existingStageSet.has(stage)) {
+        await db.insert(aiDialogEvents).values({
+          tenantId,
+          dialogId: dialog.id,
+          eventType: "STAGE_ENTERED",
+          eventValue: stage,
+          ts: dialog.createdAt || new Date(),
+        });
+      }
+    }
+
+    for (const obj of objections) {
+      await db.insert(aiDialogEvents).values({
+        tenantId,
+        dialogId: dialog.id,
+        eventType: "OBJECTION_DETECTED",
+        eventValue: obj,
+        ts: dialog.createdAt || new Date(),
+      }).onConflictDoNothing();
+    }
+
+    for (const ev of events) {
+      await db.insert(aiDialogEvents).values({
+        tenantId,
+        dialogId: dialog.id,
+        eventType: ev.type,
+        eventValue: ev.value,
+        ts: dialog.createdAt || new Date(),
+      }).onConflictDoNothing();
+    }
+
+    analyzed++;
+  }
+
+  return analyzed;
+}
+
+function normalizePhoneVariants(phone: string): string[] {
+  const digits = phone.replace(/\D/g, "");
+  const variants: string[] = [phone];
+
+  if (digits.length >= 10) {
+    const last10 = digits.slice(-10);
+    variants.push(`+7${last10}`);
+    variants.push(`7${last10}`);
+    variants.push(`8${last10}`);
+    variants.push(last10);
+  }
+
+  return [...new Set(variants)];
+}
+
+async function getOrderRevenue(tenantId: string, contactPhone: string, dialogStart: Date): Promise<number> {
+  const normalizedPhones = normalizePhoneVariants(contactPhone);
+  const matchingOrders = await db.select({ total: orders.total })
+    .from(orders)
+    .where(and(
+      eq(orders.tenantId, tenantId),
+      or(...normalizedPhones.map(p => eq(orders.customerPhone, p))),
+      gte(orders.createdAt, dialogStart),
+      or(
+        eq(orders.paymentStatus, "paid"),
+        eq(orders.paymentStatus, "prepayment"),
+        eq(orders.paymentStatus, "installment"),
+        eq(orders.paymentStatus, "credit"),
+        eq(orders.paymentStatus, "kaspi_red"),
+      ),
+    ));
+
+  return matchingOrders.reduce((sum, o) => sum + (o.total ? parseFloat(o.total) : 0), 0);
+}
+
 const summaryCache = new Map<string, { data: any; ts: number }>();
 
 async function computeSummary(tenantId: string, start: Date, end: Date, sourceFilter: string) {
@@ -276,6 +490,7 @@ async function computeSummary(tenantId: string, start: Date, end: Date, sourceFi
   if (cached && Date.now() - cached.ts < 60000) return cached.data;
 
   await deriveDialogsFromTesting(tenantId);
+  await analyzeProductionDialogs(tenantId);
 
   let dialogConditions = [
     eq(aiDialogs.tenantId, tenantId),

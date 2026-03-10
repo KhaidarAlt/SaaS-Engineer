@@ -5900,6 +5900,19 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
     return from;
   }
 
+  function detectProductionStage(userMessage: string, aiResponse: string): string | null {
+    const lower = (userMessage + " " + aiResponse).toLowerCase();
+    if (lower.includes("оплат") || lower.includes("kaspi") || lower.includes("каспи") || lower.includes("перевел") || lower.includes("перевела") || lower.includes("чек")) return "payment";
+    if ((lower.includes("заказ") && (lower.includes("оформ") || lower.includes("создан") || lower.includes("принят"))) || lower.includes("заказ №") || lower.includes("новый заказ")) return "order_created";
+    if (lower.includes("возражен") || lower.includes("дорого") || lower.includes("сомнев") || lower.includes("дороговато") || lower.includes("слишком дорого") || lower.includes("почему так дорого")) return "objection_handling";
+    if (lower.includes("закры") || lower.includes("купить") || lower.includes("оформить") || lower.includes("в корзину") || lower.includes("wa.me") || lower.includes("хочу заказать") || lower.includes("беру") || lower.includes("возьму") || lower.includes("заказываю") || lower.includes("буду брать") || lower.includes("покупаю")) return "closing_attempt";
+    if (lower.includes("товар") || lower.includes("предлож") || lower.includes("рекоменд") || lower.includes("₸") || lower.includes("тенге") || lower.includes("стоимость") || lower.includes("цена") || lower.includes("http") || lower.includes("![") || lower.includes("по цене") || lower.includes("артикул")) return "product_offer";
+    if (lower.includes("нужн") || lower.includes("ищу") || lower.includes("хочу") || lower.includes("подобр") || lower.includes("подскажите") || lower.includes("интересует") || lower.includes("покажите") || lower.includes("расскажите") || lower.includes("какие есть") || lower.includes("есть ли") || lower.includes("что у вас") || lower.includes("присмотрел") || lower.includes("выбираю")) return "need_detection";
+    if (lower.includes("привет") || lower.includes("здравств") || lower.includes("добрый") || lower.includes("салем") || lower.includes("ассалам")) return "greeting";
+    if (lower.includes("менеджер") || lower.includes("оператор") || lower.includes("человек") || lower.includes("специалист") || lower.includes("живой")) return "handover";
+    return null;
+  }
+
   async function processIncomingWhatsAppMessage(instance: any, from: string, text: string) {
     const { generateAiResponse, isOpenAiConfigured } = await import("./services/openai");
     
@@ -5999,6 +6012,7 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
                   conversationId: conversation.id,
                   role: "assistant",
                   content: paymentMessage,
+                  stageLabel: "payment",
                 });
                 
                 const { sendMessage: coreSendPayLink } = await import("./messaging/core");
@@ -6107,6 +6121,7 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
             conversationId: conversation.id,
             role: "assistant",
             content: confirmReply,
+            stageLabel: "payment",
           });
           
           const { sendMessage: coreSendPayment } = await import("./messaging/core");
@@ -6315,15 +6330,16 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
       
       console.log(`[WAHA] AI response: ${aiResult.content.substring(0, 100)}...`);
       
-      // Save assistant message
+      const stageLabel = detectProductionStage(text, aiResult.content);
+
       await storage.createAiMessage({
         conversationId: conversation.id,
         role: "assistant",
         content: aiResult.content,
         tagMatched: aiResult.matchedTag || null,
+        stageLabel,
       });
       
-      // Update conversation stage if suggested
       if (aiResult.suggestedStage) {
         await storage.updateAiConversation(conversation.id, {
           currentStage: aiResult.suggestedStage,

@@ -407,6 +407,8 @@ export function registerAiRopRoutes(
       const from = req.query.from ? new Date(req.query.from as string) : todayStart;
       const to = req.query.to ? new Date(req.query.to as string) : now;
 
+      await backfillConversationSuccess(pool, tenantId, from, to);
+
       const stages = [
         "greeting", "need_detection", "product_offer", "objection_handling",
         "closing_attempt", "order_created", "payment", "handover",
@@ -929,11 +931,13 @@ export function registerAiRopRoutes(
           from = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
       }
 
+      await backfillConversationSuccess(pool, tenantId, from, now);
+
       const result = await pool.query(`
         SELECT
           COUNT(*)::int AS total_dialogs,
           COUNT(*) FILTER (WHERE success = true)::int AS successful_dialogs,
-          COUNT(*) FILTER (WHERE success = false)::int AS failed_dialogs,
+          COUNT(*) FILTER (WHERE success = false AND status != 'open')::int AS failed_dialogs,
           COUNT(*) FILTER (WHERE stage_exit = 'handover' OR status = 'handoff')::int AS handover_count
         FROM ai_conversations
         WHERE tenant_id = $1 AND created_at >= $2 AND created_at <= $3
@@ -1553,13 +1557,70 @@ export function registerAiRopRoutes(
 
 function detectStageFromContent(userMessage: string, aiResponse: string): string | null {
   const lower = (userMessage + " " + aiResponse).toLowerCase();
-  if (lower.includes("оплат") || lower.includes("kaspi") || lower.includes("каспи")) return "payment";
-  if (lower.includes("заказ") && (lower.includes("оформ") || lower.includes("создан"))) return "order_created";
-  if (lower.includes("возражен") || lower.includes("дорого") || lower.includes("сомнев")) return "objection_handling";
-  if (lower.includes("закры") || lower.includes("купить") || lower.includes("оформить")) return "closing_attempt";
-  if (lower.includes("товар") || lower.includes("предлож") || lower.includes("рекоменд")) return "product_offer";
-  if (lower.includes("нужн") || lower.includes("ищу") || lower.includes("хочу") || lower.includes("подобр")) return "need_detection";
-  if (lower.includes("привет") || lower.includes("здравств") || lower.includes("добрый")) return "greeting";
-  if (lower.includes("менеджер") || lower.includes("оператор") || lower.includes("человек")) return "handover";
+  if (lower.includes("оплат") || lower.includes("kaspi") || lower.includes("каспи") || lower.includes("перевел") || lower.includes("перевела") || lower.includes("чек")) return "payment";
+  if ((lower.includes("заказ") && (lower.includes("оформ") || lower.includes("создан") || lower.includes("принят"))) || lower.includes("заказ №") || lower.includes("новый заказ")) return "order_created";
+  if (lower.includes("возражен") || lower.includes("дорого") || lower.includes("сомнев") || lower.includes("дороговато") || lower.includes("слишком дорого")) return "objection_handling";
+  if (lower.includes("закры") || lower.includes("купить") || lower.includes("оформить") || lower.includes("в корзину") || lower.includes("wa.me") || lower.includes("хочу заказать") || lower.includes("беру") || lower.includes("возьму") || lower.includes("заказываю") || lower.includes("буду брать") || lower.includes("покупаю")) return "closing_attempt";
+  if (lower.includes("товар") || lower.includes("предлож") || lower.includes("рекоменд") || lower.includes("₸") || lower.includes("тенге") || lower.includes("стоимость") || lower.includes("цена") || lower.includes("http") || lower.includes("![") || lower.includes("по цене") || lower.includes("артикул")) return "product_offer";
+  if (lower.includes("нужн") || lower.includes("ищу") || lower.includes("хочу") || lower.includes("подобр") || lower.includes("подскажите") || lower.includes("интересует") || lower.includes("покажите") || lower.includes("расскажите") || lower.includes("какие есть") || lower.includes("есть ли") || lower.includes("что у вас") || lower.includes("присмотрел") || lower.includes("выбираю")) return "need_detection";
+  if (lower.includes("привет") || lower.includes("здравств") || lower.includes("добрый") || lower.includes("салем") || lower.includes("ассалам")) return "greeting";
+  if (lower.includes("менеджер") || lower.includes("оператор") || lower.includes("человек") || lower.includes("специалист") || lower.includes("живой")) return "handover";
   return null;
+}
+
+const backfillCache = new Map<string, number>();
+
+async function backfillConversationSuccess(pool: any, tenantId: string, from: Date, to: Date): Promise<void> {
+  const cacheKey = `backfill:${tenantId}`;
+  const lastRun = backfillCache.get(cacheKey) || 0;
+  if (Date.now() - lastRun < 120000) return;
+  backfillCache.set(cacheKey, Date.now());
+
+  try {
+    await pool.query(`
+      UPDATE ai_conversations SET success = true
+      WHERE tenant_id = $1 AND created_at >= $2 AND created_at <= $3
+        AND success IS NOT true
+        AND customer_phone IS NOT NULL
+        AND EXISTS (
+          SELECT 1 FROM orders o
+          WHERE o.tenant_id = $1
+            AND o.payment_status IN ('paid', 'prepayment', 'installment', 'credit', 'kaspi_red')
+            AND (
+              o.customer_phone = ai_conversations.customer_phone
+              OR REGEXP_REPLACE(o.customer_phone, '[^0-9]', '', 'g') = REGEXP_REPLACE(ai_conversations.customer_phone, '[^0-9]', '', 'g')
+              OR RIGHT(REGEXP_REPLACE(o.customer_phone, '[^0-9]', '', 'g'), 10) = RIGHT(REGEXP_REPLACE(ai_conversations.customer_phone, '[^0-9]', '', 'g'), 10)
+            )
+            AND o.created_at >= ai_conversations.created_at
+            AND o.created_at <= ai_conversations.created_at + INTERVAL '7 days'
+        )
+    `, [tenantId, from.toISOString(), to.toISOString()]);
+
+    await pool.query(`
+      UPDATE ai_messages SET stage_label = sub.detected_stage
+      FROM (
+        SELECT m.id,
+          CASE
+            WHEN LOWER(m.content || ' ' || COALESCE(
+              (SELECT m2.content FROM ai_messages m2 WHERE m2.conversation_id = m.conversation_id AND m2.role = 'assistant' AND m2.created_at > m.created_at ORDER BY m2.created_at LIMIT 1), ''
+            )) ~ '(оплат|kaspi|каспи|перевел|перевела)' THEN 'payment'
+            WHEN LOWER(m.content) ~ '(заказ.*(оформ|создан|принят)|заказ №|новый заказ)' THEN 'order_created'
+            WHEN LOWER(m.content) ~ '(возражен|дорого|сомнев|дороговато)' THEN 'objection_handling'
+            WHEN LOWER(m.content) ~ '(закры|купить|оформить|в корзину|wa\\.me|хочу заказать|беру|возьму|заказываю|покупаю)' THEN 'closing_attempt'
+            WHEN LOWER(m.content) ~ '(товар|предлож|рекоменд|₸|тенге|стоимость|цена|http|!\\[|по цене)' THEN 'product_offer'
+            WHEN LOWER(m.content) ~ '(нужн|ищу|хочу|подобр|подскажите|интересует|покажите|расскажите|какие есть|есть ли)' THEN 'need_detection'
+            WHEN LOWER(m.content) ~ '(привет|здравств|добрый|салем|ассалам)' THEN 'greeting'
+            WHEN LOWER(m.content) ~ '(менеджер|оператор|человек|специалист)' THEN 'handover'
+            ELSE NULL
+          END AS detected_stage
+        FROM ai_messages m
+        JOIN ai_conversations c ON c.id = m.conversation_id
+        WHERE c.tenant_id = $1 AND m.stage_label IS NULL AND c.created_at >= $2 AND c.created_at <= $3
+        LIMIT 500
+      ) sub
+      WHERE ai_messages.id = sub.id AND sub.detected_stage IS NOT NULL
+    `, [tenantId, from.toISOString(), to.toISOString()]);
+  } catch (err) {
+    console.error("[Backfill] Error backfilling conversation data:", err);
+  }
 }
