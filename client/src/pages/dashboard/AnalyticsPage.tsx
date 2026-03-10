@@ -25,7 +25,12 @@ import {
   Target,
   Tag,
   Globe,
+  Settings,
+  Bot,
+  Banknote,
+  Shield,
 } from "lucide-react";
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -34,6 +39,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { CardSkeleton } from "@/components/LoadingSpinner";
@@ -58,6 +64,13 @@ interface OverviewMetrics {
   whatsappConversion: number;
 }
 
+interface PaymentBreakdownItem {
+  method: string;
+  label: string;
+  revenue: number;
+  count: number;
+}
+
 interface OverviewData {
   current: OverviewMetrics;
   previous: OverviewMetrics;
@@ -69,6 +82,11 @@ interface OverviewData {
     conversionRate: number;
     abandonedCarts: number;
   };
+  netRevenue: number;
+  totalCommissions: number;
+  aiRevenue: number;
+  aiOrdersCount: number;
+  paymentBreakdown: PaymentBreakdownItem[];
 }
 
 interface FunnelData {
@@ -324,7 +342,168 @@ function FunnelStep({
   );
 }
 
+const PAYMENT_COLORS: Record<string, string> = {
+  paid: "#34d399",
+  prepayment: "#38bdf8",
+  installment: "#2dd4bf",
+  credit: "#818cf8",
+  kaspi_red: "#fb7185",
+};
+
+const COMMISSION_LABELS: Record<string, string> = {
+  paid: "Полная оплата",
+  prepayment: "Предоплата",
+  installment: "Рассрочка",
+  credit: "Кредит",
+  kaspi_red: "Kaspi RED",
+};
+
+function CommissionSettingsDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const { toast } = useToast();
+  const { data } = useQuery<{ rates: Record<string, number> }>({
+    queryKey: ["/api/settings/commissions"],
+  });
+  const [localRates, setLocalRates] = useState<Record<string, number> | null>(null);
+
+  const rates = localRates || data?.rates || {};
+
+  const saveMutation = useMutation({
+    mutationFn: async (newRates: Record<string, number>) => {
+      await apiRequest("PATCH", "/api/settings/commissions", { rates: newRates });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/settings/commissions"] });
+      queryClient.invalidateQueries({ predicate: (q) => (q.queryKey[0] as string)?.includes("/api/analytics/overview") });
+      toast({ title: "Комиссии сохранены" });
+      onOpenChange(false);
+      setLocalRates(null);
+    },
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Комиссии банков (%)</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          {Object.entries(COMMISSION_LABELS).map(([key, label]) => (
+            <div key={key} className="flex items-center justify-between gap-3">
+              <Label className="text-sm">{label}</Label>
+              <div className="flex items-center gap-1">
+                <Input
+                  data-testid={`input-commission-${key}`}
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={0.5}
+                  className="w-20 text-right"
+                  value={rates[key] ?? 0}
+                  onChange={(e) => {
+                    setLocalRates({ ...rates, [key]: parseFloat(e.target.value) || 0 });
+                  }}
+                />
+                <span className="text-sm text-muted-foreground">%</span>
+              </div>
+            </div>
+          ))}
+        </div>
+        <DialogFooter>
+          <Button
+            data-testid="button-save-commissions"
+            onClick={() => saveMutation.mutate(localRates || rates)}
+            disabled={saveMutation.isPending}
+          >
+            {saveMutation.isPending ? "Сохраняю..." : "Сохранить"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function PaymentDonutChart({ breakdown }: { breakdown: PaymentBreakdownItem[] }) {
+  if (!breakdown || breakdown.length === 0) return null;
+
+  const total = breakdown.reduce((s, b) => s + b.revenue, 0);
+  const chartData = breakdown.map((b) => ({
+    name: b.label,
+    value: b.revenue,
+    method: b.method,
+  }));
+
+  const formatCurrency = (value: number) =>
+    new Intl.NumberFormat("ru-KZ", { maximumFractionDigits: 0 }).format(value) + " ₸";
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Banknote className="h-5 w-5" />
+          Источники оплат
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="flex flex-col md:flex-row items-center gap-6">
+          <div className="w-48 h-48 shrink-0">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={chartData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={45}
+                  outerRadius={80}
+                  paddingAngle={2}
+                  dataKey="value"
+                >
+                  {chartData.map((entry) => (
+                    <Cell
+                      key={entry.method}
+                      fill={PAYMENT_COLORS[entry.method] || "#94a3b8"}
+                    />
+                  ))}
+                </Pie>
+                <Tooltip
+                  formatter={(value: number) => formatCurrency(value)}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="flex-1 space-y-2">
+            {breakdown.map((b) => {
+              const pct = total > 0 ? Math.round((b.revenue / total) * 100) : 0;
+              return (
+                <div key={b.method} className="flex items-center justify-between text-sm">
+                  <div className="flex items-center gap-2">
+                    <div
+                      className="w-3 h-3 rounded-full shrink-0"
+                      style={{ backgroundColor: PAYMENT_COLORS[b.method] || "#94a3b8" }}
+                    />
+                    <span>{b.label}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-right">
+                    <span className="font-medium">{formatCurrency(b.revenue)}</span>
+                    <Badge variant="secondary" className="text-xs">{pct}%</Badge>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function OverviewTab({ dateRange }: { dateRange: DateRange }) {
+  const [commissionsOpen, setCommissionsOpen] = useState(false);
   const url = useMemo(() => {
     const { fromStr, toStr } = getDateRangeStrings(dateRange);
     return `/api/analytics/overview?from=${fromStr}&to=${toStr}`;
@@ -335,13 +514,13 @@ function OverviewTab({ dateRange }: { dateRange: DateRange }) {
   });
 
   const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat("ru-KZ").format(value) + " ₸";
+    return new Intl.NumberFormat("ru-KZ", { maximumFractionDigits: 0 }).format(Math.round(value)) + " ₸";
   };
 
   if (isLoading) {
     return (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {[...Array(8)].map((_, i) => (
+        {[...Array(12)].map((_, i) => (
           <CardSkeleton key={i} />
         ))}
       </div>
@@ -408,7 +587,7 @@ function OverviewTab({ dateRange }: { dateRange: DateRange }) {
         />
         <StatCard
           title="Конверсия"
-          value={`${(current?.conversionRate || 0).toFixed(2)}%`}
+          value={`${(current?.conversionRate || 0).toFixed(1)}%`}
           subtitle="Заказы / Посетители"
           icon={Target}
           change={changes?.conversionRate}
@@ -424,6 +603,81 @@ function OverviewTab({ dateRange }: { dateRange: DateRange }) {
           index={7}
         />
       </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.4 }}
+        >
+          <Card>
+            <CardContent className="p-5">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm text-muted-foreground mb-1">Чистая выручка (оценка)</p>
+                  <p className="text-2xl font-bold text-green-600">{formatCurrency(data?.netRevenue || 0)}</p>
+                  <p className="text-xs text-muted-foreground mt-1">За вычетом комиссий</p>
+                </div>
+                <div className="w-9 h-9 rounded-lg bg-green-500/10 flex items-center justify-center shrink-0">
+                  <Shield className="h-4 w-4 text-green-600" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.45 }}
+        >
+          <Card>
+            <CardContent className="p-5">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm text-muted-foreground mb-1">Комиссии банков</p>
+                  <p className="text-2xl font-bold text-red-500">{formatCurrency(data?.totalCommissions || 0)}</p>
+                  <p className="text-xs text-muted-foreground mt-1">Удержано платёжными системами</p>
+                </div>
+                <button
+                  onClick={() => setCommissionsOpen(true)}
+                  className="w-9 h-9 rounded-lg bg-red-500/10 flex items-center justify-center shrink-0 hover:bg-red-500/20 transition-colors"
+                  data-testid="button-open-commissions"
+                >
+                  <Settings className="h-4 w-4 text-red-500" />
+                </button>
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.5 }}
+        >
+          <Card>
+            <CardContent className="p-5">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm text-muted-foreground mb-1">Закрыто с помощью ИИ</p>
+                  <p className="text-2xl font-bold">{formatCurrency(data?.aiRevenue || 0)}</p>
+                  <p className="text-xs text-muted-foreground mt-1">{data?.aiOrdersCount || 0} заказов с участием бота</p>
+                </div>
+                <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                  <Bot className="h-4 w-4 text-primary" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+      </div>
+
+      {data?.paymentBreakdown && data.paymentBreakdown.length > 0 && (
+        <PaymentDonutChart breakdown={data.paymentBreakdown} />
+      )}
+
+      <CommissionSettingsDialog open={commissionsOpen} onOpenChange={setCommissionsOpen} />
     </div>
   );
 }

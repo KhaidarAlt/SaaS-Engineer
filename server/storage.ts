@@ -285,7 +285,7 @@ export interface IStorage {
   upsertCartSession(data: InsertCartSession): Promise<CartSession>;
   updateCartSession(id: string, tenantId: string, data: Partial<InsertCartSession>): Promise<CartSession | undefined>;
   getCartSessions(tenantId: string, filters?: { status?: string; from?: Date; to?: Date }): Promise<CartSession[]>;
-  markAbandonedCarts(thresholdHours: number): Promise<number>;
+  markAbandonedCarts(thresholdHours: number, tenantId?: string): Promise<number>;
   
   getAnalyticsEvents(tenantId: string, from: Date, to: Date): Promise<AnalyticsEvent[]>;
   getAnalyticsOverview(tenantId: string, from: Date, to: Date): Promise<{
@@ -1122,16 +1122,21 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(cartSessions.lastActivityAt));
   }
 
-  async markAbandonedCarts(thresholdHours: number): Promise<number> {
+  async markAbandonedCarts(thresholdHours: number, tenantId?: string): Promise<number> {
     const threshold = new Date();
     threshold.setHours(threshold.getHours() - thresholdHours);
     
+    const conditions = [
+      eq(cartSessions.status, 'active'),
+      lte(cartSessions.lastActivityAt, threshold),
+    ];
+    if (tenantId) {
+      conditions.push(eq(cartSessions.tenantId, tenantId));
+    }
+    
     const result = await db.update(cartSessions)
       .set({ status: 'abandoned' })
-      .where(and(
-        eq(cartSessions.status, 'active'),
-        lte(cartSessions.lastActivityAt, threshold)
-      ));
+      .where(and(...conditions));
     return result.rowCount || 0;
   }
 

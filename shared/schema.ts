@@ -83,6 +83,7 @@ export const tenants = pgTable("tenants", {
   showFloatingWhatsApp: boolean("show_floating_whatsapp").notNull().default(true),
   showAiConsultant: boolean("show_ai_consultant").notNull().default(true),
   catalogTemplate: text("catalog_template").notNull().default("universal"), // universal, fashion, food
+  commissionRates: jsonb("commission_rates").$type<Record<string, number>>(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

@@ -4082,25 +4082,131 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
   });
   
   // ============ ANALYTICS DASHBOARD ENDPOINTS ============
+  const DEFAULT_COMMISSION_RATES: Record<string, number> = {
+    paid: 1,
+    prepayment: 1,
+    installment: 10,
+    credit: 10,
+    kaspi_red: 11,
+  };
+
+  app.get("/api/settings/commissions", requireAuth, async (req, res) => {
+    try {
+      const tenant = await storage.getTenant(req.user!.tenantId!);
+      const rates = (tenant?.commissionRates as Record<string, number>) || DEFAULT_COMMISSION_RATES;
+      res.json({ rates: { ...DEFAULT_COMMISSION_RATES, ...rates } });
+    } catch (error) {
+      console.error("Get commissions error:", error);
+      res.status(500).json({ message: "Ошибка получения комиссий" });
+    }
+  });
+
+  app.patch("/api/settings/commissions", requireAuth, async (req, res) => {
+    try {
+      const { rates } = req.body;
+      if (!rates || typeof rates !== "object") {
+        return res.status(400).json({ message: "Некорректные данные" });
+      }
+      const sanitized: Record<string, number> = {};
+      for (const key of Object.keys(DEFAULT_COMMISSION_RATES)) {
+        const val = Number(rates[key]);
+        sanitized[key] = isNaN(val) ? DEFAULT_COMMISSION_RATES[key] : Math.max(0, Math.min(100, val));
+      }
+      await storage.updateTenant(req.user!.tenantId!, { commissionRates: sanitized });
+      res.json({ rates: sanitized });
+    } catch (error) {
+      console.error("Update commissions error:", error);
+      res.status(500).json({ message: "Ошибка обновления комиссий" });
+    }
+  });
+
   app.get("/api/analytics/overview", requireAuth, async (req, res) => {
     try {
       const { from, to } = req.query;
       const fromDate = from ? new Date(from as string) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
       const toDate = to ? new Date(to as string) : new Date();
+      const tenantId = req.user!.tenantId!;
+
+      await storage.markAbandonedCarts(2, tenantId);
       
-      const overview = await storage.getAnalyticsOverview(req.user!.tenantId!, fromDate, toDate);
+      const overview = await storage.getAnalyticsOverview(tenantId, fromDate, toDate);
       
-      // Calculate previous period for comparison
       const periodLength = toDate.getTime() - fromDate.getTime();
       const prevFrom = new Date(fromDate.getTime() - periodLength);
       const prevTo = new Date(fromDate.getTime());
-      const prevOverview = await storage.getAnalyticsOverview(req.user!.tenantId!, prevFrom, prevTo);
+      const prevOverview = await storage.getAnalyticsOverview(tenantId, prevFrom, prevTo);
       
       const calculateChange = (current: number, previous: number) => {
         if (previous === 0) return current > 0 ? 100 : 0;
         return ((current - previous) / previous) * 100;
       };
-      
+
+      const tenant = await storage.getTenant(tenantId);
+      const commRates = { ...DEFAULT_COMMISSION_RATES, ...((tenant?.commissionRates as Record<string, number>) || {}) };
+
+      const paidStatuses = ["paid", "prepayment", "installment", "credit", "kaspi_red"];
+      const allOrders = await storage.getOrders(tenantId);
+      const periodPaidOrders = allOrders.filter(o => {
+        const d = new Date(o.createdAt);
+        return d >= fromDate && d <= toDate && paidStatuses.includes(o.paymentStatus || "");
+      });
+
+      let totalCommissions = 0;
+      const breakdownMap: Record<string, { revenue: number; count: number }> = {};
+      for (const ps of paidStatuses) {
+        breakdownMap[ps] = { revenue: 0, count: 0 };
+      }
+      for (const order of periodPaidOrders) {
+        const total = parseFloat(order.total);
+        const ps = order.paymentStatus || "paid";
+        const rate = commRates[ps] ?? 1;
+        totalCommissions += total * (rate / 100);
+        if (breakdownMap[ps]) {
+          breakdownMap[ps].revenue += total;
+          breakdownMap[ps].count += 1;
+        }
+      }
+      const paidRevenue = periodPaidOrders.reduce((s, o) => s + parseFloat(o.total), 0);
+      const netRevenue = Math.round(paidRevenue - totalCommissions);
+      totalCommissions = Math.round(totalCommissions);
+
+      const paymentLabels: Record<string, string> = {
+        paid: "Полная оплата",
+        prepayment: "Предоплата",
+        installment: "Рассрочка",
+        credit: "Кредит",
+        kaspi_red: "Kaspi RED",
+      };
+      const paymentBreakdown = paidStatuses
+        .filter(ps => breakdownMap[ps].count > 0)
+        .map(ps => ({
+          method: ps,
+          label: paymentLabels[ps] || ps,
+          revenue: Math.round(breakdownMap[ps].revenue),
+          count: breakdownMap[ps].count,
+        }));
+
+      const aiConvPhones = new Set<string>();
+      try {
+        const convs = await storage.getAiConversations(tenantId, 10000);
+        const windowStart = new Date(fromDate.getTime() - 7 * 24 * 60 * 60 * 1000);
+        for (const c of convs) {
+          if (c.customerPhone && new Date(c.updatedAt) >= windowStart) {
+            aiConvPhones.add(c.customerPhone.replace(/\D/g, "").slice(-10));
+          }
+        }
+      } catch {}
+      let aiRevenue = 0;
+      let aiOrdersCount = 0;
+      for (const order of periodPaidOrders) {
+        const cleanPhone = (order.customerPhone || "").replace(/\D/g, "").slice(-10);
+        if (cleanPhone && aiConvPhones.has(cleanPhone)) {
+          aiRevenue += parseFloat(order.total);
+          aiOrdersCount++;
+        }
+      }
+      aiRevenue = Math.round(aiRevenue);
+
       res.json({
         current: overview,
         previous: prevOverview,
@@ -4112,6 +4218,11 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
           conversionRate: calculateChange(overview.conversionRate, prevOverview.conversionRate),
           abandonedCarts: calculateChange(overview.abandonedCarts, prevOverview.abandonedCarts),
         },
+        netRevenue,
+        totalCommissions,
+        aiRevenue,
+        aiOrdersCount,
+        paymentBreakdown,
       });
     } catch (error) {
       console.error("Analytics overview error:", error);
