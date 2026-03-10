@@ -576,7 +576,7 @@ export function registerGrowthRoutes(
   app.get("/api/ai-rop/growth/audience", requireAuth, requireAiAccess, async (req: Request, res: Response) => {
     try {
       const tenantId = req.user!.tenantId!;
-      const { inactiveDays, abandoned, active, hasInbound, limit: rawLimit, offset: rawOffset } = req.query;
+      const { inactiveDays, abandoned, active, hasInbound, source, limit: rawLimit, offset: rawOffset } = req.query;
       const limitNum = Math.max(1, Math.min(Number(rawLimit) || 50, 200));
       const offsetNum = Math.max(0, Number(rawOffset) || 0);
 
@@ -584,6 +584,17 @@ export function registerGrowthRoutes(
         sql`tenant_id = ${tenantId}`,
         sql`opt_out = false`,
       ];
+
+      if (source && typeof source === "string") {
+        const allowed = ["whatsapp", "waha_sync", "order_form", "meta_warm", "db_sync", "csv_import", "crm_import"];
+        if (allowed.includes(source)) {
+          if (source === "whatsapp") {
+            filters.push(sql`source IN ('whatsapp', 'waha_sync')`);
+          } else {
+            filters.push(sql`source = ${source}`);
+          }
+        }
+      }
 
       if (inactiveDays) {
         const days = Math.max(1, Math.min(Number(inactiveDays) || 30, 365));

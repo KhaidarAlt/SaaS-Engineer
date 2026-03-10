@@ -24,10 +24,11 @@ import {
   AlertCircle, Loader2, Phone, MessageSquare, ArrowDownUp, Save,
 } from "lucide-react";
 
-type FilterPreset = "all" | "inactive" | "abandoned" | "active" | "hasInbound";
+type FilterPreset = "all" | "whatsapp" | "inactive" | "abandoned" | "active" | "hasInbound";
 
 const FILTER_LABELS: Record<FilterPreset, string> = {
   all: "Все контакты",
+  whatsapp: "Только WhatsApp",
   inactive: "Неактивные (30+ дн)",
   abandoned: "Брошенные диалоги",
   active: "Активные (7 дн)",
@@ -42,6 +43,7 @@ export function AudiencePage() {
 
   const filterParams = (): Record<string, string> => {
     switch (filter) {
+      case "whatsapp": return { source: "whatsapp" };
       case "inactive": return { inactiveDays: "30" };
       case "abandoned": return { abandoned: "true" };
       case "active": return { active: "true" };
@@ -283,13 +285,19 @@ function SyncStatusBanner({ sync }: { sync: GrowthSyncRun }) {
 }
 
 function ContactRow({ contact }: { contact: GrowthContact }) {
-  const sourceLabels: Record<string, string> = {
-    waha_sync: "WAHA",
-    meta_warm: "Meta",
-    csv_import: "CSV",
-    crm_import: "CRM",
-    organic: "Органик",
+  const sourceConfig: Record<string, { label: string; variant: "default" | "secondary" | "outline" | "destructive" }> = {
+    whatsapp: { label: "WhatsApp", variant: "default" },
+    waha_sync: { label: "WhatsApp", variant: "default" },
+    meta_warm: { label: "Meta", variant: "secondary" },
+    order_form: { label: "Форма заказа", variant: "outline" },
+    db_sync: { label: "Авто", variant: "secondary" },
+    csv_import: { label: "CSV", variant: "secondary" },
+    crm_import: { label: "CRM", variant: "secondary" },
+    organic: { label: "Органик", variant: "secondary" },
   };
+
+  const src = sourceConfig[contact.source || ""] || { label: contact.source, variant: "secondary" as const };
+  const isOrderOnly = contact.tags?.includes("order_only");
 
   return (
     <Card className="hover-elevate" data-testid={`contact-row-${contact.id}`}>
@@ -308,16 +316,11 @@ function ContactRow({ contact }: { contact: GrowthContact }) {
 
         <div className="flex items-center gap-3 text-xs text-muted-foreground">
           {contact.source && (
-            <Badge variant="secondary" className="text-[10px]" data-testid={`badge-source-${contact.id}`}>
-              {sourceLabels[contact.source] ?? contact.source}
+            <Badge variant={src.variant} className={`text-[10px] ${isOrderOnly ? "opacity-60" : ""}`} data-testid={`badge-source-${contact.id}`}>
+              {src.label}
             </Badge>
           )}
-          {contact.lastChannelProvider && (
-            <Badge variant="outline" className="text-[10px]">
-              {contact.lastChannelProvider}
-            </Badge>
-          )}
-          <span className="flex items-center gap-0.5" title="Входящие">
+          <span className="flex items-center gap-0.5" title="Входящие / Исходящие">
             <ArrowDownUp className="h-3 w-3" />
             {contact.inboundCount ?? 0}/{contact.outboundCount ?? 0}
           </span>

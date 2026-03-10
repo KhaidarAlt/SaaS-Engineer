@@ -105,6 +105,7 @@ interface PhoneEntry {
   firstSeen: Date;
   lastSeen: Date;
   msgCount: number;
+  hasWhatsAppMessages: boolean;
 }
 
 interface OrderEntry {
@@ -121,7 +122,9 @@ interface MsgEntry {
   inbound: number;
   outbound: number;
   lastInbound: Date | null;
+  firstMsg: Date | null;
   lastPreview: string | null;
+  pushName: string | null;
 }
 
 async function syncFromLocalData(tenantId: string): Promise<{ scanned: number; upserted: number; errors: number }> {
@@ -153,6 +156,7 @@ async function syncFromLocalData(tenantId: string): Promise<{ scanned: number; u
         AND c.customer_phone != ''
         AND c.customer_phone NOT LIKE '%@g.us%'
         AND c.customer_phone != 'status@broadcast'
+        AND c.customer_phone NOT LIKE '%@newsletter%'
       GROUP BY c.customer_phone, c.customer_name, c.channel, c.success, c.status
     `);
 
@@ -174,6 +178,7 @@ async function syncFromLocalData(tenantId: string): Promise<{ scanned: number; u
           firstSeen: existing ? new Date(Math.min(existing.firstSeen.getTime(), new Date(row.first_seen || Date.now()).getTime())) : new Date(row.first_seen || Date.now()),
           lastSeen: new Date(row.last_seen || Date.now()),
           msgCount: (existing?.msgCount || 0) + (row.msg_count || 0),
+          hasWhatsAppMessages: existing?.hasWhatsAppMessages || false,
         });
       }
     }
@@ -219,19 +224,6 @@ async function syncFromLocalData(tenantId: string): Promise<{ scanned: number; u
         orderCount: row.order_count || 0,
         lastOrder: new Date(row.last_order),
       });
-
-      if (!phoneMap.has(phone)) {
-        scanned++;
-        phoneMap.set(phone, {
-          name: row.name || null,
-          channel: "whatsapp",
-          success: rowIsPaid || rowIsCompleted ? true : null,
-          convStatus: "open",
-          firstSeen: new Date(row.first_order || Date.now()),
-          lastSeen: new Date(row.last_order || Date.now()),
-          msgCount: 0,
-        });
-      }
     }
   } catch (err) {
     errors++;
@@ -244,16 +236,32 @@ async function syncFromLocalData(tenantId: string): Promise<{ scanned: number; u
         sub.phone,
         sub.inbound_count,
         sub.outbound_count,
-        sub.last_inbound
+        sub.last_inbound,
+        sub.first_msg,
+        sub.push_name
       FROM (
         SELECT
           CASE WHEN direction = 'inbound' THEN from_address ELSE to_address END AS phone,
           COUNT(*) FILTER (WHERE direction = 'inbound')::int AS inbound_count,
           COUNT(*) FILTER (WHERE direction = 'outbound')::int AS outbound_count,
-          MAX(CASE WHEN direction = 'inbound' THEN received_at END) AS last_inbound
+          MAX(CASE WHEN direction = 'inbound' THEN received_at END) AS last_inbound,
+          MIN(received_at) AS first_msg,
+          MAX(CASE WHEN direction = 'inbound' THEN
+            COALESCE(
+              meta->>'pushName',
+              meta->>'senderName',
+              meta->'key'->>'pushName'
+            )
+          END) AS push_name
         FROM messaging_messages
         WHERE tenant_id = ${tenantId}
           AND channel IN ('whatsapp', 'whatsapp_cloud')
+          AND from_address NOT LIKE '%@g.us'
+          AND to_address NOT LIKE '%@g.us'
+          AND from_address NOT LIKE '%@newsletter'
+          AND to_address NOT LIKE '%@newsletter'
+          AND from_address != 'status@broadcast'
+          AND to_address != 'status@broadcast'
         GROUP BY phone
         HAVING COUNT(*) > 0
       ) sub
@@ -263,14 +271,41 @@ async function syncFromLocalData(tenantId: string): Promise<{ scanned: number; u
     console.log(`[WahaSync/DB] messaging_messages query: ${msgRows.length} rows`);
 
     for (const row of msgRows) {
-      const phone = normalizePhone(String(row.phone));
+      const rawPhone = String(row.phone);
+      if (rawPhone.includes("@g.us") || rawPhone.includes("@newsletter") || rawPhone === "status@broadcast") continue;
+
+      const phone = normalizePhone(rawPhone);
       if (!phone || phone.length < 7) continue;
+
+      const existing = msgMap.get(phone);
       msgMap.set(phone, {
-        inbound: row.inbound_count || 0,
-        outbound: row.outbound_count || 0,
-        lastInbound: row.last_inbound ? new Date(row.last_inbound) : null,
+        inbound: (existing?.inbound || 0) + (row.inbound_count || 0),
+        outbound: (existing?.outbound || 0) + (row.outbound_count || 0),
+        lastInbound: row.last_inbound ? new Date(row.last_inbound) : existing?.lastInbound || null,
+        firstMsg: row.first_msg ? new Date(row.first_msg) : existing?.firstMsg || null,
         lastPreview: null,
+        pushName: row.push_name || existing?.pushName || null,
       });
+
+      if (!phoneMap.has(phone)) {
+        scanned++;
+        phoneMap.set(phone, {
+          name: row.push_name || null,
+          channel: "whatsapp",
+          success: null,
+          convStatus: "open",
+          firstSeen: row.first_msg ? new Date(row.first_msg) : new Date(),
+          lastSeen: row.last_inbound ? new Date(row.last_inbound) : new Date(row.first_msg || Date.now()),
+          msgCount: (row.inbound_count || 0) + (row.outbound_count || 0),
+          hasWhatsAppMessages: true,
+        });
+      } else {
+        const entry = phoneMap.get(phone)!;
+        entry.hasWhatsAppMessages = true;
+        if (row.push_name && !entry.name) {
+          entry.name = row.push_name;
+        }
+      }
     }
   } catch (err) {
     errors++;
@@ -284,6 +319,9 @@ async function syncFromLocalData(tenantId: string): Promise<{ scanned: number; u
       const order = orderMap.get(phone);
       const msg = msgMap.get(phone);
 
+      const hasRealWhatsApp = conv.hasWhatsAppMessages || !!msg;
+      const source = hasRealWhatsApp ? "whatsapp" : (order ? "order_form" : "db_sync");
+
       const tags: string[] = [];
       if (order?.hasOrder) tags.push("has_order");
       if (order?.isPaid || order?.isCompleted) tags.push("paid");
@@ -291,15 +329,16 @@ async function syncFromLocalData(tenantId: string): Promise<{ scanned: number; u
       const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
       if (conv.lastSeen > thirtyDaysAgo) tags.push("active");
       if (conv.convStatus === "handoff") tags.push("handoff");
+      if (!hasRealWhatsApp && order) tags.push("order_only");
 
       await upsertContact(tenantId, phone, {
-        name: conv.name || order?.name || null,
-        source: "db_sync",
-        lastInboundAt: msg?.lastInbound || conv.lastSeen,
+        name: conv.name || msg?.pushName || order?.name || null,
+        source,
+        lastInboundAt: msg?.lastInbound || (hasRealWhatsApp ? conv.lastSeen : null),
         lastChannel: "whatsapp",
         lastChannelProvider: "whatsapp:waha",
         lastMessagePreview: msg?.lastPreview || null,
-        firstSeenAt: conv.firstSeen,
+        firstSeenAt: msg?.firstMsg || conv.firstSeen,
         inboundCount: msg?.inbound || 0,
         outboundCount: msg?.outbound || 0,
         tags,
@@ -317,12 +356,50 @@ async function syncFromLocalData(tenantId: string): Promise<{ scanned: number; u
     }
   }
 
+  for (const [phone, order] of orderMap) {
+    if (phoneMap.has(phone)) continue;
+    try {
+      scanned++;
+      const msg = msgMap.get(phone);
+      const hasRealWhatsApp = !!msg;
+
+      const tags: string[] = ["has_order"];
+      if (order.isPaid || order.isCompleted) tags.push("paid");
+      if (!hasRealWhatsApp) tags.push("order_only");
+
+      await upsertContact(tenantId, phone, {
+        name: order.name || null,
+        source: hasRealWhatsApp ? "whatsapp" : "order_form",
+        lastInboundAt: msg?.lastInbound || null,
+        lastChannel: "whatsapp",
+        lastChannelProvider: "whatsapp:waha",
+        firstSeenAt: order.lastOrder,
+        inboundCount: msg?.inbound || 0,
+        outboundCount: msg?.outbound || 0,
+        tags,
+        meta: {
+          orderCount: order.orderCount,
+          totalRevenue: order.totalRevenue,
+          isPaid: order.isPaid,
+          isCompleted: order.isCompleted,
+        },
+      });
+      upserted++;
+    } catch (err) {
+      errors++;
+      console.error(`[WahaSync/DB] Error upserting order contact ${phone}:`, err);
+    }
+  }
+
   console.log(`[WahaSync/DB] Local sync done for tenant ${tenantId}: ${upserted} upserted from ${scanned} scanned (errors: ${errors})`);
   return { scanned, upserted, errors };
 }
 
 function normalizePhone(phone: string): string {
   let cleaned = phone.replace(/@c\.us$|@s\.whatsapp\.net$|@lid$/, "").replace(/[^0-9]/g, "");
+  if (cleaned.length === 11 && cleaned.startsWith("8")) {
+    cleaned = "7" + cleaned.substring(1);
+  }
   return cleaned;
 }
 
@@ -351,11 +428,16 @@ async function upsertContact(tenantId: string, phone: string, data: {
     };
     if (data.lastChannelProvider) updates.lastChannelProvider = data.lastChannelProvider;
     if (data.name && !existing[0].name) updates.name = data.name;
+    const sourcePriority: Record<string, number> = { whatsapp: 3, waha_sync: 3, db_sync: 1, order_form: 0 };
+    const currentPriority = sourcePriority[existing[0].source || ""] ?? 1;
+    const newPriority = sourcePriority[data.source] ?? 1;
+    if (newPriority > currentPriority || (existing[0].source === "db_sync" && data.source === "order_form")) {
+      updates.source = data.source;
+    }
     if (data.lastInboundAt && (!existing[0].lastInboundAt || data.lastInboundAt > existing[0].lastInboundAt)) {
       updates.lastInboundAt = data.lastInboundAt;
     }
     if (data.lastMessagePreview) updates.lastMessagePreview = data.lastMessagePreview;
-    if (!existing[0].source) updates.source = data.source;
     if (data.inboundCount && data.inboundCount > (existing[0].inboundCount || 0)) {
       updates.inboundCount = data.inboundCount;
     }
