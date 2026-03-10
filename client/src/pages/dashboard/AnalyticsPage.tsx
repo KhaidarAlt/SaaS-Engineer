@@ -264,15 +264,21 @@ function FunnelStep({
   count,
   percentage,
   dropoff,
+  conversionFromPrev,
   isLast,
+  isFirst,
   index,
+  color,
 }: {
   name: string;
   count: number;
   percentage: number;
   dropoff: number;
+  conversionFromPrev: number;
   isLast: boolean;
+  isFirst: boolean;
   index: number;
+  color: string;
 }) {
   return (
     <motion.div
@@ -288,17 +294,30 @@ function FunnelStep({
             <div className="flex items-center gap-2">
               <span className="text-lg font-bold">{count.toLocaleString("ru-RU")}</span>
               <Badge variant="secondary" className="text-xs">
-                {percentage.toFixed(1)}%
+                {Math.round(percentage)}%
               </Badge>
             </div>
           </div>
-          <Progress value={percentage} className="h-3" />
+          <div className="h-3 w-full rounded-full bg-secondary overflow-hidden">
+            <motion.div
+              initial={{ width: 0 }}
+              animate={{ width: `${percentage}%` }}
+              transition={{ duration: 0.6, delay: index * 0.15 }}
+              className={`h-full rounded-full ${color}`}
+            />
+          </div>
         </div>
       </div>
+      {!isFirst && conversionFromPrev > 0 && (
+        <div className="ml-4 mt-1 mb-1 text-xs text-muted-foreground flex items-center gap-1">
+          <ArrowDownRight className="h-3 w-3 text-muted-foreground" />
+          <span>Конверсия из предыдущего: {Math.round(conversionFromPrev)}%</span>
+        </div>
+      )}
       {!isLast && dropoff > 0 && (
-        <div className="ml-4 my-2 text-sm text-muted-foreground flex items-center gap-1">
+        <div className="ml-4 my-1 text-sm text-muted-foreground flex items-center gap-1">
           <TrendingDown className="h-3 w-3 text-orange-500" />
-          <span>Отток: {dropoff.toFixed(1)}%</span>
+          <span>Отток: {Math.round(dropoff)}%</span>
         </div>
       )}
     </motion.div>
@@ -415,14 +434,14 @@ function FunnelTab({ dateRange }: { dateRange: DateRange }) {
     return `/api/analytics/funnel?from=${fromStr}&to=${toStr}`;
   }, [dateRange]);
   
-  const { data, isLoading } = useQuery<FunnelData>({
+  const { data, isLoading } = useQuery<FunnelData & { avgCheck?: number }>({
     queryKey: [url],
   });
 
   if (isLoading) {
     return (
       <div className="space-y-4">
-        {[...Array(5)].map((_, i) => (
+        {[...Array(4)].map((_, i) => (
           <CardSkeleton key={i} />
         ))}
       </div>
@@ -431,6 +450,15 @@ function FunnelTab({ dateRange }: { dateRange: DateRange }) {
 
   const funnel = data?.funnel || [];
   const maxCount = funnel.length > 0 ? funnel[0].count : 0;
+  const lastCount = funnel.length > 0 ? funnel[funnel.length - 1]?.count || 0 : 0;
+  const overallConversion = maxCount > 0 ? Math.round(lastCount / maxCount * 100) : 0;
+
+  const stepColors = [
+    "bg-blue-500",
+    "bg-indigo-500",
+    "bg-amber-500",
+    "bg-green-500",
+  ];
 
   return (
     <div className="space-y-6">
@@ -440,16 +468,20 @@ function FunnelTab({ dateRange }: { dateRange: DateRange }) {
             <BarChart3 className="h-5 w-5" />
             Воронка продаж
           </CardTitle>
-          <CardDescription>
-            Общая конверсия: {maxCount > 0 && funnel.length > 0 
-              ? ((funnel[funnel.length - 1]?.count || 0) / maxCount * 100).toFixed(2) 
-              : 0}%
+          <CardDescription className="flex items-center gap-3">
+            <span>Общая конверсия (Посетитель → Оплата): <strong className="text-foreground">{overallConversion}%</strong></span>
+            {data?.avgCheck && data.avgCheck > 0 && (
+              <span className="text-muted-foreground">· Средний чек: <strong className="text-foreground">{data.avgCheck.toLocaleString("ru-RU")} ₸</strong></span>
+            )}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {funnel.map((step, index) => {
             const percentage = maxCount > 0 ? (step.count / maxCount) * 100 : 0;
             const dropoff = index < funnel.length - 1 ? 100 - step.conversionToNext : 0;
+            const conversionFromPrev = index > 0 && funnel[index - 1].count > 0
+              ? (step.count / funnel[index - 1].count) * 100
+              : 0;
             return (
               <FunnelStep
                 key={step.step}
@@ -457,8 +489,11 @@ function FunnelTab({ dateRange }: { dateRange: DateRange }) {
                 count={step.count}
                 percentage={percentage}
                 dropoff={dropoff}
+                conversionFromPrev={conversionFromPrev}
                 isLast={index === funnel.length - 1}
+                isFirst={index === 0}
                 index={index}
+                color={stepColors[index] || "bg-primary"}
               />
             );
           })}

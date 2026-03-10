@@ -4124,18 +4124,36 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
       const { from, to } = req.query;
       const fromDate = from ? new Date(from as string) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
       const toDate = to ? new Date(to as string) : new Date();
+      const tenantId = req.user!.tenantId!;
       
-      const overview = await storage.getAnalyticsOverview(req.user!.tenantId!, fromDate, toDate);
+      const overview = await storage.getAnalyticsOverview(tenantId, fromDate, toDate);
       
+      const whatsappContacts = overview.whatsappClicks || overview.ordersCreated;
+
+      const paidStatuses = ["paid", "prepayment", "installment", "credit", "kaspi_red"];
+      const periodOrders = await storage.getOrders(tenantId);
+      const paidCount = periodOrders.filter(o => {
+        const orderDate = new Date(o.createdAt);
+        if (orderDate < fromDate || orderDate > toDate) return false;
+        return paidStatuses.includes(o.paymentStatus || "");
+      }).length;
+
+      const avgCheck = paidCount > 0
+        ? Math.round(periodOrders
+            .filter(o => {
+              const d = new Date(o.createdAt);
+              return d >= fromDate && d <= toDate && paidStatuses.includes(o.paymentStatus || "");
+            })
+            .reduce((s, o) => s + parseFloat(o.total), 0) / paidCount)
+        : 0;
+
       const funnel = [
-        { step: 'Посетители', count: overview.uniqueVisitors, conversionToNext: overview.uniqueVisitors > 0 ? (overview.addToCart / overview.uniqueVisitors * 100) : 0 },
-        { step: 'Добавили в корзину', count: overview.addToCart, conversionToNext: overview.addToCart > 0 ? (overview.checkoutStarts / overview.addToCart * 100) : 0 },
-        { step: 'Начали оформление', count: overview.checkoutStarts, conversionToNext: overview.checkoutStarts > 0 ? (overview.ordersCreated / overview.checkoutStarts * 100) : 0 },
-        { step: 'Заказ создан', count: overview.ordersCreated, conversionToNext: overview.ordersCreated > 0 ? (overview.whatsappClicks / overview.ordersCreated * 100) : 0 },
-        { step: 'Открыли WhatsApp', count: overview.whatsappClicks, conversionToNext: 100 },
+        { step: 'Посетители', count: overview.uniqueVisitors, conversionToNext: overview.uniqueVisitors > 0 ? Math.round(overview.addToCart / overview.uniqueVisitors * 100) : 0 },
+        { step: 'Интерес', count: overview.addToCart, conversionToNext: overview.addToCart > 0 ? Math.round(whatsappContacts / overview.addToCart * 100) : 0 },
+        { step: 'Написали в WhatsApp', count: whatsappContacts, conversionToNext: whatsappContacts > 0 ? Math.round(paidCount / whatsappContacts * 100) : 0 },
+        { step: 'Продажи (Оплачено)', count: paidCount, conversionToNext: 100 },
       ];
       
-      // Find bottleneck (biggest drop)
       let bottleneckIndex = 0;
       let biggestDrop = 100;
       for (let i = 0; i < funnel.length - 1; i++) {
@@ -4145,19 +4163,21 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
         }
       }
       
-      // Generate recommendations based on funnel
       const recommendations: string[] = [];
-      if (overview.uniqueVisitors > 10 && overview.cartConversion < 10) {
+      if (overview.uniqueVisitors > 10 && overview.addToCart < overview.uniqueVisitors * 0.05) {
         recommendations.push("Низкая конверсия в корзину. Улучшите фото товаров, добавьте подробные описания, сделайте CTA-кнопки заметнее.");
       }
-      if (overview.addToCart > 5 && overview.checkoutStarts < overview.addToCart * 0.3) {
-        recommendations.push("Много брошенных корзин. Упростите процесс оформления, добавьте информацию о доставке и оплате.");
+      if (overview.addToCart > 5 && whatsappContacts < overview.addToCart * 0.3) {
+        recommendations.push("Клиенты добавляют товары, но не пишут в WhatsApp. Упростите процесс оформления или сделайте кнопку WhatsApp заметнее.");
       }
-      if (overview.ordersCreated > 3 && overview.whatsappConversion < 50) {
-        recommendations.push("Клиенты не нажимают кнопку WhatsApp. Проверьте, заметна ли кнопка, или есть ли технические проблемы.");
+      if (whatsappContacts > 3 && paidCount < whatsappContacts * 0.3) {
+        recommendations.push("Мало продаж из переписок. Проработайте скрипты продаж, ускорьте ответы менеджеров, настройте AI-бота.");
+      }
+      if (paidCount > 0) {
+        recommendations.push(`Средний чек оплаченных заказов: ${avgCheck.toLocaleString("ru-RU")} ₸`);
       }
       
-      res.json({ funnel, bottleneckIndex, recommendations });
+      res.json({ funnel, bottleneckIndex, recommendations, avgCheck });
     } catch (error) {
       console.error("Funnel analytics error:", error);
       res.status(500).json({ message: "Ошибка получения воронки" });
