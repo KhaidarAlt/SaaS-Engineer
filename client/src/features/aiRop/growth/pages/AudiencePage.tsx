@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -66,6 +66,14 @@ export function AudiencePage() {
     queryFn: () => fetchAudience(filterParams()),
   });
 
+  const prevSyncStatus = useRef<string | null>(null);
+  useEffect(() => {
+    if (latestSync?.status === "SUCCESS" && prevSyncStatus.current && prevSyncStatus.current !== "SUCCESS") {
+      queryClient.invalidateQueries({ queryKey: GROWTH_KEYS.audience });
+    }
+    prevSyncStatus.current = latestSync?.status ?? null;
+  }, [latestSync?.status]);
+
   const { data: segments } = useQuery<GrowthSegment[]>({
     queryKey: GROWTH_KEYS.segments,
     queryFn: fetchSegments,
@@ -77,6 +85,7 @@ export function AudiencePage() {
       toast({ title: "Синхронизация запущена" });
       queryClient.invalidateQueries({ queryKey: GROWTH_KEYS.syncLatest });
       queryClient.invalidateQueries({ queryKey: GROWTH_KEYS.syncRuns });
+      queryClient.invalidateQueries({ queryKey: GROWTH_KEYS.audience });
     },
     onError: (err: any) => {
       const msg = err?.message?.includes("409") ? "Синхронизация уже запущена" : "Ошибка запуска";

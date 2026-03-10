@@ -577,48 +577,83 @@ export function registerGrowthRoutes(
     try {
       const tenantId = req.user!.tenantId!;
       const { inactiveDays, abandoned, active, hasInbound, limit: rawLimit, offset: rawOffset } = req.query;
-      const limitNum = Math.min(Number(rawLimit) || 50, 200);
-      const offsetNum = Number(rawOffset) || 0;
+      const limitNum = Math.max(1, Math.min(Number(rawLimit) || 50, 200));
+      const offsetNum = Math.max(0, Number(rawOffset) || 0);
 
-      let conditions = [
-        eq(growthContacts.tenantId, tenantId),
-        eq(growthContacts.optOut, false),
+      const filters: ReturnType<typeof sql>[] = [
+        sql`tenant_id = ${tenantId}`,
+        sql`opt_out = false`,
       ];
 
       if (inactiveDays) {
-        const threshold = new Date();
-        threshold.setDate(threshold.getDate() - Number(inactiveDays));
-        conditions.push(lte(growthContacts.lastInboundAt, threshold));
-        conditions.push(sql`${growthContacts.lastInboundAt} IS NOT NULL`);
+        const days = Math.max(1, Math.min(Number(inactiveDays) || 30, 365));
+        filters.push(sql`last_inbound_at IS NOT NULL`);
+        filters.push(sql`last_inbound_at <= NOW() - make_interval(days => ${days})`);
       }
 
       if (abandoned === "true") {
-        const threshold = new Date();
-        threshold.setDate(threshold.getDate() - 3);
-        conditions.push(sql`${growthContacts.lastInboundAt} IS NOT NULL`);
-        conditions.push(lte(growthContacts.lastInboundAt, threshold));
-        conditions.push(sql`(${growthContacts.outboundCount} = 0 OR ${growthContacts.outboundCount} IS NULL OR ${growthContacts.outboundCount} < ${growthContacts.inboundCount})`);
+        filters.push(sql`last_inbound_at IS NOT NULL`);
+        filters.push(sql`last_inbound_at <= NOW() - INTERVAL '3 days'`);
+        filters.push(sql`(outbound_count = 0 OR outbound_count IS NULL OR outbound_count < inbound_count)`);
       }
 
       if (active === "true") {
-        const threshold = new Date();
-        threshold.setDate(threshold.getDate() - 7);
-        conditions.push(gte(growthContacts.lastInboundAt, threshold));
+        filters.push(sql`last_inbound_at >= NOW() - INTERVAL '7 days'`);
       }
 
       if (hasInbound === "true") {
-        conditions.push(sql`${growthContacts.lastInboundAt} IS NOT NULL`);
+        filters.push(sql`last_inbound_at IS NOT NULL`);
       }
 
-      const contacts = await db.select().from(growthContacts)
-        .where(and(...conditions))
-        .orderBy(desc(growthContacts.lastInboundAt))
-        .limit(limitNum).offset(offsetNum);
+      const whereClause = sql.join(filters, sql` AND `);
 
-      const [totalResult] = await db.select({ count: count() }).from(growthContacts)
-        .where(and(...conditions));
+      const contactsResult = await db.execute(sql`
+        SELECT id, tenant_id, name, phone, instagram_id, telegram_id, widget_user_id,
+               last_channel, primary_channel, source, first_seen_at, last_inbound_at,
+               last_outbound_at, last_dialog_id, inbound_count, outbound_count,
+               last_message_preview, last_channel_provider, opt_out, tags, meta,
+               created_at, updated_at
+        FROM growth_contacts
+        WHERE ${whereClause}
+        ORDER BY last_inbound_at DESC NULLS LAST
+        LIMIT ${limitNum} OFFSET ${offsetNum}
+      `);
+      const rawRows = (contactsResult as any).rows || contactsResult;
 
-      res.json({ contacts, total: totalResult?.count ?? 0 });
+      const contacts = rawRows.map((r: any) => ({
+        id: r.id,
+        tenantId: r.tenant_id,
+        name: r.name,
+        phone: r.phone,
+        instagramId: r.instagram_id,
+        telegramId: r.telegram_id,
+        widgetUserId: r.widget_user_id,
+        lastChannel: r.last_channel,
+        primaryChannel: r.primary_channel,
+        source: r.source,
+        firstSeenAt: r.first_seen_at,
+        lastInboundAt: r.last_inbound_at,
+        lastOutboundAt: r.last_outbound_at,
+        lastDialogId: r.last_dialog_id,
+        inboundCount: r.inbound_count,
+        outboundCount: r.outbound_count,
+        lastMessagePreview: r.last_message_preview,
+        lastChannelProvider: r.last_channel_provider,
+        optOut: r.opt_out,
+        tags: r.tags,
+        meta: r.meta,
+        createdAt: r.created_at,
+        updatedAt: r.updated_at,
+      }));
+
+      const countResult = await db.execute(sql`
+        SELECT COUNT(*)::int AS cnt FROM growth_contacts WHERE ${whereClause}
+      `);
+      const total = ((countResult as any).rows || countResult)?.[0]?.cnt ?? 0;
+
+      console.log(`[Audience] tenant=${tenantId} filter=${JSON.stringify(req.query)} found=${contacts.length} total=${total}`);
+
+      res.json({ contacts, total });
     } catch (error) {
       console.error("Audience error:", error);
       res.status(500).json({ error: "Ошибка загрузки аудитории" });
