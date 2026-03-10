@@ -2,6 +2,11 @@ import { db } from "../db";
 import { growthContacts, growthSyncRuns, messagingMessages, aiDialogs } from "@shared/schema";
 import { eq, and, sql, count, max, min } from "drizzle-orm";
 
+function normalizePhone(phone: string): string {
+  let cleaned = phone.replace(/@c\.us$|@s\.whatsapp\.net$|@lid$/, "").replace(/[^0-9]/g, "");
+  return cleaned;
+}
+
 export async function runMetaWarmAudienceBuilder(tenantId: string, syncRunId: string) {
   await db.update(growthSyncRuns).set({
     status: "RUNNING",
@@ -28,7 +33,7 @@ export async function runMetaWarmAudienceBuilder(tenantId: string, syncRunId: st
         MAX(CASE WHEN direction = 'outbound' THEN received_at END) AS last_outbound
       FROM messaging_messages
       WHERE tenant_id = ${tenantId}
-        AND (channel = 'whatsapp_cloud' OR (channel = 'whatsapp' AND provider = 'meta'))
+        AND (channel = 'whatsapp_cloud' OR channel = 'whatsapp')
         AND COALESCE(
           CASE WHEN direction = 'inbound' THEN from_address ELSE to_address END,
           ''
@@ -42,14 +47,14 @@ export async function runMetaWarmAudienceBuilder(tenantId: string, syncRunId: st
 
     for (const row of rows) {
       try {
-        const phone = String(row.phone).replace(/[^0-9+]/g, "");
+        const phone = normalizePhone(String(row.phone));
         if (!phone || phone.length < 7) continue;
 
         const lastPreviewResult = await db.execute(sql`
           SELECT content->>'text' AS preview
           FROM messaging_messages
           WHERE tenant_id = ${tenantId}
-            AND (channel = 'whatsapp_cloud' OR (channel = 'whatsapp' AND provider = 'meta'))
+            AND (channel = 'whatsapp_cloud' OR channel = 'whatsapp')
             AND direction = 'inbound'
             AND (from_address = ${phone} OR from_address = ${row.phone})
           ORDER BY received_at DESC
