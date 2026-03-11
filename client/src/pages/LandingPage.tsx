@@ -176,26 +176,26 @@ export default function LandingPage() {
     <div className="min-h-screen bg-background overflow-x-hidden">
       {/* Header */}
       <header className="fixed top-0 left-0 right-0 z-[999] bg-background/80 backdrop-blur-xl border-b">
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
+        <div className="container mx-auto px-3 sm:px-4 h-14 sm:h-16 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 flex-shrink-0">
             <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
               <MessageSquare className="w-5 h-5 text-primary-foreground" />
             </div>
-            <span className="text-xl font-bold" data-testid="text-brand-name">SmartCatalog</span>
+            <span className="text-lg sm:text-xl font-bold" data-testid="text-brand-name">SmartCatalog</span>
           </div>
-          <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
             <ThemeToggle />
             {user ? (
               <Link href="/dashboard">
-                <Button data-testid="button-dashboard">Личный кабинет</Button>
+                <Button size="sm" data-testid="button-dashboard">Личный кабинет</Button>
               </Link>
             ) : (
               <>
                 <Link href="/login">
-                  <Button variant="ghost" size="sm" data-testid="link-login">Войти</Button>
+                  <Button variant="ghost" size="sm" className="px-2 sm:px-3" data-testid="link-login">Войти</Button>
                 </Link>
                 <Link href="/register">
-                  <Button size="sm" data-testid="button-register-header">Создать каталог</Button>
+                  <Button size="sm" className="px-2 sm:px-3 text-xs sm:text-sm" data-testid="button-register-header">Создать каталог</Button>
                 </Link>
               </>
             )}
@@ -256,9 +256,8 @@ export default function LandingPage() {
               с <TypingText texts={["ИИ-продавцом", "CRM-системой", "оплатой Kaspi", "аналитикой"]} className="text-primary" /> — за 5 минут
             </h2>
             <p className="text-base sm:text-lg text-muted-foreground mb-8 max-w-2xl mx-auto leading-relaxed">
-              Клиент платит в привычном приложении Kaspi.
-              ИИ общается, выставляет счёт, проверяет оплату
-              и закрывает сделку в CRM.
+              Полный цикл продаж в WhatsApp: от первого приветствия ИИ
+              до успешного перехода к оплате и записи в CRM.
             </p>
 
             <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center items-center mb-4">
@@ -281,7 +280,7 @@ export default function LandingPage() {
               </div>
             </div>
             <p className="text-sm text-muted-foreground">
-              Без карты. Сможет каждый. Бесплатно до 20 товаров навсегда.
+              Без карты. Сможет каждый.
             </p>
           </motion.div>
 
@@ -436,7 +435,7 @@ export default function LandingPage() {
               { icon: SiWhatsapp, title: "WhatsApp AI", desc: "ИИ отвечает за 30 секунд", time: "30 сек", color: "text-[#25D366]", bgColor: "bg-[#25D366]/10 dark:bg-[#25D366]/20" },
               { icon: SiWhatsapp, title: "Cloud API", desc: "Официальное API Meta", time: "5 мин", color: "text-[#25D366]", bgColor: "bg-[#25D366]/10 dark:bg-[#25D366]/20" },
               { icon: SiInstagram, title: "Instagram Direct", desc: "Автоответы в директ", time: "5 мин", color: "text-[#E4405F]", bgColor: "bg-[#E4405F]/10 dark:bg-[#E4405F]/20" },
-              { icon: SiTelegram, title: "Telegram", desc: "Бот для заказов", time: "Скоро", color: "text-[#26A5E4]", bgColor: "bg-[#26A5E4]/10 dark:bg-[#26A5E4]/20" },
+              { icon: SiTelegram, title: "Telegram", desc: "Бот для заказов", time: "5 мин", color: "text-[#26A5E4]", bgColor: "bg-[#26A5E4]/10 dark:bg-[#26A5E4]/20" },
             ].map((ch, i) => (
               <motion.div key={i} variants={staggerItem}>
                 <Card className="h-full hover-elevate">
