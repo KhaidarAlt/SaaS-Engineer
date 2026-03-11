@@ -115,8 +115,8 @@ function resolveImageUrl(imageRaw, slug) {
 async function serveBotOg(req, res, slug, host) {
   if (!slug) {
     const html = generateOgHtml(
-      "SmartCatalog — Умный каталог для вашего бизнеса",
-      "Создайте красивый онлайн-каталог товаров, управляйте заказами через WhatsApp",
+      "BotFactory — Онлайн-каталог",
+      "Онлайн-каталог товаров с AI-ассистентом",
       "",
       "https://botfactory.kz"
     );

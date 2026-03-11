@@ -742,8 +742,8 @@ export async function registerRoutes(
 
         console.log(`[OG-Bot-MW] Serving default OG for path=${req.path}, host=${host}`);
         const defaultHtml = generateOgHtml(
-          "SmartCatalog — Умный каталог для вашего бизнеса",
-          "Создайте красивый онлайн-каталог товаров, управляйте заказами через WhatsApp, используйте AI-ассистента для продаж",
+          "BotFactory — Онлайн-каталог",
+          "Онлайн-каталог товаров с AI-ассистентом",
           "",
           "https://botfactory.kz"
         );
