@@ -590,8 +590,10 @@ export default function ProductDetailPage() {
                 />
                 {isInStock
                   ? product.alwaysInStock
-                    ? "Всегда в наличии"
-                    : `В наличии: ${product.stockQty} шт.`
+                    ? "В наличии"
+                    : (product as any).hideStockDisplay
+                      ? "В наличии"
+                      : `В наличии: ${product.stockQty} шт.`
                   : "Нет в наличии"}
               </span>
             </div>

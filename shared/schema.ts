@@ -196,6 +196,7 @@ export const products = pgTable("products", {
   stockQty: integer("stock_qty").notNull().default(0),
   inStock: boolean("in_stock").notNull().default(true),
   alwaysInStock: boolean("always_in_stock").notNull().default(false),
+  hideStockDisplay: boolean("hide_stock_display").notNull().default(false),
   isActive: boolean("is_active").notNull().default(true),
   mainImageUrl: text("main_image_url"),
   galleryUrls: jsonb("gallery_urls").$type<string[]>(),

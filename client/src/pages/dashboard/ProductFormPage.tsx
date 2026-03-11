@@ -87,6 +87,7 @@ const productFormSchema = z.object({
   stockQty: z.coerce.number().min(0),
   inStock: z.boolean(),
   alwaysInStock: z.boolean(),
+  hideStockDisplay: z.boolean(),
   isActive: z.boolean(),
   mainImageUrl: z.string().optional(),
   gender: z.string().optional(),
@@ -177,6 +178,7 @@ export default function ProductFormPage() {
       stockQty: 0,
       inStock: true,
       alwaysInStock: false,
+      hideStockDisplay: false,
       isActive: true,
       mainImageUrl: "",
       gender: "",
@@ -225,6 +227,7 @@ export default function ProductFormPage() {
         stockQty: product.stockQty,
         inStock: product.inStock,
         alwaysInStock: product.alwaysInStock,
+        hideStockDisplay: (product as any).hideStockDisplay ?? false,
         isActive: product.isActive,
         mainImageUrl: product.mainImageUrl || "",
         gender: productGender,
@@ -1346,7 +1349,6 @@ export default function ProductFormPage() {
             </CardContent>
           </Card>
 
-          {isEdit && (
           <Card>
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">
@@ -1483,13 +1485,27 @@ export default function ProductFormPage() {
               </p>
             </CardContent>
           </Card>
-          )}
 
           <Card>
             <CardHeader>
               <CardTitle className="text-lg">Наличие и статус</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              <div className="flex items-center justify-between py-2">
+                <div>
+                  <Label htmlFor="hideStockDisplay">Скрыть остатки склада</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Не показывать количество на складе посетителям каталога
+                  </p>
+                </div>
+                <Switch
+                  id="hideStockDisplay"
+                  checked={form.watch("hideStockDisplay")}
+                  onCheckedChange={(checked) => form.setValue("hideStockDisplay", checked)}
+                  data-testid="switch-hide-stock-display"
+                />
+              </div>
+
               <div className="space-y-2">
                 <Label htmlFor="stockQty">Общее количество на складе</Label>
                 <Input
