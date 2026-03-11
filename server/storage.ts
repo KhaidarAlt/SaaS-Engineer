@@ -95,6 +95,7 @@ export interface IStorage {
   createProduct(product: InsertProduct): Promise<Product>;
   updateProduct(id: string, tenantId: string, data: Partial<InsertProduct>): Promise<Product | undefined>;
   deleteProduct(id: string, tenantId: string): Promise<boolean>;
+  reorderProducts(tenantId: string, ids: string[]): Promise<void>;
   
   getProductVariants(productId: string, tenantId: string): Promise<ProductVariant[]>;
   createProductVariant(variant: InsertProductVariant): Promise<ProductVariant>;
@@ -114,6 +115,7 @@ export interface IStorage {
   createCategory(category: InsertCategory): Promise<Category>;
   updateCategory(id: string, tenantId: string, data: Partial<InsertCategory>): Promise<Category | undefined>;
   deleteCategory(id: string, tenantId: string): Promise<boolean>;
+  reorderCategories(tenantId: string, ids: string[]): Promise<void>;
   
   getDiscounts(tenantId: string): Promise<Discount[]>;
   createDiscount(discount: InsertDiscount): Promise<Discount>;
@@ -522,7 +524,23 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getProducts(tenantId: string): Promise<Product[]> {
-    return db.select().from(products).where(eq(products.tenantId, tenantId)).orderBy(desc(products.createdAt));
+    return db.select().from(products).where(eq(products.tenantId, tenantId)).orderBy(products.sortOrder, desc(products.createdAt));
+  }
+
+  async reorderCategories(tenantId: string, ids: string[]): Promise<void> {
+    for (let i = 0; i < ids.length; i++) {
+      await db.update(categories)
+        .set({ sortOrder: i } as any)
+        .where(and(eq(categories.id, ids[i]), eq(categories.tenantId, tenantId)));
+    }
+  }
+
+  async reorderProducts(tenantId: string, ids: string[]): Promise<void> {
+    for (let i = 0; i < ids.length; i++) {
+      await db.update(products)
+        .set({ sortOrder: i, updatedAt: new Date() } as any)
+        .where(and(eq(products.id, ids[i]), eq(products.tenantId, tenantId)));
+    }
   }
 
   async getProduct(id: string, tenantId: string): Promise<Product | undefined> {

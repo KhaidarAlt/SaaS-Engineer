@@ -847,6 +847,11 @@ export default function CatalogHome({ basePath: parentBasePath }: { basePath?: s
     return product.isActive && matchesSearch && matchesCategory && matchesStock && matchesSize && matchesColor && matchesBrand;
   });
 
+  // Build a map of categoryId -> sortOrder for fast lookup
+  const categorySortMap = new Map<string, number>(
+    (data?.categories || []).map(c => [c.id, c.sortOrder ?? 0])
+  );
+
   const sortedProducts = filteredProducts ? filteredProducts.slice().sort((a, b) => {
     switch (sortOrder) {
       case "price_asc":
@@ -857,8 +862,16 @@ export default function CatalogHome({ basePath: parentBasePath }: { basePath?: s
         return a.name.localeCompare(b.name, "ru");
       case "newest":
         return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
-      default:
-        return 0;
+      default: {
+        // Default: sort by category position first, then product sort order
+        // Products without a category go to the very end
+        const aCatOrder = a.categoryId != null ? (categorySortMap.get(a.categoryId) ?? 9999) : 99999;
+        const bCatOrder = b.categoryId != null ? (categorySortMap.get(b.categoryId) ?? 9999) : 99999;
+        if (aCatOrder !== bCatOrder) return aCatOrder - bCatOrder;
+        const aProd = (a as any).sortOrder ?? 0;
+        const bProd = (b as any).sortOrder ?? 0;
+        return aProd - bProd;
+      }
     }
   }) : [];
 

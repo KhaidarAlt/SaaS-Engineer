@@ -19,6 +19,8 @@ import {
   X,
   Bot,
   TrendingUp,
+  GripVertical,
+  ArrowUpDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -174,6 +176,12 @@ export default function ProductsPage() {
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [stockFilter, setStockFilter] = useState<string>("all");
+  const [sortMode, setSortMode] = useState(false);
+  const [localOrder, setLocalOrder] = useState<Product[]>([]);
+  const dragItem = useRef<number | null>(null);
+  const dragOverItem = useRef<number | null>(null);
+  const [draggingIdx, setDraggingIdx] = useState<number | null>(null);
+  const [overIdx, setOverIdx] = useState<number | null>(null);
   const [confirmReplace, setConfirmReplace] = useState<{ product: Product; existingProductName: string } | null>(null);
   const [crossSellDialog, setCrossSellDialog] = useState<Product | null>(null);
   const [crossSellSearch, setCrossSellSearch] = useState("");
@@ -221,6 +229,19 @@ export default function ProductsPage() {
     },
   });
 
+  const reorderMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      await apiRequest("POST", "/api/products/reorder", { ids });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      toast({ title: "Порядок сохранён" });
+    },
+    onError: () => {
+      toast({ title: "Ошибка сохранения порядка", variant: "destructive" });
+    },
+  });
+
   const filteredProducts = products?.filter((product) => {
     const matchesSearch =
       product.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -233,6 +254,58 @@ export default function ProductsPage() {
       (stockFilter === "out_of_stock" && !product.alwaysInStock && product.stockQty <= 0);
     return matchesSearch && matchesCategory && matchesStock;
   });
+
+  // Products to show: use localOrder in sort mode, otherwise filteredProducts sorted by sortOrder
+  const displayProducts = sortMode
+    ? localOrder
+    : (filteredProducts || []).slice().sort((a, b) => ((a as any).sortOrder ?? 0) - ((b as any).sortOrder ?? 0));
+
+  const enterSortMode = () => {
+    const base = (filteredProducts || []).slice().sort((a, b) => ((a as any).sortOrder ?? 0) - ((b as any).sortOrder ?? 0));
+    setLocalOrder(base);
+    setSortMode(true);
+  };
+
+  const exitSortMode = (save: boolean) => {
+    if (save) {
+      reorderMutation.mutate(localOrder.map(p => p.id));
+    }
+    setSortMode(false);
+    setLocalOrder([]);
+  };
+
+  const handleDragStart = (index: number) => {
+    dragItem.current = index;
+    setDraggingIdx(index);
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    dragOverItem.current = index;
+    setOverIdx(index);
+  };
+
+  const handleDrop = () => {
+    if (dragItem.current === null || dragOverItem.current === null) return;
+    if (dragItem.current === dragOverItem.current) {
+      setDraggingIdx(null);
+      setOverIdx(null);
+      return;
+    }
+    const newOrder = [...localOrder];
+    const [removed] = newOrder.splice(dragItem.current, 1);
+    newOrder.splice(dragOverItem.current, 0, removed);
+    setLocalOrder(newOrder);
+    dragItem.current = null;
+    dragOverItem.current = null;
+    setDraggingIdx(null);
+    setOverIdx(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggingIdx(null);
+    setOverIdx(null);
+  };
 
   const getStockSelectValue = (product: Product): string => {
     if (product.alwaysInStock) return "always";
@@ -403,13 +476,50 @@ export default function ProductsPage() {
               Управляйте каталогом товаров
             </p>
           </div>
-          <Link href="/dashboard/products/new">
-            <Button data-testid="button-add-product">
-              <Plus className="h-4 w-4 mr-2" />
-              Добавить товар
-            </Button>
-          </Link>
+          <div className="flex items-center gap-2">
+            {sortMode ? (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => exitSortMode(false)}
+                  data-testid="button-cancel-sort"
+                >
+                  Отмена
+                </Button>
+                <Button
+                  onClick={() => exitSortMode(true)}
+                  disabled={reorderMutation.isPending}
+                  data-testid="button-save-sort"
+                >
+                  Сохранить порядок
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={enterSortMode}
+                  data-testid="button-sort-mode"
+                  title="Изменить порядок товаров в каталоге"
+                >
+                  <ArrowUpDown className="h-4 w-4 mr-2" />
+                  Порядок
+                </Button>
+                <Link href="/dashboard/products/new">
+                  <Button data-testid="button-add-product">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Добавить товар
+                  </Button>
+                </Link>
+              </>
+            )}
+          </div>
         </div>
+        {sortMode && (
+          <div className="rounded-md bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 px-4 py-3 text-sm text-blue-800 dark:text-blue-200">
+            Перетащите товары для изменения порядка в каталоге. Нажмите «Сохранить порядок» когда закончите.
+          </div>
+        )}
 
         <Card>
           <CardContent className="p-4">
@@ -456,6 +566,7 @@ export default function ProductsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  {sortMode && <TableHead className="w-10"></TableHead>}
                   <TableHead className="w-16"></TableHead>
                   <TableHead>Товар</TableHead>
                   <TableHead>Артикул</TableHead>
@@ -469,15 +580,27 @@ export default function ProductsPage() {
               <TableBody>
                 {isLoading ? (
                   [...Array(5)].map((_, i) => <TableRowSkeleton key={i} cols={8} />)
-                ) : filteredProducts && filteredProducts.length > 0 ? (
-                  filteredProducts.map((product, index) => (
+                ) : displayProducts && displayProducts.length > 0 ? (
+                  displayProducts.map((product, index) => (
                     <motion.tr
                       key={product.id}
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
-                      transition={{ delay: index * 0.05 }}
-                      className="group border-b"
+                      transition={{ delay: sortMode ? 0 : index * 0.05 }}
+                      className={`group border-b ${sortMode ? (draggingIdx === index ? "opacity-40" : overIdx === index && draggingIdx !== index ? "ring-2 ring-inset ring-primary" : "") : ""}`}
+                      draggable={sortMode}
+                      onDragStart={sortMode ? () => handleDragStart(index) : undefined}
+                      onDragOver={sortMode ? (e) => handleDragOver(e, index) : undefined}
+                      onDrop={sortMode ? handleDrop : undefined}
+                      onDragEnd={sortMode ? handleDragEnd : undefined}
                     >
+                      {sortMode && (
+                        <TableCell className="w-10 pr-0">
+                          <div className="cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground">
+                            <GripVertical className="h-5 w-5" />
+                          </div>
+                        </TableCell>
+                      )}
                       <TableCell>
                         <div className="w-12 h-12 rounded-lg bg-muted overflow-hidden">
                           {product.mainImageUrl ? (

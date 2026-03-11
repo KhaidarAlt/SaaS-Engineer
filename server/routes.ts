@@ -2372,6 +2372,28 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/categories/reorder", requireAuth, async (req, res) => {
+    try {
+      const { ids } = req.body;
+      if (!Array.isArray(ids)) return res.status(400).json({ message: "ids должен быть массивом" });
+      await storage.reorderCategories(req.user!.tenantId!, ids);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка сортировки категорий" });
+    }
+  });
+
+  app.post("/api/products/reorder", requireAuth, async (req, res) => {
+    try {
+      const { ids } = req.body;
+      if (!Array.isArray(ids)) return res.status(400).json({ message: "ids должен быть массивом" });
+      await storage.reorderProducts(req.user!.tenantId!, ids);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка сортировки товаров" });
+    }
+  });
+
   app.get("/api/discounts", requireAuth, async (req, res) => {
     try {
       const discounts = await storage.getDiscounts(req.user!.tenantId!);
