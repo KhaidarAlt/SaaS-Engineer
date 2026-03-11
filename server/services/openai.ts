@@ -126,7 +126,7 @@ export async function generateAiResponse(
       response = response.replace("{catalog_link}", catalogUrl);
       response = response.replace("{store_name}", context.storeName);
       return {
-        content: response,
+        content: sanitizeForWhatsApp(response),
         matchedTag: matchedTag.tag,
         action: matchedTag.action,
       };
@@ -157,7 +157,8 @@ export async function generateAiResponse(
       max_tokens: 600,
     });
 
-    const content = response.choices[0]?.message?.content || "Извините, не удалось сгенерировать ответ.";
+    const rawContent = response.choices[0]?.message?.content || "Извините, не удалось сгенерировать ответ.";
+    const content = sanitizeForWhatsApp(rawContent);
     
     return {
       content,
@@ -197,6 +198,45 @@ function checkTagRules(message: string, tagRules?: TagRule[]): TagRule | undefin
 function detectSuggestedStage(response: string, stages?: SalesStage[]): string | undefined {
   if (!stages || stages.length === 0) return undefined;
   return undefined;
+}
+
+export function sanitizeForWhatsApp(text: string): string {
+  let result = text;
+
+  result = result.replace(/!\[([^\]]*)\]\(([^)]*(?:\([^)]*\))*[^)]*)\)/g, (_match, _alt, url) => {
+    return url.trim();
+  });
+
+  result = result.replace(/\[([^\]]+)\]\(([^)]*(?:\([^)]*\))*[^)]*)\)/g, (_match, linkText, url) => {
+    const cleanUrl = url.trim();
+    if (linkText.trim().toLowerCase() === cleanUrl.toLowerCase()) {
+      return cleanUrl;
+    }
+    return `${linkText.trim()}\n${cleanUrl}`;
+  });
+
+  result = result.replace(/\*\*\*([^*]+)\*\*\*/g, "*$1*");
+  result = result.replace(/\*\*([^*]+)\*\*/g, "*$1*");
+
+  result = result.replace(/^#{1,6}\s+(.+)$/gm, "*$1*");
+
+  result = result.replace(/```[\s\S]*?```/g, (match) => {
+    return match.replace(/```\w*\n?/g, "").replace(/```/g, "").trim();
+  });
+  result = result.replace(/`([^`]+)`/g, "$1");
+
+  result = result.replace(/^>\s?/gm, "");
+
+  result = result.replace(/^---+$/gm, "");
+  result = result.replace(/^\*\*\*+$/gm, "");
+
+  result = result.replace(/<([a-zA-Z][a-zA-Z0-9]*:[^\s>]+)>/g, "$1");
+
+  result = result.replace(/\n{3,}/g, "\n\n");
+
+  result = result.trim();
+
+  return result;
 }
 
 function buildSystemPrompt(context: TenantContext, catalogUrl: string, matchedTag?: TagRule): string {
@@ -450,23 +490,22 @@ ${catalogUrl}
         if (p.description) {
           prompt += ` (${p.description.substring(0, 100)})`;
         }
-        if (p.imageUrl) {
-          prompt += ` [фото: ${p.imageUrl}]`;
-        }
         if (p.productUrl) {
-          prompt += ` [ссылка: ${p.productUrl}]`;
+          prompt += ` — ссылка: ${p.productUrl}`;
         }
       });
     });
 
     prompt += `\n\n## ПРАВИЛО ОТОБРАЖЕНИЯ ТОВАРА
-Если конкретный товар найден и соответствует запросу клиента, показывай его с изображением, ценой и ссылкой.
-Формат ответа:
-![Название товара](URL_фото)
-**Название товара** — цена тг
-Подробнее и заказать: ссылка_на_товар
+Когда показываешь товар клиенту, используй СТРОГО этот формат:
 
-Если у товара нет фото — показывай без изображения. Если нет ссылки — не добавляй ссылку.`;
+*Название товара* — цена тг
+Краткое описание (1 строка)
+
+Подробнее и заказать:
+ссылка_на_товар
+
+ЗАПРЕЩЕНО использовать Markdown-ссылки или изображения. Ссылку выводи "голым" URL на отдельной строке.`;
   }
   
   if (context.categoryPriorities && context.categoryPriorities.length > 0) {
@@ -494,6 +533,14 @@ ${catalogUrl}
     prompt += `\n\nКогда клиент интересуется товаром, у которого настроен апселл — мягко упомяни более дорогую альтернативу. Пример: "Кстати, у нас есть [апселл-товар] — он дороже, но [кратко преимущество]. Хотите узнать подробнее?"
 Предлагай апселл ОДИН раз в начале диалога. Если клиент отказался или уже выбрал — не возвращайся к этому. Используй ТОЛЬКО настроенные апселл-товары, никогда не придумывай свои.`;
   }
+
+  prompt += `\n\n## ПРАВИЛА ФОРМАТИРОВАНИЯ (WhatsApp)
+1. Используй WhatsApp-форматирование: *жирный* (одинарные звёздочки), _курсив_ (подчёркивания). НИКОГДА не используй **двойные звёздочки** — WhatsApp их не поддерживает.
+2. ЗАПРЕЩЕНО использовать Markdown: никаких [текст](ссылка), ![](ссылка), # заголовков.
+3. Ссылки выводи ТОЛЬКО "голым" URL на отдельной строке — никогда не оборачивай в скобки.
+4. Разделяй логические блоки пустой строкой: Название → Описание → Цена → Ссылка → Призыв к действию.
+5. Используй не более одного эмодзи на логический блок (💰, 📲, ✅ и т.д.). Не перегружай эмодзи.
+6. Пиши кратко: максимум 3-4 коротких абзаца в ответе.`;
 
   const hasPromosOrDiscounts = (context.promotions && context.promotions.length > 0) || (context.discounts && context.discounts.length > 0);
 
