@@ -1544,7 +1544,7 @@ export default function CatalogHome({ basePath: parentBasePath }: { basePath?: s
       />
 
       {/* Floating WhatsApp Button */}
-      {data?.tenant?.contactPhone && data.tenant.showFloatingWhatsApp && (
+      {(data?.tenant?.notificationPhone || data?.tenant?.contactPhone) && data.tenant.showFloatingWhatsApp && (
         <motion.div
           initial={{ scale: 0, opacity: 0, y: 20 }}
           animate={{ scale: 1, opacity: 1, y: 0 }}
@@ -1554,7 +1554,7 @@ export default function CatalogHome({ basePath: parentBasePath }: { basePath?: s
           <Button
             className="h-14 w-14 rounded-full shadow-lg bg-[#25D366] hover:bg-[#25D366]/90 text-white group flex items-center justify-center"
             onClick={() => {
-              const phone = data.tenant.contactPhone!.replace(/\D/g, "");
+              const phone = (data.tenant.notificationPhone || data.tenant.contactPhone)!.replace(/\D/g, "");
               const message = encodeURIComponent("Здравствуйте! Хочу узнать подробнее");
               window.open(`https://wa.me/${phone}?text=${message}`, "_blank");
             }}

@@ -46,7 +46,7 @@ export default function PromoPage() {
     const promoTitle = promo?.title || "Акция";
     const message = encodeURIComponent(`Мне интересна ваша акция "${promoTitle}"`);
     
-    const phoneNumber = tenant?.contactPhone?.replace(/\D/g, "") || "";
+    const phoneNumber = (tenant?.notificationPhone || tenant?.contactPhone)?.replace(/\D/g, "") || "";
     if (phoneNumber) {
       window.open(`https://wa.me/${phoneNumber}?text=${message}`, "_blank");
     }
