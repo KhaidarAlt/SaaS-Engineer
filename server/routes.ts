@@ -3736,6 +3736,12 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
         console.error("Auto-payment generation error:", paymentErr);
       }
 
+      // Use tenant's configured domain (custom or subdomain) instead of request host
+      const platformDomain = process.env.PLATFORM_DOMAIN || "botfactory.kz";
+      const tenantCatalogUrl = ((tenant as any)?.customDomain && (tenant as any)?.domainVerified)
+        ? `https://${(tenant as any).customDomain}`
+        : `https://${tenantSlug}.${platformDomain}`;
+
       res.json({ 
         orderId: order.id, 
         orderNumber: order.orderNumber,
@@ -3744,7 +3750,7 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
           ...order,
           items: orderItems,
         },
-        catalogUrl: `${req.protocol}://${req.get('host')}/c/${tenantSlug}`,
+        catalogUrl: tenantCatalogUrl,
         paymentUrl,
       });
     } catch (error) {
