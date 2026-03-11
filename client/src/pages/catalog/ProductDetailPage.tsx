@@ -304,10 +304,10 @@ export default function ProductDetailPage() {
 
   if (error || !data?.product) {
     return (
-      <div className="min-h-screen bg-background">
+      <div className="min-h-screen bg-background overflow-x-hidden">
         <header className="sticky top-0 z-50 backdrop-blur-md bg-background/95 border-b border-border">
-          <div className="max-w-7xl mx-auto px-4 md:px-6 lg:px-8">
-            <div className="flex items-center justify-between h-16">
+          <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8">
+            <div className="flex items-center justify-between h-14 sm:h-16">
               <Link href={basePath || "/"}>
                 <Button variant="ghost" size="sm" className="gap-2">
                   <ArrowLeft className="h-4 w-4" />
@@ -318,10 +318,10 @@ export default function ProductDetailPage() {
             </div>
           </div>
         </header>
-        <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="flex items-center justify-center min-h-[60vh] px-4">
           <div className="text-center">
-            <Package className="h-16 w-16 text-muted-foreground/50 mx-auto mb-4" />
-            <h1 className="text-2xl font-bold mb-2">Товар не найден</h1>
+            <Package className="h-12 w-12 sm:h-16 sm:w-16 text-muted-foreground/50 mx-auto mb-4" />
+            <h1 className="text-xl sm:text-2xl font-bold mb-2">Товар не найден</h1>
             <p className="text-muted-foreground mb-4">
               Товар был удалён или скрыт владельцем магазина
             </p>
@@ -363,20 +363,20 @@ export default function ProductDetailPage() {
   const isInStock = product.alwaysInStock || product.stockQty > 0;
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background overflow-x-hidden">
       <header className="sticky top-0 z-50 backdrop-blur-md bg-background/95 border-b border-border">
-        <div className="max-w-7xl mx-auto px-4 md:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-14 sm:h-16 gap-2">
             <Link href={basePath || "/"}>
-              <h1 className="text-xl font-bold tracking-tight cursor-pointer">
+              <h1 className="text-base sm:text-xl font-bold tracking-tight cursor-pointer truncate max-w-[50vw]">
                 {data.tenant.name}
               </h1>
             </Link>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
               <ThemeToggle variant="catalog" />
               <Link href={`${basePath}/cart`}>
-                <Button variant="outline" className="relative" data-testid="button-cart">
-                  <ShoppingCart className="h-5 w-5" />
+                <Button variant="outline" size={isMobile ? "sm" : "default"} className="relative" data-testid="button-cart">
+                  <ShoppingCart className="h-4 w-4 sm:h-5 sm:w-5" />
                   {totalItems > 0 && (
                     <motion.span
                       key={totalItems}
@@ -394,21 +394,21 @@ export default function ProductDetailPage() {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 md:px-6 lg:px-8 py-8">
+      <main className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-4 sm:py-8">
         <Link href={basePath || "/"}>
-          <Button variant="ghost" size="sm" className="gap-2 mb-6">
+          <Button variant="ghost" size="sm" className="gap-2 mb-4 sm:mb-6">
             <ArrowLeft className="h-4 w-4" />
             Вернуться в каталог
           </Button>
         </Link>
 
-        <div className="grid lg:grid-cols-2 gap-8 lg:gap-12">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-12">
           <motion.div
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
-            className="space-y-4"
+            className="space-y-3 sm:space-y-4"
           >
-            <div className="relative aspect-[4/5] sm:aspect-square rounded-xl overflow-hidden bg-muted max-h-[65vh]">
+            <div className="relative aspect-square rounded-xl overflow-hidden bg-muted">
               <AnimatePresence mode="wait">
                 {allImages.length > 0 ? (
                   videoUrl && allImages[currentImageIndex] === videoUrl ? (
@@ -529,20 +529,20 @@ export default function ProductDetailPage() {
           <motion.div
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
-            className="space-y-6"
+            className="space-y-4 sm:space-y-6 min-w-0"
           >
             {data.category && (
-              <p className="text-sm text-muted-foreground">{data.category.name}</p>
+              <p className="text-xs sm:text-sm text-muted-foreground">{data.category.name}</p>
             )}
 
-            <h1 className="text-3xl font-bold tracking-tight">{product.name}</h1>
+            <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight break-words">{product.name}</h1>
 
-            <div className="flex items-baseline gap-3">
-              <span className="text-3xl font-bold text-primary">
+            <div className="flex items-baseline gap-2 sm:gap-3 flex-wrap">
+              <span className="text-2xl sm:text-3xl font-bold text-primary">
                 {formatPrice(product.computedPrice)}
               </span>
               {product.hasDiscount && (
-                <span className="text-xl text-muted-foreground line-through">
+                <span className="text-base sm:text-xl text-muted-foreground line-through">
                   {formatPrice(product.originalPrice)}
                 </span>
               )}
@@ -565,8 +565,8 @@ export default function ProductDetailPage() {
             )}
 
             {product.description && (
-              <div className="prose prose-sm dark:prose-invert max-w-none">
-                <p className="text-muted-foreground whitespace-pre-wrap">
+              <div className="prose prose-sm dark:prose-invert max-w-none min-w-0">
+                <p className="text-muted-foreground whitespace-pre-wrap break-words text-sm sm:text-base" style={{ overflowWrap: "anywhere" }}>
                   {product.description}
                 </p>
               </div>
@@ -687,20 +687,22 @@ export default function ProductDetailPage() {
               </div>
             )}
 
-            <div className="flex items-center gap-4 pt-4">
-              <div className="flex items-center border rounded-lg">
+            <div className="flex items-center gap-3 sm:gap-4 pt-4">
+              <div className="flex items-center border rounded-lg flex-shrink-0">
                 <Button
                   variant="ghost"
                   size="icon"
+                  className="h-9 w-9 sm:h-10 sm:w-10"
                   onClick={() => setQuantity((q) => Math.max(1, q - 1))}
                   disabled={quantity <= 1}
                 >
                   <Minus className="h-4 w-4" />
                 </Button>
-                <span className="w-12 text-center font-medium">{quantity}</span>
+                <span className="w-8 sm:w-12 text-center font-medium text-sm sm:text-base">{quantity}</span>
                 <Button
                   variant="ghost"
                   size="icon"
+                  className="h-9 w-9 sm:h-10 sm:w-10"
                   onClick={() => setQuantity((q) => q + 1)}
                   disabled={!isInStock || (!product.alwaysInStock && quantity >= (product.stockQty || 0))}
                 >
@@ -709,8 +711,8 @@ export default function ProductDetailPage() {
               </div>
 
               <Button
-                size="lg"
-                className="flex-1 gap-2"
+                size={isMobile ? "default" : "lg"}
+                className="flex-1 gap-2 min-w-0"
                 disabled={!isInStock}
                 onClick={handleAddToCart}
                 data-testid="button-add-to-cart"
@@ -724,8 +726,8 @@ export default function ProductDetailPage() {
                       exit={{ scale: 0 }}
                       className="flex items-center gap-2"
                     >
-                      <Check className="h-5 w-5" />
-                      Добавлено
+                      <Check className="h-4 w-4 sm:h-5 sm:w-5" />
+                      <span className="truncate">Добавлено</span>
                     </motion.div>
                   ) : (
                     <motion.div
@@ -735,8 +737,8 @@ export default function ProductDetailPage() {
                       exit={{ scale: 0 }}
                       className="flex items-center gap-2"
                     >
-                      <ShoppingCart className="h-5 w-5" />
-                      В корзину
+                      <ShoppingCart className="h-4 w-4 sm:h-5 sm:w-5" />
+                      <span className="truncate">В корзину</span>
                     </motion.div>
                   )}
                 </AnimatePresence>
@@ -748,7 +750,7 @@ export default function ProductDetailPage() {
               <SheetTrigger asChild>
                 <Button
                   variant="outline"
-                  className="w-full gap-2"
+                  className="w-full gap-2 text-sm sm:text-base"
                   data-testid="button-ai-consultant"
                 >
                   <Bot className="h-5 w-5" />
@@ -834,8 +836,8 @@ export default function ProductDetailPage() {
               className="col-span-full"
               data-testid="section-cross-sell"
             >
-              <div className="mt-16 pt-8 border-t border-border">
-                <h2 className="text-2xl font-bold mb-6" data-testid="heading-cross-sell">
+              <div className="mt-8 sm:mt-16 pt-6 sm:pt-8 border-t border-border">
+                <h2 className="text-lg sm:text-2xl font-bold mb-4 sm:mb-6" data-testid="heading-cross-sell">
                   С этим товаром берут
                 </h2>
                 
@@ -868,8 +870,8 @@ export default function ProductDetailPage() {
         </div>
       </main>
 
-      <footer className="border-t border-border py-8 mt-12">
-        <div className="max-w-7xl mx-auto px-4 md:px-6 lg:px-8 text-center">
+      <footer className="border-t border-border py-6 sm:py-8 mt-8 sm:mt-12">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 text-center">
           <p className="text-sm text-muted-foreground">
             {data.tenant.name} © {new Date().getFullYear()}
           </p>
