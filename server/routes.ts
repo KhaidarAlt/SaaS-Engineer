@@ -5793,11 +5793,17 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
         console.log(`[WAHA] Event=${event} from=${from} fromMe=${fromMe} text=${text?.substring?.(0, 50)}`);
         
         if (event === "message" && from && text && !fromMe) {
-          console.log(`[WAHA] Processing message from ${from}: ${text}`);
-          
-          processIncomingWhatsAppMessage(instance, from, text).catch(err => {
-            console.error("[WAHA] Error processing message:", err);
-          });
+          // Filter WAHA echo-back: NOWEB engine sometimes returns sent bot messages with fromMe=false
+          const echoKey = `${instance.tenantId}_${text.trim().substring(0, 80)}`;
+          const echoTime = recentlySentBotTexts.get(echoKey) || 0;
+          if (Date.now() - echoTime < BOT_ECHO_TTL_MS) {
+            console.log(`[WAHA] Echo-back filter: skipping bot's own message from ${from}`);
+          } else {
+            console.log(`[WAHA] Processing message from ${from}: ${text}`);
+            processIncomingWhatsAppMessage(instance, from, text).catch(err => {
+              console.error("[WAHA] Error processing message:", err);
+            });
+          }
         }
       }
       
@@ -5905,6 +5911,9 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
   const recentlyProcessedMessages = new Map<string, number>();
   const MSG_DEDUP_TTL_MS = 120000;
   const lidToPhoneCache = new Map<string, string>();
+  // Cache of recently sent AI replies to filter WAHA echo-back (fromMe=false bug in NOWEB engine)
+  const recentlySentBotTexts = new Map<string, number>();
+  const BOT_ECHO_TTL_MS = 60000;
 
   function extractPhoneFromJid(jid: string): string | null {
     if (!jid || jid.endsWith("@lid") || jid.endsWith("@g.us")) return null;
@@ -6089,6 +6098,7 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
                 
                 console.log(`[Payment] Sent Kaspi payment link to ${customerPhone} for order #${orderNumber}`);
                 aiResponseCooldown.set(`${tenantId}_${from}`, Date.now());
+                recentlySentBotTexts.set(`${tenantId}_${paymentMessage.trim().substring(0, 80)}`, Date.now());
                 return;
               }
             }
@@ -6193,6 +6203,7 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
           });
           console.log(`[Payment] Customer ${customerPhone} confirmed payment for order #${pendingOrder.orderNumber}`);
           aiResponseCooldown.set(`${tenantId}_${from}`, Date.now());
+          recentlySentBotTexts.set(`${tenantId}_${confirmReply.trim().substring(0, 80)}`, Date.now());
           return;
         }
       } catch (payErr) {
@@ -6462,6 +6473,13 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
       });
       console.log(`[WAHA] Enqueued AI reply to ${customerPhone} (msgId=${sendResult.messageId})`);
       aiResponseCooldown.set(`${tenantId}_${from}`, Date.now());
+      // Register bot's sent text to filter WAHA echo-back
+      const botEchoKey = `${tenantId}_${aiResult.content.trim().substring(0, 80)}`;
+      recentlySentBotTexts.set(botEchoKey, Date.now());
+      if (recentlySentBotTexts.size > 300) {
+        const cutoff = Date.now() - BOT_ECHO_TTL_MS;
+        for (const [k, t] of recentlySentBotTexts) { if (t < cutoff) recentlySentBotTexts.delete(k); }
+      }
       
     } catch (error) {
       console.error("[WAHA] Error generating/sending AI response:", error);
