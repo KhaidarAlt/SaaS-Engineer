@@ -5799,10 +5799,26 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
           if (Date.now() - echoTime < BOT_ECHO_TTL_MS) {
             console.log(`[WAHA] Echo-back filter: skipping bot's own message from ${from}`);
           } else {
-            console.log(`[WAHA] Processing message from ${from}: ${text}`);
-            processIncomingWhatsAppMessage(instance, from, text).catch(err => {
-              console.error("[WAHA] Error processing message:", err);
-            });
+            // CRITICAL: Cross-tenant isolation - prevent same message from being processed by multiple tenants
+            // This protects against WAHA sending the same message event to multiple sessions
+            const messageSignature = `${from}_${text.trim().substring(0, 100)}`;
+            const processedInTenant = globalMessageDedup.get(messageSignature);
+            if (processedInTenant && processedInTenant !== instance.tenantId) {
+              console.warn(`[WAHA] SECURITY: Message already processed in tenant ${processedInTenant}, skipping duplicate in tenant ${instance.tenantId}`);
+            } else {
+              console.log(`[WAHA] Processing message from ${from}: ${text}`);
+              globalMessageDedup.set(messageSignature, instance.tenantId);
+              // Cleanup old dedup entries
+              if (globalMessageDedup.size > 1000) {
+                const cutoff = Date.now() - GLOBAL_DEDUP_TTL_MS;
+                // Limit cleanup iterations
+                let cleaned = 0;
+                for (const [k, v] of globalMessageDedup) { if (cleaned++ < 200) globalMessageDedup.delete(k); }
+              }
+              processIncomingWhatsAppMessage(instance, from, text).catch(err => {
+                console.error("[WAHA] Error processing message:", err);
+              });
+            }
           }
         }
       }
@@ -5914,6 +5930,9 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
   // Cache of recently sent AI replies to filter WAHA echo-back (fromMe=false bug in NOWEB engine)
   const recentlySentBotTexts = new Map<string, number>();
   const BOT_ECHO_TTL_MS = 60000;
+  // Cross-tenant message dedup: prevent one message from being processed in multiple tenant accounts
+  const globalMessageDedup = new Map<string, string>(); // key: messageSignature, value: processed tenantId
+  const GLOBAL_DEDUP_TTL_MS = 60000;
 
   function extractPhoneFromJid(jid: string): string | null {
     if (!jid || jid.endsWith("@lid") || jid.endsWith("@g.us")) return null;
