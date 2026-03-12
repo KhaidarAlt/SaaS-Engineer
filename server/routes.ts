@@ -5800,11 +5800,11 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
             console.log(`[WAHA] Echo-back filter: skipping bot's own message from ${from}`);
           } else {
             // CRITICAL: Cross-tenant isolation - prevent same message from being processed by multiple tenants
-            // This protects against WAHA sending the same message event to multiple sessions
-            const messageSignature = `${from}_${text.trim().substring(0, 100)}`;
+            // This protects against WAHA sending the same message content to multiple sessions (appears with different from addresses)
+            const messageSignature = text.trim().substring(0, 100);
             const processedInTenant = globalMessageDedup.get(messageSignature);
             if (processedInTenant && processedInTenant !== instance.tenantId) {
-              console.warn(`[WAHA] SECURITY: Message already processed in tenant ${processedInTenant}, skipping duplicate in tenant ${instance.tenantId}`);
+              console.warn(`[WAHA] SECURITY: Message already processed in tenant ${processedInTenant}, skipping duplicate in tenant ${instance.tenantId}: "${messageSignature.substring(0, 50)}..."`);
             } else {
               console.log(`[WAHA] Processing message from ${from}: ${text}`);
               globalMessageDedup.set(messageSignature, instance.tenantId);
