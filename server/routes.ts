@@ -5914,6 +5914,22 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
     }
   });
 
+  // Toggle AI enabled for a channel (CRITICAL: This fixes the bug where disabling AI didn't work)
+  app.post("/api/ai-rop/connect/channel/ai-toggle", requireAuth, requireAiAccess, async (req, res) => {
+    try {
+      const { channelType, enabled } = req.body;
+      const tenantId = req.user!.tenantId!;
+      if (!channelType) return res.status(400).json({ message: "channelType required" });
+      const updated = await storage.updateAiRopChannel(tenantId, channelType, { isAiEnabled: enabled });
+      if (!updated) return res.status(404).json({ message: "Канал не найден" });
+      console.log(`[AI-ROP] Channel ${channelType} AI enabled=${enabled} for tenant ${tenantId}`);
+      res.json(updated);
+    } catch (error) {
+      console.error("[AI-ROP] Toggle channel AI error:", error);
+      res.status(500).json({ message: "Ошибка" });
+    }
+  });
+
   // Process incoming WhatsApp message with AI
   function getTypingDelay(message: string): number {
     const baseDelay = Math.min(message.length * 50, 4000);
