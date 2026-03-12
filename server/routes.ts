@@ -620,6 +620,51 @@ async function ensureDemoTenant() {
   console.log("Created demo products");
 }
 
+function getCorrectWebhookUrl(req?: any): string {
+  let baseUrl = process.env.WAHA_WEBHOOK_BASE_URL;
+  if (!baseUrl) {
+    baseUrl = process.env.NODE_ENV === "production" || process.env.REPLIT_DEPLOYMENT
+      ? "https://botfactory.kz"
+      : process.env.REPLIT_DEV_DOMAIN
+        ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+        : req
+          ? (() => {
+              const protocol = req.headers?.["x-forwarded-proto"] || req.protocol || "https";
+              const host = req.headers?.["x-forwarded-host"] || req.headers?.host;
+              return host ? `${protocol}://${host}` : "https://botfactory.kz";
+            })()
+          : "https://botfactory.kz";
+  }
+  return `${baseUrl}/api/waha/webhook`;
+}
+
+async function syncAllWahaWebhooks(): Promise<void> {
+  try {
+    const correctUrl = getCorrectWebhookUrl();
+    const allInstances = await storage.getActiveWahaInstances();
+    let synced = 0;
+    for (const inst of allInstances) {
+      if (inst.webhookUrl !== correctUrl) {
+        try {
+          await wahaService.updateSessionWebhook(inst.instanceName, correctUrl);
+          await storage.updateWahaInstance(inst.id, inst.tenantId, { webhookUrl: correctUrl });
+          console.log(`[WAHA] Auto-synced webhook for ${inst.instanceName}: ${correctUrl}`);
+          synced++;
+        } catch (e: any) {
+          console.warn(`[WAHA] Failed to sync webhook for ${inst.instanceName}:`, e.message);
+        }
+      }
+    }
+    if (synced > 0) {
+      console.log(`[WAHA] Auto-synced ${synced} webhook URL(s) to ${correctUrl}`);
+    } else {
+      console.log(`[WAHA] All webhooks already correct (${correctUrl})`);
+    }
+  } catch (e: any) {
+    console.warn("[WAHA] Auto-sync webhooks failed:", e.message);
+  }
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -660,6 +705,10 @@ export async function registerRoutes(
   startGrowthSyncWorker();
   startWahaMessagePoller(storage, processIncomingWhatsAppMessage);
   seedScenarioTemplates();
+  // Auto-sync all WAHA webhook URLs to correct production domain on startup (production only)
+  if (process.env.NODE_ENV === "production" || process.env.REPLIT_DEPLOYMENT) {
+    syncAllWahaWebhooks().catch(e => console.warn("[WAHA] Startup webhook sync error:", e));
+  }
 
   app.get("/__ping", (_req: Request, res: Response) => {
     res.type("text/plain").status(200).send("pong");
@@ -5492,20 +5541,8 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
 
       const instanceName = wahaService.generateInstanceName(tenantId);
       
-      // Get webhook URL - production always uses botfactory.kz
-      let baseUrl = process.env.WAHA_WEBHOOK_BASE_URL;
-      if (!baseUrl) {
-        baseUrl = process.env.NODE_ENV === "production" || process.env.REPLIT_DEPLOYMENT
-          ? "https://botfactory.kz"
-          : process.env.REPLIT_DEV_DOMAIN
-            ? `https://${process.env.REPLIT_DEV_DOMAIN}`
-            : (() => {
-                const protocol = req.headers["x-forwarded-proto"] || req.protocol || "https";
-                const host = req.headers["x-forwarded-host"] || req.headers.host;
-                return host ? `${protocol}://${host}` : "";
-              })();
-      }
-      const webhookUrl = baseUrl ? `${baseUrl}/api/waha/webhook` : "";
+      // Get webhook URL - always uses correct production domain
+      const webhookUrl = getCorrectWebhookUrl(req);
       
       // Create and start session in WAHA (start: true is included in createSession)
       await wahaService.createSession(instanceName, webhookUrl || undefined);
@@ -5634,12 +5671,7 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
         return res.status(404).json({ message: "Инстанс не найден" });
       }
       
-      const currentDomain = process.env.REPLIT_DEV_DOMAIN || process.env.REPLIT_DOMAINS?.split(",")[0];
-      if (!currentDomain) {
-        return res.status(500).json({ message: "Не удалось определить домен приложения" });
-      }
-      
-      const newWebhookUrl = `https://${currentDomain}/api/waha/webhook`;
+      const newWebhookUrl = getCorrectWebhookUrl(req);
       
       console.log(`[WAHA] Syncing webhook for ${instance.instanceName}: ${newWebhookUrl}`);
       
@@ -5694,15 +5726,7 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
           const matchedTenant = allTenants.find(t => t.id.startsWith(tenantIdPrefix));
           if (matchedTenant) {
             console.log(`[WAHA] Auto-registering session ${session} for tenant ${matchedTenant.id} (${matchedTenant.name})`);
-            const webhookUrl = process.env.NODE_ENV === "production" || process.env.REPLIT_DEPLOYMENT
-              ? "https://botfactory.kz/api/waha/webhook"
-              : process.env.REPLIT_DEV_DOMAIN
-                ? `https://${process.env.REPLIT_DEV_DOMAIN}/api/waha/webhook`
-                : (() => {
-                    const protocol = req.headers["x-forwarded-proto"] || req.protocol || "https";
-                    const host = req.headers["x-forwarded-host"] || req.headers.host;
-                    return host ? `${protocol}://${host}/api/waha/webhook` : "";
-                  })();
+            const webhookUrl = getCorrectWebhookUrl(req);
             instance = await storage.createWahaInstance({
               tenantId: matchedTenant.id,
               instanceName: session,
