@@ -640,13 +640,14 @@ function getCorrectWebhookUrl(req?: any): string {
 
 async function syncAllWahaWebhooks(): Promise<void> {
   try {
+    const { wahaService: _wahaService } = await import("./services/waha");
     const correctUrl = getCorrectWebhookUrl();
     const allInstances = await storage.getActiveWahaInstances();
     let synced = 0;
     for (const inst of allInstances) {
       if (inst.webhookUrl !== correctUrl) {
         try {
-          await wahaService.updateSessionWebhook(inst.instanceName, correctUrl);
+          await _wahaService.updateSessionWebhook(inst.instanceName, correctUrl);
           await storage.updateWahaInstance(inst.id, inst.tenantId, { webhookUrl: correctUrl });
           console.log(`[WAHA] Auto-synced webhook for ${inst.instanceName}: ${correctUrl}`);
           synced++;
@@ -5992,10 +5993,12 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
       return;
     }
     
-    // Check if tenant has AI enabled
+    // Check if tenant has AI enabled - check tenant.aiEnabled OR ai_rop_channels.isAiEnabled (set via UI toggle)
     const tenant = await storage.getTenant(tenantId);
-    console.log(`[WAHA] Tenant ${tenantId} aiEnabled=${tenant?.aiEnabled}`);
-    if (!tenant || !tenant.aiEnabled) {
+    const aiRopChannel = await storage.getAiRopChannel(tenantId, "WHATSAPP_WAHA");
+    const aiEnabled = tenant?.aiEnabled || aiRopChannel?.isAiEnabled;
+    console.log(`[WAHA] Tenant ${tenantId} aiEnabled=${tenant?.aiEnabled}, channelAiEnabled=${aiRopChannel?.isAiEnabled}`);
+    if (!tenant || !aiEnabled) {
       console.log(`[WAHA] AI disabled for tenant ${tenantId}, skipping response`);
       return;
     }
