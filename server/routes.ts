@@ -6037,11 +6037,12 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
       return;
     }
     
-    // Check if tenant has AI enabled - check tenant.aiEnabled OR ai_rop_channels.isAiEnabled (set via UI toggle)
+    // Check if tenant has AI enabled - CHANNEL setting has priority over tenant global setting
     const tenant = await storage.getTenant(tenantId);
     const aiRopChannel = await storage.getAiRopChannel(tenantId, "WHATSAPP_WAHA");
-    const aiEnabled = tenant?.aiEnabled || aiRopChannel?.isAiEnabled;
-    console.log(`[WAHA] Tenant ${tenantId} aiEnabled=${tenant?.aiEnabled}, channelAiEnabled=${aiRopChannel?.isAiEnabled}`);
+    // If channel has explicit setting, use it; otherwise use global tenant setting
+    const aiEnabled = aiRopChannel?.isAiEnabled ?? tenant?.aiEnabled;
+    console.log(`[WAHA] Tenant ${tenantId} aiEnabled=${tenant?.aiEnabled}, channelAiEnabled=${aiRopChannel?.isAiEnabled}, final=${aiEnabled}`);
     if (!tenant || !aiEnabled) {
       console.log(`[WAHA] AI disabled for tenant ${tenantId}, skipping response`);
       return;
