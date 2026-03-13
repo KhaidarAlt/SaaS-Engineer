@@ -5809,26 +5809,30 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
           if (Date.now() - echoTime < BOT_ECHO_TTL_MS) {
             console.log(`[WAHA] Echo-back filter: skipping bot's own message from ${from}`);
           } else {
-            // CRITICAL: Cross-tenant isolation using WAHA message ID (unique per message).
-            // Use payload.id if available (most reliable), fallback to from+text hash.
-            // This prevents the same WAHA message from being processed by two different tenant bots.
-            const wahaMessageId = payload?.id || payload?.key?.id;
-            const messageSignature = wahaMessageId
-              ? `msgid_${wahaMessageId}`
-              : `from_${from}_${text.trim().substring(0, 100)}`;
+            // CRITICAL: Cross-tenant isolation.
+            // WAHA assigns DIFFERENT payload.id values to the same physical message across different sessions,
+            // so we CANNOT use payload.id as the dedup key across tenants.
+            // Instead, use sender phone (from) + message text — these are identical across sessions for
+            // the same incoming message, reliably preventing two tenant bots from processing it.
+            const normalizedFrom = from.replace("@c.us", "").replace("@s.whatsapp.net", "").replace(/\D/g, "");
+            const messageSignature = `from_${normalizedFrom}_${text.trim().substring(0, 100)}`;
 
-            const processedInTenant = globalMessageDedup.get(messageSignature);
-            if (processedInTenant && processedInTenant !== instance.tenantId) {
-              console.warn(`[WAHA] SECURITY: Message already processed in tenant ${processedInTenant}, blocking duplicate in tenant ${instance.tenantId}. msgSig="${messageSignature.substring(0, 60)}"`);
+            const dedupEntry = globalMessageDedup.get(messageSignature);
+            const now = Date.now();
+            const isStale = dedupEntry && (now - dedupEntry.ts) > GLOBAL_DEDUP_TTL_MS;
+            if (dedupEntry && !isStale && dedupEntry.tenantId !== instance.tenantId) {
+              console.warn(`[WAHA] SECURITY: Cross-tenant duplicate blocked. Message from ${normalizedFrom} already handled by tenant ${dedupEntry.tenantId}, skipping for tenant ${instance.tenantId}`);
             } else {
-              // Mark as being processed by this tenant BEFORE async call to prevent race conditions
-              globalMessageDedup.set(messageSignature, instance.tenantId);
-              console.log(`[WAHA] Processing message from ${from} (tenant=${instance.tenantId}): ${text?.substring(0, 50)}`);
-              // Cleanup old dedup entries periodically
-              if (globalMessageDedup.size > 1000) {
-                let cleaned = 0;
-                for (const [k] of globalMessageDedup) { if (cleaned++ < 200) globalMessageDedup.delete(k); }
+              // Mark BEFORE async call — Node.js is single-threaded so this is atomic w.r.t. concurrent webhooks
+              globalMessageDedup.set(messageSignature, { tenantId: instance.tenantId, ts: now });
+              // TTL-based cleanup
+              if (globalMessageDedup.size > 500) {
+                const cutoff = now - GLOBAL_DEDUP_TTL_MS;
+                for (const [k, v] of globalMessageDedup) {
+                  if (v.ts < cutoff) globalMessageDedup.delete(k);
+                }
               }
+              console.log(`[WAHA] Processing message from ${from} (tenant=${instance.tenantId}): ${text?.substring(0, 50)}`);
               processIncomingWhatsAppMessage(instance, from, text).catch(err => {
                 console.error("[WAHA] Error processing message:", err);
               });
@@ -5986,7 +5990,7 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
   const recentlySentBotTexts = new Map<string, number>();
   const BOT_ECHO_TTL_MS = 60000;
   // Cross-tenant message dedup: prevent one message from being processed in multiple tenant accounts
-  const globalMessageDedup = new Map<string, string>(); // key: messageSignature, value: processed tenantId
+  const globalMessageDedup = new Map<string, { tenantId: string; ts: number }>(); // key: messageSignature
   const GLOBAL_DEDUP_TTL_MS = 60000;
 
   function extractPhoneFromJid(jid: string): string | null {
