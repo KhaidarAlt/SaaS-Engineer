@@ -6080,14 +6080,20 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
       return;
     }
     
-    // Check if tenant has AI enabled - CHANNEL setting has priority over tenant global setting
+    // Two-level AI enable check:
+    // 1. Global master switch (tenant.aiEnabled) — the OverviewPage toggle. If OFF → AI is OFF, always.
+    // 2. Channel switch (aiRopChannel.isAiEnabled) — per-channel toggle. Only matters when global is ON.
     const tenant = await storage.getTenant(tenantId);
+    if (!tenant || !tenant.aiEnabled) {
+      console.log(`[WAHA] Global AI disabled for tenant ${tenantId}, skipping response`);
+      return;
+    }
     const aiRopChannel = await storage.getAiRopChannel(tenantId, "WHATSAPP_WAHA");
-    // If channel has explicit setting, use it; otherwise use global tenant setting
-    const aiEnabled = aiRopChannel?.isAiEnabled ?? tenant?.aiEnabled;
-    console.log(`[WAHA] Tenant ${tenantId} aiEnabled=${tenant?.aiEnabled}, channelAiEnabled=${aiRopChannel?.isAiEnabled}, final=${aiEnabled}`);
-    if (!tenant || !aiEnabled) {
-      console.log(`[WAHA] AI disabled for tenant ${tenantId}, skipping response`);
+    // If channel record exists, its switch must also be ON. If no record, default to enabled.
+    const channelEnabled = aiRopChannel ? aiRopChannel.isAiEnabled : true;
+    console.log(`[WAHA] Tenant ${tenantId} globalAI=${tenant.aiEnabled}, channelAI=${aiRopChannel?.isAiEnabled ?? "no_record"}, channelEnabled=${channelEnabled}`);
+    if (!channelEnabled) {
+      console.log(`[WAHA] Channel AI disabled for tenant ${tenantId}, skipping response`);
       return;
     }
     
