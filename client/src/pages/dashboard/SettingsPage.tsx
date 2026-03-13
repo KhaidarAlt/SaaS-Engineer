@@ -345,6 +345,7 @@ export default function SettingsPage() {
   const [ogImagePreview, setOgImagePreview] = useState<string>("");
   const [showWhatsAppQr, setShowWhatsAppQr] = useState(false);
   const [currentInstance, setCurrentInstance] = useState<WahaInstance | null>(null);
+  const [wahaConnected, setWahaConnected] = useState(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
   const ogImageInputRef = useRef<HTMLInputElement>(null);
   const [newDomainInput, setNewDomainInput] = useState("");
@@ -363,44 +364,57 @@ export default function SettingsPage() {
 
   const { data: wahaInstances, refetch: refetchWahaInstances } = useQuery<WahaInstance[]>({
     queryKey: ["/api/waha/instances"],
-    refetchInterval: showWhatsAppQr ? 3000 : false,
+    // Only poll while QR is showing AND connection not yet confirmed
+    refetchInterval: showWhatsAppQr && !wahaConnected ? 3000 : false,
   });
 
   const connectedInstance = wahaInstances?.find(i => i.status === "running");
   const pendingInstance = wahaInstances?.find(i => i.status === "scan_qr" || i.status === "starting");
 
-  useEffect(() => {
-    if (pendingInstance && !currentInstance) {
-      setCurrentInstance(pendingInstance);
-      setShowWhatsAppQr(true);
-    }
-    if (connectedInstance && showWhatsAppQr) {
-      setShowWhatsAppQr(false);
-      setCurrentInstance(null);
-      toast({ title: "WhatsApp успешно подключен!" });
-    }
-  }, [pendingInstance, connectedInstance, currentInstance, showWhatsAppQr]);
-
   const { data: wahaQr, refetch: refetchWahaQr } = useQuery<{ qrCode: string }>({
     queryKey: ["/api/waha/instances", currentInstance?.id || "none", "qr"],
-    enabled: !!currentInstance?.id && showWhatsAppQr,
-    refetchInterval: showWhatsAppQr && !!currentInstance?.id ? 5000 : false,
+    enabled: !!currentInstance?.id && showWhatsAppQr && !wahaConnected,
+    // Stop polling QR once connected
+    refetchInterval: showWhatsAppQr && !!currentInstance?.id && !wahaConnected ? 5000 : false,
   });
 
   const { data: wahaStatus, refetch: refetchWahaStatus } = useQuery<WahaInstance>({
     queryKey: ["/api/waha/instances", currentInstance?.id || "none", "status"],
-    enabled: !!currentInstance?.id && showWhatsAppQr,
-    refetchInterval: showWhatsAppQr && !!currentInstance?.id ? 3000 : false,
+    enabled: !!currentInstance?.id && showWhatsAppQr && !wahaConnected,
+    // Stop polling status once connected
+    refetchInterval: showWhatsAppQr && !!currentInstance?.id && !wahaConnected ? 3000 : false,
   });
 
+  // Single unified effect — prevents race between two competing effects
   useEffect(() => {
+    if (wahaConnected) return; // already handled, skip to avoid double-toasts
+
+    // Detect connection via status poll (primary path)
     if (wahaStatus?.status === "running") {
+      setWahaConnected(true);
       setShowWhatsAppQr(false);
       setCurrentInstance(null);
       toast({ title: "WhatsApp успешно подключен!" });
+      // Refetch instances so connectedInstance is populated and the connected card renders
       refetchWahaInstances();
+      return;
     }
-  }, [wahaStatus?.status]);
+
+    // Detect connection via instances poll (fallback when status poll lags)
+    if (connectedInstance && showWhatsAppQr) {
+      setWahaConnected(true);
+      setShowWhatsAppQr(false);
+      setCurrentInstance(null);
+      toast({ title: "WhatsApp успешно подключен!" });
+      return;
+    }
+
+    // Auto-open QR section when a pending instance appears (e.g. after create)
+    if (pendingInstance && !currentInstance) {
+      setCurrentInstance(pendingInstance);
+      setShowWhatsAppQr(true);
+    }
+  }, [wahaStatus?.status, connectedInstance, pendingInstance, currentInstance, wahaConnected]);
 
   const createWahaMutation = useMutation({
     mutationFn: async () => {
