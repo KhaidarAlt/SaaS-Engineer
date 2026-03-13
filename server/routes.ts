@@ -5809,21 +5809,25 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
           if (Date.now() - echoTime < BOT_ECHO_TTL_MS) {
             console.log(`[WAHA] Echo-back filter: skipping bot's own message from ${from}`);
           } else {
-            // CRITICAL: Cross-tenant isolation - prevent same message from being processed by multiple tenants
-            // This protects against WAHA sending the same message content to multiple sessions (appears with different from addresses)
-            const messageSignature = text.trim().substring(0, 100);
+            // CRITICAL: Cross-tenant isolation using WAHA message ID (unique per message).
+            // Use payload.id if available (most reliable), fallback to from+text hash.
+            // This prevents the same WAHA message from being processed by two different tenant bots.
+            const wahaMessageId = payload?.id || payload?.key?.id;
+            const messageSignature = wahaMessageId
+              ? `msgid_${wahaMessageId}`
+              : `from_${from}_${text.trim().substring(0, 100)}`;
+
             const processedInTenant = globalMessageDedup.get(messageSignature);
             if (processedInTenant && processedInTenant !== instance.tenantId) {
-              console.warn(`[WAHA] SECURITY: Message already processed in tenant ${processedInTenant}, skipping duplicate in tenant ${instance.tenantId}: "${messageSignature.substring(0, 50)}..."`);
+              console.warn(`[WAHA] SECURITY: Message already processed in tenant ${processedInTenant}, blocking duplicate in tenant ${instance.tenantId}. msgSig="${messageSignature.substring(0, 60)}"`);
             } else {
-              console.log(`[WAHA] Processing message from ${from}: ${text}`);
+              // Mark as being processed by this tenant BEFORE async call to prevent race conditions
               globalMessageDedup.set(messageSignature, instance.tenantId);
-              // Cleanup old dedup entries
+              console.log(`[WAHA] Processing message from ${from} (tenant=${instance.tenantId}): ${text?.substring(0, 50)}`);
+              // Cleanup old dedup entries periodically
               if (globalMessageDedup.size > 1000) {
-                const cutoff = Date.now() - GLOBAL_DEDUP_TTL_MS;
-                // Limit cleanup iterations
                 let cleaned = 0;
-                for (const [k, v] of globalMessageDedup) { if (cleaned++ < 200) globalMessageDedup.delete(k); }
+                for (const [k] of globalMessageDedup) { if (cleaned++ < 200) globalMessageDedup.delete(k); }
               }
               processIncomingWhatsAppMessage(instance, from, text).catch(err => {
                 console.error("[WAHA] Error processing message:", err);
@@ -5924,16 +5928,41 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
     }
   });
 
-  // Toggle AI enabled for a channel (CRITICAL: This fixes the bug where disabling AI didn't work)
+  // Toggle AI enabled for a channel - UPSERT to handle missing channel records
   app.post("/api/ai-rop/connect/channel/ai-toggle", requireAuth, requireAiAccess, async (req, res) => {
     try {
       const { channelType, enabled } = req.body;
       const tenantId = req.user!.tenantId!;
       if (!channelType) return res.status(400).json({ message: "channelType required" });
-      const updated = await storage.updateAiRopChannel(tenantId, channelType, { isAiEnabled: enabled });
-      if (!updated) return res.status(404).json({ message: "Канал не найден" });
-      console.log(`[AI-ROP] Channel ${channelType} AI enabled=${enabled} for tenant ${tenantId}`);
-      res.json(updated);
+
+      // Smart upsert: update isAiEnabled if channel exists, create minimal record if not
+      let channelResult = await storage.getAiRopChannel(tenantId, channelType);
+      if (channelResult) {
+        // Update only isAiEnabled, preserve all other fields (status, config, etc.)
+        channelResult = await storage.updateAiRopChannel(tenantId, channelType, { isAiEnabled: !!enabled }) ?? channelResult;
+      } else {
+        // Create a minimal channel record so the toggle is persisted
+        const displayName = channelType === "WHATSAPP_WAHA" ? "WhatsApp (WAHA)"
+          : channelType === "WHATSAPP_META" ? "WhatsApp (Meta)"
+          : channelType === "INSTAGRAM" ? "Instagram"
+          : channelType === "TELEGRAM" ? "Telegram"
+          : channelType;
+        channelResult = await storage.upsertAiRopChannel({
+          tenantId,
+          channelType,
+          isAiEnabled: !!enabled,
+          status: "NOT_CONNECTED",
+          displayName,
+        });
+      }
+      const upserted = channelResult;
+
+      // Also update the global tenant.aiEnabled as a backup so AI is truly off
+      // regardless of whether channel record is found later
+      await storage.updateTenant(tenantId, { aiEnabled: !!enabled });
+
+      console.log(`[AI-ROP] Channel ${channelType} AI enabled=${enabled} for tenant ${tenantId} (upserted)`);
+      res.json(upserted);
     } catch (error) {
       console.error("[AI-ROP] Toggle channel AI error:", error);
       res.status(500).json({ message: "Ошибка" });
