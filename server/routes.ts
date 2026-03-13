@@ -5008,14 +5008,24 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
               startDate: p.startsAt || undefined,
               endDate: p.endsAt || undefined,
             })),
-            discounts: discounts.filter(d => d.isActive).map(d => ({
-              name: d.name,
-              type: d.type,
-              value: Number(d.value),
-              scope: d.scope,
-              categoryName: d.scope === 'category' && d.scopeId ? categoryMap.get(d.scopeId) : undefined,
-              productName: d.scope === 'product' && d.scopeId ? products.find(p => p.id === d.scopeId)?.name : undefined,
-            })),
+            discounts: (() => {
+              const now = new Date();
+              return discounts
+                .filter(d => {
+                  if (!d.isActive) return false;
+                  if (d.startsAt && new Date(d.startsAt) > now) return false;
+                  if (d.endsAt && new Date(d.endsAt) < now) return false;
+                  return true;
+                })
+                .map(d => ({
+                  name: d.name,
+                  type: d.type,
+                  value: Number(d.value),
+                  scope: d.scope,
+                  categoryName: d.scope === 'category' && d.scopeId ? categoryMap.get(d.scopeId) : undefined,
+                  productName: d.scope === 'product' && d.scopeId ? products.find(p => p.id === d.scopeId)?.name : undefined,
+                }));
+            })(),
             contactPhone: tenant?.contactPhone || undefined,
             customerWhatsAppPhone: customerPhone || undefined,
             aiLanguages: (tenant as any).aiLanguages || ["ru"],
@@ -6356,14 +6366,24 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
         startDate: p.startsAt || undefined,
         endDate: p.endsAt || undefined,
       })),
-      discounts: discounts.filter(d => d.isActive).map(d => ({
-        name: d.name,
-        type: d.type,
-        value: Number(d.value),
-        scope: d.scope,
-        categoryName: d.scope === "category" && d.scopeId ? categoryMap.get(d.scopeId) : undefined,
-        productName: undefined,
-      })),
+      discounts: (() => {
+        const now = new Date();
+        return discounts
+          .filter(d => {
+            if (!d.isActive) return false;
+            if (d.startsAt && new Date(d.startsAt) > now) return false;
+            if (d.endsAt && new Date(d.endsAt) < now) return false;
+            return true;
+          })
+          .map(d => ({
+            name: d.name,
+            type: d.type,
+            value: Number(d.value),
+            scope: d.scope,
+            categoryName: d.scope === "category" && d.scopeId ? categoryMap.get(d.scopeId) : undefined,
+            productName: d.scope === "product" && d.scopeId ? products.find(p => p.id === d.scopeId)?.name : undefined,
+          }));
+      })(),
       policies: policies ? {
         answerOnlyFromData: policies.answerOnlyFromData || undefined,
         offerHandoffIfNoAnswer: policies.offerHandoffIfNoAnswer || undefined,
