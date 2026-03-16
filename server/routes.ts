@@ -2684,6 +2684,55 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/crm/leads", requireAuth, async (req, res) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const status = req.query.status as string | undefined;
+      const leads = await storage.getCrmLeads(tenantId, status);
+      res.json(leads);
+    } catch (error) {
+      console.error("[CRM Leads] Error:", error);
+      res.status(500).json({ message: "Ошибка получения лидов" });
+    }
+  });
+
+  app.post("/api/crm/leads/sync", requireAuth, async (req, res) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const synced = await storage.syncCrmLeadsFromMessages(tenantId);
+      const classified = await storage.autoClassifyCrmLeads(tenantId);
+      res.json({ synced, classified });
+    } catch (error) {
+      console.error("[CRM Leads Sync] Error:", error);
+      res.status(500).json({ message: "Ошибка синхронизации лидов" });
+    }
+  });
+
+  app.patch("/api/crm/leads/:id", requireAuth, async (req, res) => {
+    try {
+      const tenantId = req.user!.tenantId!;
+      const patchSchema = z.object({
+        status: z.enum(["new", "unqualified", "qualified"]).optional(),
+        notes: z.string().max(2000).optional(),
+      });
+      const validation = patchSchema.safeParse(req.body);
+      if (!validation.success) {
+        return res.status(400).json({ message: "Неверные данные", errors: validation.error.errors });
+      }
+      const { status, notes } = validation.data;
+      const updates: Partial<{ status: string; notes: string; qualifiedAt: Date }> = {};
+      if (status) updates.status = status;
+      if (notes !== undefined) updates.notes = notes;
+      if (status === 'qualified') updates.qualifiedAt = new Date();
+      const lead = await storage.updateCrmLead(req.params.id, tenantId, updates as any);
+      if (!lead) return res.status(404).json({ message: "Лид не найден" });
+      res.json(lead);
+    } catch (error) {
+      console.error("[CRM Lead Update] Error:", error);
+      res.status(500).json({ message: "Ошибка обновления лида" });
+    }
+  });
+
   app.get("/api/crm/stats", requireAuth, async (req, res) => {
     try {
       const orders = await storage.getOrders(req.user!.tenantId!);

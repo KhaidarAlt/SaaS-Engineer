@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
@@ -25,6 +25,10 @@ import {
   Percent,
   Wallet,
   Banknote,
+  UserPlus,
+  UserX,
+  UserCheck,
+  Phone,
 } from "lucide-react";
 import { SiWhatsapp } from "react-icons/si";
 import { Button } from "@/components/ui/button";
@@ -63,7 +67,13 @@ import { TableRowSkeleton } from "@/components/LoadingSpinner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import type { Order } from "@shared/schema";
+import type { Order, CrmLead } from "@shared/schema";
+
+const leadStatusOptions = [
+  { value: "new", label: "Новый", icon: UserPlus, color: "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200", bgColor: "bg-slate-50 dark:bg-slate-950/30" },
+  { value: "unqualified", label: "Не квалифицирован", icon: UserX, color: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300", bgColor: "bg-gray-50 dark:bg-gray-950/30" },
+  { value: "qualified", label: "Квалифицирован", icon: UserCheck, color: "bg-violet-100 text-violet-800 dark:bg-violet-900 dark:text-violet-200", bgColor: "bg-violet-50 dark:bg-violet-950/30" },
+];
 
 const dealStatusOptions = [
   { value: "new", label: "Новый", color: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200", bgColor: "bg-blue-50 dark:bg-blue-950/30" },
@@ -92,9 +102,14 @@ export default function CRMPage() {
   const [viewMode, setViewMode] = useState<ViewMode>("table");
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  const [syncTriggered, setSyncTriggered] = useState(false);
 
   const { data: orders, isLoading } = useQuery<Order[]>({
     queryKey: ["/api/orders"],
+  });
+
+  const { data: leads, isLoading: leadsLoading } = useQuery<CrmLead[]>({
+    queryKey: ["/api/crm/leads"],
   });
 
   const { data: stats } = useQuery<{
@@ -107,6 +122,22 @@ export default function CRMPage() {
   }>({
     queryKey: ["/api/crm/stats"],
   });
+
+  const syncMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", "/api/crm/leads/sync");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/crm/leads"] });
+    },
+  });
+
+  useEffect(() => {
+    if (!syncTriggered) {
+      setSyncTriggered(true);
+      syncMutation.mutate();
+    }
+  }, []);
 
   const updateStatusMutation = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
@@ -130,6 +161,16 @@ export default function CRMPage() {
     },
   });
 
+  const updateLeadStatusMutation = useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: string }) => {
+      return apiRequest("PATCH", `/api/crm/leads/${id}`, { status });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/crm/leads"] });
+      toast({ title: "Статус лида обновлён" });
+    },
+  });
+
   const filteredOrders = orders?.filter((order) => {
     const matchesSearch =
       order.orderNumber.toLowerCase().includes(search.toLowerCase()) ||
@@ -140,11 +181,25 @@ export default function CRMPage() {
     return matchesSearch && matchesStatus && matchesPayment;
   });
 
+  const filteredLeads = leads?.filter((lead) => {
+    if (!search) return true;
+    return (
+      lead.phone.includes(search) ||
+      (lead.name && lead.name.toLowerCase().includes(search.toLowerCase()))
+    );
+  });
+
+  const leadsByStatus = leadStatusOptions.reduce((acc, status) => {
+    acc[status.value] = filteredLeads?.filter((l) => l.status === status.value) || [];
+    return acc;
+  }, {} as Record<string, CrmLead[]>);
+
   const formatPrice = (price: string) => {
     return new Intl.NumberFormat("ru-KZ").format(parseFloat(price)) + " ₸";
   };
 
-  const formatDate = (date: string | Date) => {
+  const formatDate = (date: string | Date | null) => {
+    if (!date) return "-";
     return new Date(date).toLocaleString("ru-RU", {
       day: "numeric",
       month: "short",
@@ -175,6 +230,14 @@ export default function CRMPage() {
     return digits;
   };
 
+  const formatPhoneDisplay = (phone: string) => {
+    const digits = phone.replace(/\D/g, "");
+    if (digits.length === 11) {
+      return `+${digits[0]} (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7, 9)}-${digits.slice(9)}`;
+    }
+    return phone;
+  };
+
   const createWhatsAppLink = (order: Order) => {
     const phone = formatPhoneForWhatsApp(order.customerPhone);
     const message = encodeURIComponent(
@@ -183,6 +246,11 @@ export default function CRMPage() {
       `Спасибо за заказ!`
     );
     return `https://wa.me/${phone}?text=${message}`;
+  };
+
+  const createLeadWhatsAppLink = (phone: string) => {
+    const digits = formatPhoneForWhatsApp(phone);
+    return `https://wa.me/${digits}`;
   };
 
   const isFirstDeal = orders && orders.length === 1;
@@ -220,11 +288,11 @@ export default function CRMPage() {
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  <p className="max-w-xs">CRM — учёт сделок, оплат и переписки с клиентами</p>
+                  <p className="max-w-xs">CRM — учёт лидов, сделок, оплат и переписки с клиентами</p>
                 </TooltipContent>
               </Tooltip>
             </div>
-            <p className="text-muted-foreground">Управляйте сделками, клиентами и оплатами</p>
+            <p className="text-muted-foreground">Управляйте лидами, сделками, клиентами и оплатами</p>
           </div>
           <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as ViewMode)}>
             <TabsList>
@@ -496,129 +564,235 @@ export default function CRMPage() {
             </div>
           </Card>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-            {dealStatusOptions.map((status) => (
-              <div key={status.value} className="space-y-3">
-                <div className={`p-3 rounded-lg ${status.bgColor}`}>
-                  <div className="flex items-center justify-between">
-                    <Badge className={status.color}>{status.label}</Badge>
-                    <span className="text-sm font-medium">
-                      {ordersByStatus[status.value]?.length || 0}
-                    </span>
-                  </div>
-                </div>
-                <div className="space-y-2 min-h-[200px]">
-                  {isLoading ? (
-                    [...Array(2)].map((_, i) => (
-                      <Card key={i} className="p-3">
-                        <Skeleton className="h-4 w-24 mb-2" />
-                        <Skeleton className="h-3 w-full mb-1" />
-                        <Skeleton className="h-3 w-20" />
-                      </Card>
-                    ))
-                  ) : (
-                    ordersByStatus[status.value]?.map((order) => (
-                      <motion.div
-                        key={order.id}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="group"
-                      >
-                        <Card 
-                          className="p-3 cursor-pointer hover-elevate"
-                          onClick={() => navigate(`/dashboard/crm/${order.id}`)}
-                          data-testid={`kanban-deal-${order.id}`}
-                        >
-                          <div className="flex items-start justify-between mb-2">
-                            <span className="text-sm font-medium text-primary">
-                              #{order.orderNumber}
-                            </span>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
+          <div className="space-y-6">
+            <div>
+              <h3 className="text-sm font-medium text-muted-foreground mb-3 uppercase tracking-wider">Лиды</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {leadStatusOptions.map((status) => (
+                  <div key={status.value} className="space-y-3">
+                    <div className={`p-3 rounded-lg ${status.bgColor}`}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <status.icon className="h-4 w-4" />
+                          <Badge className={status.color}>{status.label}</Badge>
+                        </div>
+                        <span className="text-sm font-medium">
+                          {leadsLoading ? <Skeleton className="h-5 w-6 inline-block" /> : leadsByStatus[status.value]?.length || 0}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="space-y-2 min-h-[120px]">
+                      {leadsLoading ? (
+                        [...Array(2)].map((_, i) => (
+                          <Card key={i} className="p-3">
+                            <Skeleton className="h-4 w-24 mb-2" />
+                            <Skeleton className="h-3 w-full mb-1" />
+                            <Skeleton className="h-3 w-20" />
+                          </Card>
+                        ))
+                      ) : (
+                        leadsByStatus[status.value]?.map((lead) => (
+                          <motion.div
+                            key={lead.id}
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="group"
+                          >
+                            <Card className="p-3 hover-elevate" data-testid={`kanban-lead-${lead.id}`}>
+                              <div className="flex items-start justify-between mb-2">
+                                <div className="flex items-center gap-1.5">
+                                  <Phone className="h-3.5 w-3.5 text-muted-foreground" />
+                                  <span className="text-sm font-medium">{formatPhoneDisplay(lead.phone)}</span>
+                                </div>
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-6 w-6 opacity-0 group-hover:opacity-100"
+                                      onClick={(e) => e.stopPropagation()}
+                                      data-testid={`lead-menu-${lead.id}`}
+                                    >
+                                      <ChevronDown className="h-3 w-3" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    {leadStatusOptions
+                                      .filter((s) => s.value !== lead.status)
+                                      .map((s) => (
+                                        <DropdownMenuItem
+                                          key={s.value}
+                                          onClick={() =>
+                                            updateLeadStatusMutation.mutate({ id: lead.id, status: s.value })
+                                          }
+                                          data-testid={`lead-move-${lead.id}-${s.value}`}
+                                        >
+                                          <ArrowRight className="h-3 w-3 mr-2" />
+                                          {s.label}
+                                        </DropdownMenuItem>
+                                      ))}
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </div>
+                              {lead.name && (
+                                <p className="text-sm text-muted-foreground truncate">{lead.name}</p>
+                              )}
+                              <div className="flex items-center gap-1 mt-2 pt-2 border-t">
                                 <Button
                                   variant="ghost"
                                   size="icon"
-                                  className="h-6 w-6 opacity-0 group-hover:opacity-100"
-                                  onClick={(e) => e.stopPropagation()}
+                                  className="h-6 w-6"
+                                  onClick={() => window.open(createLeadWhatsAppLink(lead.phone), "_blank")}
+                                  data-testid={`whatsapp-lead-${lead.id}`}
                                 >
-                                  <ChevronDown className="h-3 w-3" />
+                                  <SiWhatsapp className="h-3 w-3 text-green-600" />
                                 </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                {dealStatusOptions
-                                  .filter((s) => s.value !== order.status)
-                                  .map((s) => (
-                                    <DropdownMenuItem
-                                      key={s.value}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        updateStatusMutation.mutate({ id: order.id, status: s.value });
-                                      }}
-                                    >
-                                      <ArrowRight className="h-3 w-3 mr-2" />
-                                      {s.label}
-                                    </DropdownMenuItem>
-                                  ))}
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </div>
-                          <p className="font-medium text-sm truncate">{order.customerName}</p>
-                          <p className="text-xs text-muted-foreground">{order.customerPhone}</p>
-                          <div className="flex items-center justify-between mt-2">
-                            <span className="font-medium text-sm">{formatPrice(order.total)}</span>
-                            {(() => {
-                              const badge = getPaymentBadge(order.paymentStatus);
-                              const Icon = badge.icon;
-                              const label = order.paymentStatus === "prepayment" && (order as any).prepaymentPercentage
-                                ? `${(order as any).prepaymentPercentage}%`
-                                : null;
-                              return (
-                                <Badge className={`text-[10px] px-1.5 py-0 ${badge.badgeColor || ""}`}>
-                                  <Icon className="h-3 w-3 mr-0.5" />
-                                  {label || badge.label}
-                                </Badge>
-                              );
-                            })()}
-                          </div>
-                          <div className="flex items-center gap-1 mt-2 pt-2 border-t">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-6 w-6"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                window.open(createWhatsAppLink(order), "_blank");
-                              }}
-                            >
-                              <SiWhatsapp className="h-3 w-3 text-green-600" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-6 w-6"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                navigate(`/dashboard/crm/${order.id}?ai=1`);
-                              }}
-                            >
-                              <BrainCircuit className="h-3 w-3 text-purple-600" />
-                            </Button>
-                            <span className="text-xs text-muted-foreground ml-auto">
-                              {formatDate(order.createdAt)}
-                            </span>
-                          </div>
-                        </Card>
-                      </motion.div>
-                    ))
-                  )}
-                  {!isLoading && ordersByStatus[status.value]?.length === 0 && (
-                    <div className="flex items-center justify-center h-24 border-2 border-dashed rounded-lg">
-                      <p className="text-xs text-muted-foreground">Пусто</p>
+                                <span className="text-xs text-muted-foreground ml-auto">
+                                  {formatDate(lead.lastMessageAt)}
+                                </span>
+                              </div>
+                            </Card>
+                          </motion.div>
+                        ))
+                      )}
+                      {!leadsLoading && leadsByStatus[status.value]?.length === 0 && (
+                        <div className="flex items-center justify-center h-20 border-2 border-dashed rounded-lg">
+                          <p className="text-xs text-muted-foreground">Пусто</p>
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
+                  </div>
+                ))}
               </div>
-            ))}
+            </div>
+
+            <div>
+              <h3 className="text-sm font-medium text-muted-foreground mb-3 uppercase tracking-wider">Заказы</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+                {dealStatusOptions.map((status) => (
+                  <div key={status.value} className="space-y-3">
+                    <div className={`p-3 rounded-lg ${status.bgColor}`}>
+                      <div className="flex items-center justify-between">
+                        <Badge className={status.color}>{status.label}</Badge>
+                        <span className="text-sm font-medium">
+                          {ordersByStatus[status.value]?.length || 0}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="space-y-2 min-h-[200px]">
+                      {isLoading ? (
+                        [...Array(2)].map((_, i) => (
+                          <Card key={i} className="p-3">
+                            <Skeleton className="h-4 w-24 mb-2" />
+                            <Skeleton className="h-3 w-full mb-1" />
+                            <Skeleton className="h-3 w-20" />
+                          </Card>
+                        ))
+                      ) : (
+                        ordersByStatus[status.value]?.map((order) => (
+                          <motion.div
+                            key={order.id}
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="group"
+                          >
+                            <Card 
+                              className="p-3 cursor-pointer hover-elevate"
+                              onClick={() => navigate(`/dashboard/crm/${order.id}`)}
+                              data-testid={`kanban-deal-${order.id}`}
+                            >
+                              <div className="flex items-start justify-between mb-2">
+                                <span className="text-sm font-medium text-primary">
+                                  #{order.orderNumber}
+                                </span>
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-6 w-6 opacity-0 group-hover:opacity-100"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      <ChevronDown className="h-3 w-3" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    {dealStatusOptions
+                                      .filter((s) => s.value !== order.status)
+                                      .map((s) => (
+                                        <DropdownMenuItem
+                                          key={s.value}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            updateStatusMutation.mutate({ id: order.id, status: s.value });
+                                          }}
+                                        >
+                                          <ArrowRight className="h-3 w-3 mr-2" />
+                                          {s.label}
+                                        </DropdownMenuItem>
+                                      ))}
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </div>
+                              <p className="font-medium text-sm truncate">{order.customerName}</p>
+                              <p className="text-xs text-muted-foreground">{order.customerPhone}</p>
+                              <div className="flex items-center justify-between mt-2">
+                                <span className="font-medium text-sm">{formatPrice(order.total)}</span>
+                                {(() => {
+                                  const badge = getPaymentBadge(order.paymentStatus);
+                                  const Icon = badge.icon;
+                                  const label = order.paymentStatus === "prepayment" && (order as any).prepaymentPercentage
+                                    ? `${(order as any).prepaymentPercentage}%`
+                                    : null;
+                                  return (
+                                    <Badge className={`text-[10px] px-1.5 py-0 ${badge.badgeColor || ""}`}>
+                                      <Icon className="h-3 w-3 mr-0.5" />
+                                      {label || badge.label}
+                                    </Badge>
+                                  );
+                                })()}
+                              </div>
+                              <div className="flex items-center gap-1 mt-2 pt-2 border-t">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    window.open(createWhatsAppLink(order), "_blank");
+                                  }}
+                                >
+                                  <SiWhatsapp className="h-3 w-3 text-green-600" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    navigate(`/dashboard/crm/${order.id}?ai=1`);
+                                  }}
+                                >
+                                  <BrainCircuit className="h-3 w-3 text-purple-600" />
+                                </Button>
+                                <span className="text-xs text-muted-foreground ml-auto">
+                                  {formatDate(order.createdAt)}
+                                </span>
+                              </div>
+                            </Card>
+                          </motion.div>
+                        ))
+                      )}
+                      {!isLoading && ordersByStatus[status.value]?.length === 0 && (
+                        <div className="flex items-center justify-center h-24 border-2 border-dashed rounded-lg">
+                          <p className="text-xs text-muted-foreground">Пусто</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         )}
       </div>

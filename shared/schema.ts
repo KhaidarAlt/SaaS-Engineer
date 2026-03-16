@@ -3099,3 +3099,32 @@ export const aiLearningSuggestionsRelations = relations(aiLearningSuggestions, (
 export const insertAiLearningSuggestionSchema = createInsertSchema(aiLearningSuggestions).omit({ id: true, createdAt: true });
 export type InsertAiLearningSuggestion = z.infer<typeof insertAiLearningSuggestionSchema>;
 export type AiLearningSuggestion = typeof aiLearningSuggestions.$inferSelect;
+
+// ============ CRM LEADS ============
+export const crmLeads = pgTable("crm_leads", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  phone: text("phone").notNull(),
+  name: text("name"),
+  channel: text("channel").notNull().default("whatsapp"),
+  status: text("status").notNull().default("new"),
+  conversationId: varchar("conversation_id"),
+  lastMessageAt: timestamp("last_message_at"),
+  qualifiedAt: timestamp("qualified_at"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("crm_leads_tenant_phone_idx").on(table.tenantId, table.phone),
+]);
+
+export const crmLeadsRelations = relations(crmLeads, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [crmLeads.tenantId],
+    references: [tenants.id],
+  }),
+}));
+
+export const insertCrmLeadSchema = createInsertSchema(crmLeads).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertCrmLead = z.infer<typeof insertCrmLeadSchema>;
+export type CrmLead = typeof crmLeads.$inferSelect;

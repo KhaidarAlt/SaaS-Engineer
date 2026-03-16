@@ -63,6 +63,8 @@ import {
   type AiRopChannelEvent, type InsertAiRopChannelEvent,
   type WahaDisclaimerAcceptance,
   type BankProduct,
+  crmLeads, messagingMessages,
+  type CrmLead, type InsertCrmLead,
 } from "@shared/schema";
 import bcrypt from "bcryptjs";
 
@@ -382,6 +384,14 @@ export interface IStorage {
   // WAHA Disclaimer
   getWahaDisclaimerAcceptance(tenantId: string): Promise<WahaDisclaimerAcceptance | undefined>;
   acceptWahaDisclaimer(tenantId: string, version: string): Promise<WahaDisclaimerAcceptance>;
+
+  // CRM Leads
+  getCrmLeads(tenantId: string, status?: string): Promise<CrmLead[]>;
+  getCrmLead(id: string, tenantId: string): Promise<CrmLead | undefined>;
+  upsertCrmLead(data: InsertCrmLead): Promise<CrmLead>;
+  updateCrmLead(id: string, tenantId: string, data: Partial<InsertCrmLead>): Promise<CrmLead | undefined>;
+  syncCrmLeadsFromMessages(tenantId: string): Promise<number>;
+  autoClassifyCrmLeads(tenantId: string): Promise<number>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2573,6 +2583,119 @@ export class DatabaseStorage implements IStorage {
       .values({ tenantId, accepted: true, acceptedAt: new Date(), version })
       .returning();
     return created;
+  }
+
+  async getCrmLeads(tenantId: string, status?: string): Promise<CrmLead[]> {
+    const conditions = [eq(crmLeads.tenantId, tenantId)];
+    if (status) {
+      conditions.push(eq(crmLeads.status, status));
+    }
+    return db.select().from(crmLeads).where(and(...conditions)).orderBy(desc(crmLeads.lastMessageAt));
+  }
+
+  async getCrmLead(id: string, tenantId: string): Promise<CrmLead | undefined> {
+    const [lead] = await db.select().from(crmLeads).where(and(eq(crmLeads.id, id), eq(crmLeads.tenantId, tenantId)));
+    return lead;
+  }
+
+  async upsertCrmLead(data: InsertCrmLead): Promise<CrmLead> {
+    const [result] = await db.insert(crmLeads).values(data)
+      .onConflictDoUpdate({
+        target: [crmLeads.tenantId, crmLeads.phone],
+        set: {
+          updatedAt: new Date(),
+          ...(data.lastMessageAt ? { lastMessageAt: data.lastMessageAt } : {}),
+          ...(data.conversationId ? { conversationId: data.conversationId } : {}),
+          ...(data.name ? { name: sql`COALESCE(${crmLeads.name}, ${data.name})` } : {}),
+        },
+      })
+      .returning();
+    return result;
+  }
+
+  async updateCrmLead(id: string, tenantId: string, data: Partial<InsertCrmLead>): Promise<CrmLead | undefined> {
+    const [updated] = await db.update(crmLeads).set({ ...data, updatedAt: new Date() })
+      .where(and(eq(crmLeads.id, id), eq(crmLeads.tenantId, tenantId))).returning();
+    return updated;
+  }
+
+  async syncCrmLeadsFromMessages(tenantId: string): Promise<number> {
+    const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+    const inboundMessages = await db.select({
+      phone: messagingMessages.fromAddress,
+      channel: messagingMessages.channel,
+      lastMessageAt: sql<Date>`max(${messagingMessages.createdAt})`,
+      firstMessageAt: sql<Date>`min(${messagingMessages.createdAt})`,
+    }).from(messagingMessages).where(
+      and(
+        eq(messagingMessages.tenantId, tenantId),
+        eq(messagingMessages.direction, "inbound"),
+        gte(messagingMessages.createdAt, ninetyDaysAgo)
+      )
+    ).groupBy(messagingMessages.fromAddress, messagingMessages.channel);
+
+    let synced = 0;
+    for (const msg of inboundMessages) {
+      const phone = msg.phone.replace(/@c\.us$/, '').replace(/@lid$/, '');
+      if (!/^\d{10,15}$/.test(phone)) continue;
+
+      const convRows = await db.select().from(aiConversations).where(
+        and(eq(aiConversations.tenantId, tenantId), eq(aiConversations.customerPhone, phone))
+      ).orderBy(desc(aiConversations.updatedAt)).limit(1);
+
+      const conv = convRows[0];
+
+      await this.upsertCrmLead({
+        tenantId,
+        phone,
+        channel: msg.channel.includes('whatsapp') ? 'whatsapp' : msg.channel,
+        lastMessageAt: msg.lastMessageAt,
+        name: conv?.customerName || null,
+        conversationId: conv?.id || null,
+      });
+      synced++;
+    }
+    return synced;
+  }
+
+  async autoClassifyCrmLeads(tenantId: string): Promise<number> {
+    const allLeads = await this.getCrmLeads(tenantId);
+    const now = Date.now();
+    const twelveHoursMs = 12 * 60 * 60 * 1000;
+    let classified = 0;
+
+    const orderPhones = new Set<string>();
+    const allOrders = await db.select({ phone: orders.customerPhone }).from(orders).where(eq(orders.tenantId, tenantId));
+    for (const o of allOrders) {
+      let p = o.phone.replace(/\D/g, '');
+      if (p.startsWith('8') && p.length === 11) p = '7' + p.slice(1);
+      orderPhones.add(p);
+    }
+
+    for (const lead of allLeads) {
+      let normalizedPhone = lead.phone.replace(/\D/g, '');
+      if (normalizedPhone.startsWith('8') && normalizedPhone.length === 11) normalizedPhone = '7' + normalizedPhone.slice(1);
+
+      const hasOrder = orderPhones.has(normalizedPhone);
+      if (hasOrder) continue;
+
+      if (lead.status === 'new') {
+        if (lead.conversationId) {
+          const [conv] = await db.select().from(aiConversations).where(eq(aiConversations.id, lead.conversationId));
+          if (conv?.currentStage && conv.currentStage !== 'greeting') {
+            await this.updateCrmLead(lead.id, tenantId, { status: 'qualified', qualifiedAt: new Date() } as any);
+            classified++;
+            continue;
+          }
+        }
+
+        if (lead.lastMessageAt && (now - new Date(lead.lastMessageAt).getTime()) > twelveHoursMs) {
+          await this.updateCrmLead(lead.id, tenantId, { status: 'unqualified' } as any);
+          classified++;
+        }
+      }
+    }
+    return classified;
   }
 }
 
