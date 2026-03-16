@@ -75,7 +75,7 @@ const leadStatusOptions = [
   { value: "qualified", label: "Квалифицирован", icon: UserCheck, color: "bg-violet-100 text-violet-800 dark:bg-violet-900 dark:text-violet-200", bgColor: "bg-violet-50 dark:bg-violet-950/30" },
 ];
 
-const dealStatusOptions = [
+const allDealStatusOptions = [
   { value: "new", label: "Новый", color: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200", bgColor: "bg-blue-50 dark:bg-blue-950/30" },
   { value: "confirmed", label: "Подтверждён", color: "bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-200", bgColor: "bg-cyan-50 dark:bg-cyan-950/30" },
   { value: "assembling", label: "Сборка", color: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200", bgColor: "bg-yellow-50 dark:bg-yellow-950/30" },
@@ -83,6 +83,8 @@ const dealStatusOptions = [
   { value: "completed", label: "Выполнен", color: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200", bgColor: "bg-green-50 dark:bg-green-950/30" },
   { value: "cancelled", label: "Отменён", color: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200", bgColor: "bg-red-50 dark:bg-red-950/30" },
 ];
+
+const kanbanOrderStatusOptions = allDealStatusOptions.filter(s => s.value !== "new");
 
 const paymentStatusOptions = [
   { value: "pending", label: "Ожидает оплаты", icon: Clock, color: "text-yellow-600", badgeColor: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200" },
@@ -210,7 +212,7 @@ export default function CRMPage() {
 
   const getStatusBadge = (status: string) => {
     const mapped = mapLegacyStatus(status);
-    const option = dealStatusOptions.find((s) => s.value === mapped);
+    const option = allDealStatusOptions.find((s) => s.value === mapped);
     return option || { label: status, color: "bg-gray-100 text-gray-800" };
   };
 
@@ -269,7 +271,7 @@ export default function CRMPage() {
     return legacyMap[status] || status;
   };
 
-  const ordersByStatus = dealStatusOptions.reduce((acc, status) => {
+  const ordersByStatus = allDealStatusOptions.reduce((acc, status) => {
     acc[status.value] = filteredOrders?.filter((o) => mapLegacyStatus(o.status) === status.value) || [];
     return acc;
   }, {} as Record<string, Order[]>);
@@ -336,7 +338,7 @@ export default function CRMPage() {
         )}
 
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-          {dealStatusOptions.map((status) => (
+          {allDealStatusOptions.map((status) => (
             <Card 
               key={status.value} 
               className={`cursor-pointer transition-all hover-elevate ${statusFilter === status.value ? 'ring-2 ring-primary' : ''}`}
@@ -374,7 +376,7 @@ export default function CRMPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Все статусы</SelectItem>
-                  {dealStatusOptions.map((status) => (
+                  {allDealStatusOptions.map((status) => (
                     <SelectItem key={status.value} value={status.value}>
                       {status.label}
                     </SelectItem>
@@ -501,7 +503,7 @@ export default function CRMPage() {
                               </Badge>
                             </SelectTrigger>
                             <SelectContent>
-                              {dealStatusOptions.map((status) => (
+                              {allDealStatusOptions.map((status) => (
                                 <SelectItem key={status.value} value={status.value}>
                                   <Badge className={status.color}>{status.label}</Badge>
                                 </SelectItem>
@@ -689,8 +691,8 @@ export default function CRMPage() {
 
             <div>
               <h3 className="text-sm font-medium text-muted-foreground mb-3 uppercase tracking-wider">Заказы</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-                {dealStatusOptions.map((status) => (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+                {kanbanOrderStatusOptions.map((status) => (
                   <div key={status.value} className="space-y-3">
                     <div className={`p-3 rounded-lg ${status.bgColor}`}>
                       <div className="flex items-center justify-between">
@@ -738,7 +740,7 @@ export default function CRMPage() {
                                     </Button>
                                   </DropdownMenuTrigger>
                                   <DropdownMenuContent align="end">
-                                    {dealStatusOptions
+                                    {allDealStatusOptions
                                       .filter((s) => s.value !== order.status)
                                       .map((s) => (
                                         <DropdownMenuItem

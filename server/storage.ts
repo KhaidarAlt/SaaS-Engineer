@@ -2603,11 +2603,11 @@ export class DatabaseStorage implements IStorage {
       .onConflictDoUpdate({
         target: [crmLeads.tenantId, crmLeads.phone],
         set: {
-          updatedAt: new Date(),
-          ...(data.lastMessageAt ? { lastMessageAt: data.lastMessageAt } : {}),
-          ...(data.firstMessageAt ? { firstMessageAt: sql`COALESCE(${crmLeads.firstMessageAt}, ${data.firstMessageAt})` } : {}),
-          ...(data.conversationId ? { conversationId: data.conversationId } : {}),
-          ...(data.name ? { name: sql`COALESCE(${crmLeads.name}, ${data.name})` } : {}),
+          updatedAt: sql`CASE WHEN ${crmLeads.status} = 'new' THEN now() ELSE ${crmLeads.updatedAt} END`,
+          lastMessageAt: sql`CASE WHEN ${crmLeads.status} = 'new' THEN ${data.lastMessageAt ?? null}::timestamp ELSE ${crmLeads.lastMessageAt} END`,
+          firstMessageAt: sql`COALESCE(${crmLeads.firstMessageAt}, ${data.firstMessageAt ?? null}::timestamp)`,
+          conversationId: sql`CASE WHEN ${crmLeads.status} = 'new' THEN COALESCE(${data.conversationId ?? null}, ${crmLeads.conversationId}) ELSE ${crmLeads.conversationId} END`,
+          name: sql`COALESCE(${crmLeads.name}, ${data.name ?? null})`,
         },
       })
       .returning();
@@ -2698,10 +2698,13 @@ export class DatabaseStorage implements IStorage {
       let normalizedPhone = lead.phone.replace(/\D/g, '');
       if (normalizedPhone.startsWith('8') && normalizedPhone.length === 11) normalizedPhone = '7' + normalizedPhone.slice(1);
 
-      const hasAnyOrder = anyOrderPhones.has(normalizedPhone);
-      if (hasAnyOrder) continue;
+      const hasPaidOrder = paidOrderPhones.has(normalizedPhone);
+      if (hasPaidOrder) continue;
 
       if (lead.status === 'new') {
+        const hasAnyOrder = anyOrderPhones.has(normalizedPhone);
+        if (hasAnyOrder) continue;
+
         if (lead.conversationId) {
           const conv = convMap.get(lead.conversationId);
           if (conv?.currentStage && conv.currentStage !== 'greeting') {
@@ -2716,8 +2719,7 @@ export class DatabaseStorage implements IStorage {
           classified++;
         }
       } else if (lead.status === 'qualified') {
-        const hasPaidOrder = paidOrderPhones.has(normalizedPhone);
-        if (!hasPaidOrder && lead.qualifiedAt && (now - new Date(lead.qualifiedAt).getTime()) > twentyFourHoursMs) {
+        if (lead.qualifiedAt && (now - new Date(lead.qualifiedAt).getTime()) > twentyFourHoursMs) {
           await this.updateCrmLead(lead.id, tenantId, { status: 'unqualified' });
           classified++;
         }
