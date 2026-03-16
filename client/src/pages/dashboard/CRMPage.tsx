@@ -599,7 +599,7 @@ export default function CRMPage() {
                             className="group"
                           >
                             <Card className="p-3 hover-elevate" data-testid={`kanban-lead-${lead.id}`}>
-                              <div className="flex items-start justify-between mb-2">
+                              <div className="flex items-start justify-between mb-1">
                                 <div className="flex items-center gap-1.5">
                                   <Phone className="h-3.5 w-3.5 text-muted-foreground" />
                                   <span className="text-sm font-medium">{formatPhoneDisplay(lead.phone)}</span>
@@ -637,6 +637,30 @@ export default function CRMPage() {
                               {lead.name && (
                                 <p className="text-sm text-muted-foreground truncate">{lead.name}</p>
                               )}
+                              <div className="flex items-center gap-1.5 mt-1">
+                                {(() => {
+                                  const statusOpt = leadStatusOptions.find(s => s.value === lead.status);
+                                  return statusOpt ? (
+                                    <Badge className={`text-[10px] px-1.5 py-0 ${statusOpt.color}`} data-testid={`lead-badge-${lead.id}`}>
+                                      {statusOpt.label}
+                                    </Badge>
+                                  ) : null;
+                                })()}
+                                <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                                  <SiWhatsapp className="h-2.5 w-2.5 mr-0.5 text-green-600" />
+                                  {lead.channel === 'whatsapp' ? 'WA' : lead.channel}
+                                </Badge>
+                              </div>
+                              <div className="mt-2 space-y-0.5 text-[11px] text-muted-foreground">
+                                <div className="flex justify-between">
+                                  <span>Первое сообщение:</span>
+                                  <span>{formatDate(lead.firstMessageAt)}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span>Последнее:</span>
+                                  <span>{formatDate(lead.lastMessageAt)}</span>
+                                </div>
+                              </div>
                               <div className="flex items-center gap-1 mt-2 pt-2 border-t">
                                 <Button
                                   variant="ghost"
@@ -647,9 +671,6 @@ export default function CRMPage() {
                                 >
                                   <SiWhatsapp className="h-3 w-3 text-green-600" />
                                 </Button>
-                                <span className="text-xs text-muted-foreground ml-auto">
-                                  {formatDate(lead.lastMessageAt)}
-                                </span>
                               </div>
                             </Card>
                           </motion.div>

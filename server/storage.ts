@@ -389,7 +389,7 @@ export interface IStorage {
   getCrmLeads(tenantId: string, status?: string): Promise<CrmLead[]>;
   getCrmLead(id: string, tenantId: string): Promise<CrmLead | undefined>;
   upsertCrmLead(data: InsertCrmLead): Promise<CrmLead>;
-  updateCrmLead(id: string, tenantId: string, data: Partial<InsertCrmLead>): Promise<CrmLead | undefined>;
+  updateCrmLead(id: string, tenantId: string, data: Partial<Pick<CrmLead, 'status' | 'notes' | 'qualifiedAt'>>): Promise<CrmLead | undefined>;
   syncCrmLeadsFromMessages(tenantId: string): Promise<number>;
   autoClassifyCrmLeads(tenantId: string): Promise<number>;
 }
@@ -2605,6 +2605,7 @@ export class DatabaseStorage implements IStorage {
         set: {
           updatedAt: new Date(),
           ...(data.lastMessageAt ? { lastMessageAt: data.lastMessageAt } : {}),
+          ...(data.firstMessageAt ? { firstMessageAt: sql`COALESCE(${crmLeads.firstMessageAt}, ${data.firstMessageAt})` } : {}),
           ...(data.conversationId ? { conversationId: data.conversationId } : {}),
           ...(data.name ? { name: sql`COALESCE(${crmLeads.name}, ${data.name})` } : {}),
         },
@@ -2613,7 +2614,7 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  async updateCrmLead(id: string, tenantId: string, data: Partial<InsertCrmLead>): Promise<CrmLead | undefined> {
+  async updateCrmLead(id: string, tenantId: string, data: Partial<Pick<CrmLead, 'status' | 'notes' | 'qualifiedAt'>>): Promise<CrmLead | undefined> {
     const [updated] = await db.update(crmLeads).set({ ...data, updatedAt: new Date() })
       .where(and(eq(crmLeads.id, id), eq(crmLeads.tenantId, tenantId))).returning();
     return updated;
@@ -2649,6 +2650,7 @@ export class DatabaseStorage implements IStorage {
         tenantId,
         phone,
         channel: msg.channel.includes('whatsapp') ? 'whatsapp' : msg.channel,
+        firstMessageAt: msg.firstMessageAt,
         lastMessageAt: msg.lastMessageAt,
         name: conv?.customerName || null,
         conversationId: conv?.id || null,
@@ -2659,38 +2661,64 @@ export class DatabaseStorage implements IStorage {
   }
 
   async autoClassifyCrmLeads(tenantId: string): Promise<number> {
-    const allLeads = await this.getCrmLeads(tenantId);
+    const leadsToClassify = await db.select().from(crmLeads).where(
+      and(
+        eq(crmLeads.tenantId, tenantId),
+        inArray(crmLeads.status, ['new', 'qualified'])
+      )
+    );
+    if (leadsToClassify.length === 0) return 0;
+
     const now = Date.now();
     const twelveHoursMs = 12 * 60 * 60 * 1000;
+    const twentyFourHoursMs = 24 * 60 * 60 * 1000;
     let classified = 0;
 
-    const orderPhones = new Set<string>();
-    const allOrders = await db.select({ phone: orders.customerPhone }).from(orders).where(eq(orders.tenantId, tenantId));
+    const paidOrderPhones = new Set<string>();
+    const anyOrderPhones = new Set<string>();
+    const allOrders = await db.select({ phone: orders.customerPhone, paymentStatus: orders.paymentStatus })
+      .from(orders).where(eq(orders.tenantId, tenantId));
     for (const o of allOrders) {
       let p = o.phone.replace(/\D/g, '');
       if (p.startsWith('8') && p.length === 11) p = '7' + p.slice(1);
-      orderPhones.add(p);
+      anyOrderPhones.add(p);
+      if (o.paymentStatus === 'paid') paidOrderPhones.add(p);
     }
 
-    for (const lead of allLeads) {
+    const convIds = leadsToClassify.filter(l => l.conversationId).map(l => l.conversationId!);
+    const convMap = new Map<string, typeof aiConversations.$inferSelect>();
+    if (convIds.length > 0) {
+      const convRows = await db.select().from(aiConversations).where(inArray(aiConversations.id, convIds));
+      for (const c of convRows) {
+        convMap.set(c.id, c);
+      }
+    }
+
+    for (const lead of leadsToClassify) {
       let normalizedPhone = lead.phone.replace(/\D/g, '');
       if (normalizedPhone.startsWith('8') && normalizedPhone.length === 11) normalizedPhone = '7' + normalizedPhone.slice(1);
 
-      const hasOrder = orderPhones.has(normalizedPhone);
-      if (hasOrder) continue;
+      const hasAnyOrder = anyOrderPhones.has(normalizedPhone);
+      if (hasAnyOrder) continue;
 
       if (lead.status === 'new') {
         if (lead.conversationId) {
-          const [conv] = await db.select().from(aiConversations).where(eq(aiConversations.id, lead.conversationId));
+          const conv = convMap.get(lead.conversationId);
           if (conv?.currentStage && conv.currentStage !== 'greeting') {
-            await this.updateCrmLead(lead.id, tenantId, { status: 'qualified', qualifiedAt: new Date() } as any);
+            await this.updateCrmLead(lead.id, tenantId, { status: 'qualified', qualifiedAt: new Date() });
             classified++;
             continue;
           }
         }
 
         if (lead.lastMessageAt && (now - new Date(lead.lastMessageAt).getTime()) > twelveHoursMs) {
-          await this.updateCrmLead(lead.id, tenantId, { status: 'unqualified' } as any);
+          await this.updateCrmLead(lead.id, tenantId, { status: 'unqualified' });
+          classified++;
+        }
+      } else if (lead.status === 'qualified') {
+        const hasPaidOrder = paidOrderPhones.has(normalizedPhone);
+        if (!hasPaidOrder && lead.qualifiedAt && (now - new Date(lead.qualifiedAt).getTime()) > twentyFourHoursMs) {
+          await this.updateCrmLead(lead.id, tenantId, { status: 'unqualified' });
           classified++;
         }
       }
