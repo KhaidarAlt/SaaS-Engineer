@@ -101,10 +101,12 @@ export default function CRMPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [paymentFilter, setPaymentFilter] = useState<string>("all");
-  const [viewMode, setViewMode] = useState<ViewMode>("table");
+  const [viewMode, setViewMode] = useState<ViewMode>("kanban");
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const [syncTriggered, setSyncTriggered] = useState(false);
+  const [draggedCard, setDraggedCard] = useState<{ id: string; type: "lead" | "order"; fromStatus: string } | null>(null);
+  const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
 
   const { data: orders, isLoading } = useQuery<Order[]>({
     queryKey: ["/api/orders"],
@@ -583,7 +585,19 @@ export default function CRMPage() {
                         </span>
                       </div>
                     </div>
-                    <div className="space-y-2 min-h-[120px]">
+                    <div
+                      className={`space-y-2 min-h-[120px] rounded-lg transition-colors ${draggedCard?.type === "lead" && dragOverColumn === `lead-${status.value}` ? "bg-accent/50 ring-2 ring-primary/30" : ""}`}
+                      onDragOver={(e) => { e.preventDefault(); setDragOverColumn(`lead-${status.value}`); }}
+                      onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverColumn(null); }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        if (draggedCard?.type === "lead" && draggedCard.fromStatus !== status.value) {
+                          updateLeadStatusMutation.mutate({ id: draggedCard.id, status: status.value });
+                        }
+                        setDraggedCard(null);
+                        setDragOverColumn(null);
+                      }}
+                    >
                       {leadsLoading ? (
                         [...Array(2)].map((_, i) => (
                           <Card key={i} className="p-3">
@@ -599,8 +613,11 @@ export default function CRMPage() {
                             initial={{ opacity: 0, y: 10 }}
                             animate={{ opacity: 1, y: 0 }}
                             className="group"
+                            draggable
+                            onDragStart={() => setDraggedCard({ id: lead.id, type: "lead", fromStatus: lead.status })}
+                            onDragEnd={() => { setDraggedCard(null); setDragOverColumn(null); }}
                           >
-                            <Card className="p-3 hover-elevate" data-testid={`kanban-lead-${lead.id}`}>
+                            <Card className={`p-3 hover-elevate cursor-grab active:cursor-grabbing ${draggedCard?.id === lead.id ? "opacity-50" : ""}`} data-testid={`kanban-lead-${lead.id}`}>
                               <div className="flex items-start justify-between mb-1">
                                 <div className="flex items-center gap-1.5">
                                   <Phone className="h-3.5 w-3.5 text-muted-foreground" />
@@ -706,7 +723,19 @@ export default function CRMPage() {
                         </span>
                       </div>
                     </div>
-                    <div className="space-y-2 min-h-[200px]">
+                    <div
+                      className={`space-y-2 min-h-[200px] rounded-lg transition-colors ${draggedCard?.type === "order" && dragOverColumn === `order-${status.value}` ? "bg-accent/50 ring-2 ring-primary/30" : ""}`}
+                      onDragOver={(e) => { e.preventDefault(); setDragOverColumn(`order-${status.value}`); }}
+                      onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverColumn(null); }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        if (draggedCard?.type === "order" && draggedCard.fromStatus !== status.value) {
+                          updateStatusMutation.mutate({ id: draggedCard.id, status: status.value });
+                        }
+                        setDraggedCard(null);
+                        setDragOverColumn(null);
+                      }}
+                    >
                       {isLoading ? (
                         [...Array(2)].map((_, i) => (
                           <Card key={i} className="p-3">
@@ -722,9 +751,12 @@ export default function CRMPage() {
                             initial={{ opacity: 0, y: 10 }}
                             animate={{ opacity: 1, y: 0 }}
                             className="group"
+                            draggable
+                            onDragStart={() => setDraggedCard({ id: order.id, type: "order", fromStatus: order.status })}
+                            onDragEnd={() => { setDraggedCard(null); setDragOverColumn(null); }}
                           >
                             <Card 
-                              className="p-3 cursor-pointer hover-elevate"
+                              className={`p-3 cursor-grab active:cursor-grabbing hover-elevate ${draggedCard?.id === order.id ? "opacity-50" : ""}`}
                               onClick={() => navigate(`/dashboard/crm/${order.id}`)}
                               data-testid={`kanban-deal-${order.id}`}
                             >
