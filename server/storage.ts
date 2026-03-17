@@ -2605,9 +2605,9 @@ export class DatabaseStorage implements IStorage {
         set: {
           updatedAt: sql`CASE WHEN ${crmLeads.status} = 'new' THEN now() ELSE ${crmLeads.updatedAt} END`,
           lastMessageAt: sql`CASE WHEN ${crmLeads.status} = 'new' THEN ${data.lastMessageAt ?? null}::timestamp ELSE ${crmLeads.lastMessageAt} END`,
-          firstMessageAt: sql`COALESCE(${crmLeads.firstMessageAt}, ${data.firstMessageAt ?? null}::timestamp)`,
+          firstMessageAt: sql`CASE WHEN ${crmLeads.status} = 'new' THEN COALESCE(${crmLeads.firstMessageAt}, ${data.firstMessageAt ?? null}::timestamp) ELSE ${crmLeads.firstMessageAt} END`,
           conversationId: sql`CASE WHEN ${crmLeads.status} = 'new' THEN COALESCE(${data.conversationId ?? null}, ${crmLeads.conversationId}) ELSE ${crmLeads.conversationId} END`,
-          name: sql`COALESCE(${crmLeads.name}, ${data.name ?? null})`,
+          name: sql`CASE WHEN ${crmLeads.status} = 'new' THEN COALESCE(${crmLeads.name}, ${data.name ?? null}) ELSE ${crmLeads.name} END`,
         },
       })
       .returning();
@@ -2707,7 +2707,11 @@ export class DatabaseStorage implements IStorage {
 
         if (lead.conversationId) {
           const conv = convMap.get(lead.conversationId);
-          if (conv?.currentStage && conv.currentStage !== 'greeting') {
+          const qualifyingStages = new Set([
+            'product_inquiry', 'objection', 'negotiation', 'closing',
+            'decision', 'payment', 'upsell', 'order_form',
+          ]);
+          if (conv?.currentStage && qualifyingStages.has(conv.currentStage)) {
             await this.updateCrmLead(lead.id, tenantId, { status: 'qualified', qualifiedAt: new Date() });
             classified++;
             continue;

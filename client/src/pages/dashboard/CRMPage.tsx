@@ -30,7 +30,7 @@ import {
   UserCheck,
   Phone,
 } from "lucide-react";
-import { SiWhatsapp } from "react-icons/si";
+import { SiWhatsapp, SiTelegram } from "react-icons/si";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -649,8 +649,12 @@ export default function CRMPage() {
                                   ) : null;
                                 })()}
                                 <Badge variant="outline" className="text-[10px] px-1.5 py-0">
-                                  <SiWhatsapp className="h-2.5 w-2.5 mr-0.5 text-green-600" />
-                                  {lead.channel === 'whatsapp' ? 'WA' : lead.channel}
+                                  {lead.channel === 'telegram' ? (
+                                    <SiTelegram className="h-2.5 w-2.5 mr-0.5 text-blue-500" />
+                                  ) : (
+                                    <SiWhatsapp className="h-2.5 w-2.5 mr-0.5 text-green-600" />
+                                  )}
+                                  {lead.channel === 'whatsapp' ? 'WA' : lead.channel === 'telegram' ? 'TG' : lead.channel}
                                 </Badge>
                               </div>
                               <div className="mt-2 space-y-0.5 text-[11px] text-muted-foreground">
