@@ -2305,6 +2305,17 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/products/:productId/images/reorder", requireAuth, async (req, res) => {
+    try {
+      const { ids } = req.body;
+      if (!Array.isArray(ids)) return res.status(400).json({ message: "ids must be an array" });
+      await storage.reorderProductImages(req.params.productId, req.user!.tenantId!, ids);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ message: "Ошибка изменения порядка изображений" });
+    }
+  });
+
   app.post("/api/products/generate-description", requireAuth, async (req, res) => {
     try {
       const { name, category, price, attributes, currentText, style, options, action } = req.body;

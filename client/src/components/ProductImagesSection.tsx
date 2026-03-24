@@ -1,6 +1,6 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Plus, Trash2, ChevronDown, ChevronUp, ImageIcon, Star, Upload, X, AlertCircle } from "lucide-react";
+import { Plus, Trash2, ChevronDown, ChevronUp, ImageIcon, Star, Upload, X, AlertCircle, GripVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -97,12 +97,64 @@ export function ProductImagesSection({ productId }: ProductImagesSectionProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [previewImages, setPreviewImages] = useState<PreviewImage[]>([]);
+  const [orderedImages, setOrderedImages] = useState<ProductImage[]>([]);
+  const [dragOverImgId, setDragOverImgId] = useState<string | null>(null);
+  const dragImgIdRef = useRef<string | null>(null);
   const { toast } = useToast();
 
   const { data: images, isLoading } = useQuery<ProductImage[]>({
     queryKey: ["/api/products", productId, "images"],
     enabled: !!productId,
   });
+
+  useEffect(() => {
+    if (images) setOrderedImages(images);
+  }, [images]);
+
+  const reorderMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      return apiRequest("POST", `/api/products/${productId}/images/reorder`, { ids });
+    },
+    onError: () => {
+      if (images) setOrderedImages(images);
+      toast({ title: "Ошибка изменения порядка", variant: "destructive" });
+    },
+  });
+
+  const handleImgDragStart = (e: React.DragEvent, id: string) => {
+    dragImgIdRef.current = id;
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("imgId", id);
+  };
+
+  const handleImgDragOver = (e: React.DragEvent, id: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setDragOverImgId(id);
+  };
+
+  const handleImgDrop = (e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    const sourceId = e.dataTransfer.getData("imgId") || dragImgIdRef.current;
+    dragImgIdRef.current = null;
+    setDragOverImgId(null);
+    if (!sourceId || sourceId === targetId) return;
+    setOrderedImages(prev => {
+      const arr = [...prev];
+      const fromIdx = arr.findIndex(i => i.id === sourceId);
+      const toIdx = arr.findIndex(i => i.id === targetId);
+      if (fromIdx === -1 || toIdx === -1) return prev;
+      const [item] = arr.splice(fromIdx, 1);
+      arr.splice(toIdx, 0, item);
+      reorderMutation.mutate(arr.map(i => i.id));
+      return arr;
+    });
+  };
+
+  const handleImgDragEnd = () => {
+    dragImgIdRef.current = null;
+    setDragOverImgId(null);
+  };
 
   const uploadMutation = useMutation({
     mutationFn: async (blobs: Blob[]) => {
@@ -442,18 +494,29 @@ export function ProductImagesSection({ productId }: ProductImagesSectionProps) {
               <div className="text-center py-4 text-muted-foreground">
                 Загрузка...
               </div>
-            ) : images && images.length > 0 ? (
+            ) : orderedImages.length > 0 ? (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                {images.map((image) => (
+                {orderedImages.map((image) => (
                   <div
                     key={image.id}
-                    className="relative group rounded-lg overflow-hidden border bg-muted/30 aspect-square"
+                    draggable
+                    onDragStart={(e) => handleImgDragStart(e, image.id)}
+                    onDragOver={(e) => handleImgDragOver(e, image.id)}
+                    onDrop={(e) => handleImgDrop(e, image.id)}
+                    onDragEnd={handleImgDragEnd}
+                    className={`relative group rounded-lg overflow-hidden border bg-muted/30 aspect-square cursor-grab active:cursor-grabbing transition-all ${dragOverImgId === image.id ? "ring-2 ring-primary scale-105" : ""}`}
+                    data-testid={`img-card-${image.id}`}
                   >
                     <img
                       src={resolveImageUrl(image.url)}
                       alt=""
-                      className="w-full h-full object-cover"
+                      className="w-full h-full object-cover pointer-events-none"
                     />
+                    <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="bg-background/80 rounded p-0.5">
+                        <GripVertical className="h-4 w-4 text-muted-foreground" />
+                      </div>
+                    </div>
                     {image.isMain && (
                       <div className="absolute top-2 left-2">
                         <Badge variant="default" className="text-xs">

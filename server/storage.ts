@@ -111,6 +111,7 @@ export interface IStorage {
   updateProductImageUrl(id: string, newUrl: string): Promise<void>;
   deleteProductImage(id: string, tenantId: string): Promise<boolean>;
   setMainImage(productId: string, imageId: string, tenantId: string): Promise<void>;
+  reorderProductImages(productId: string, tenantId: string, ids: string[]): Promise<void>;
   
   getCategories(tenantId: string): Promise<Category[]>;
   getCategory(id: string, tenantId: string): Promise<Category | undefined>;
@@ -643,6 +644,14 @@ export class DatabaseStorage implements IStorage {
     await db.update(productImages)
       .set({ isMain: true })
       .where(and(eq(productImages.id, imageId), eq(productImages.tenantId, tenantId)));
+  }
+
+  async reorderProductImages(productId: string, tenantId: string, ids: string[]): Promise<void> {
+    for (let i = 0; i < ids.length; i++) {
+      await db.update(productImages)
+        .set({ sortOrder: i } as any)
+        .where(and(eq(productImages.id, ids[i]), eq(productImages.productId, productId), eq(productImages.tenantId, tenantId)));
+    }
   }
 
   async getCategories(tenantId: string): Promise<Category[]> {
