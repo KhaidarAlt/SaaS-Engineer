@@ -176,6 +176,7 @@ export const InlineProductImages = forwardRef<InlineProductImagesRef, InlineProd
   const { toast } = useToast();
   
   const previewImagesRef = useRef<PreviewImage[]>([]);
+  const dragItemIdRef = useRef<string | null>(null);
   const mainImageIdRef = useRef<string | null>(null);
   const compressionResolversRef = useRef<(() => void)[]>([]);
   const prevCompressionStateRef = useRef<boolean>(false);
@@ -301,29 +302,29 @@ export const InlineProductImages = forwardRef<InlineProductImagesRef, InlineProd
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
-    if (!dragItemId) {
+    if (!dragItemIdRef.current) {
       setIsDragging(true);
     }
-  }, [dragItemId]);
+  }, []);
 
   const handleDragLeave = useCallback((e: React.DragEvent) => {
     e.preventDefault();
-    if (!dragItemId) {
+    if (!dragItemIdRef.current) {
       setIsDragging(false);
     }
-  }, [dragItemId]);
+  }, []);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
     
-    if (dragItemId) return;
+    if (dragItemIdRef.current) return;
 
     const files = e.dataTransfer.files;
     if (files.length > 0) {
       processFiles(files);
     }
-  }, [processFiles, dragItemId]);
+  }, [processFiles]);
 
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -350,6 +351,7 @@ export const InlineProductImages = forwardRef<InlineProductImagesRef, InlineProd
   }, []);
 
   const handleItemDragStart = useCallback((e: React.DragEvent, id: string) => {
+    dragItemIdRef.current = id;
     setDragItemId(id);
     e.dataTransfer.effectAllowed = "move";
     e.dataTransfer.setData("text/plain", id);
@@ -358,22 +360,24 @@ export const InlineProductImages = forwardRef<InlineProductImagesRef, InlineProd
   const handleItemDragOver = useCallback((e: React.DragEvent, id: string) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
-    if (dragItemId && dragItemId !== id) {
+    if (dragItemIdRef.current && dragItemIdRef.current !== id) {
       setDragOverId(id);
     }
-  }, [dragItemId]);
+  }, []);
 
   const handleItemDrop = useCallback((e: React.DragEvent, targetId: string) => {
     e.preventDefault();
     e.stopPropagation();
-    if (!dragItemId || dragItemId === targetId) {
+    const sourceId = e.dataTransfer.getData("text/plain") || dragItemIdRef.current;
+    if (!sourceId || sourceId === targetId) {
       setDragItemId(null);
       setDragOverId(null);
+      dragItemIdRef.current = null;
       return;
     }
 
     setPreviewImages(prev => {
-      const dragIdx = prev.findIndex(img => img.id === dragItemId);
+      const dragIdx = prev.findIndex(img => img.id === sourceId);
       const targetIdx = prev.findIndex(img => img.id === targetId);
       if (dragIdx === -1 || targetIdx === -1) return prev;
 
@@ -385,9 +389,11 @@ export const InlineProductImages = forwardRef<InlineProductImagesRef, InlineProd
 
     setDragItemId(null);
     setDragOverId(null);
-  }, [dragItemId]);
+    dragItemIdRef.current = null;
+  }, []);
 
   const handleItemDragEnd = useCallback(() => {
+    dragItemIdRef.current = null;
     setDragItemId(null);
     setDragOverId(null);
   }, []);
