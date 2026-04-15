@@ -141,8 +141,8 @@ export function registerMagicImportRoutes(
           tenantId: tenant.id,
           planId: freePlan.id,
           status: "trial",
-          currentPeriodStart: new Date(),
-          currentPeriodEnd: trialEnd,
+          startsAt: new Date(),
+          endsAt: trialEnd,
         });
       }
 
@@ -198,6 +198,35 @@ export function registerMagicImportRoutes(
 
   // === Admin routes ===
 
+  app.get("/api/admin/magic-import/stats", requireAuth, requireSuperAdmin, async (_req: Request, res: Response) => {
+    try {
+      const sessions = await storage.getMagicImportSessions();
+      const total = sessions.length;
+      const scraping = sessions.filter(s => s.status === "scraping").length;
+      const done = sessions.filter(s => s.status === "done").length;
+      const paidClicked = sessions.filter(s => s.paidClickedAt).length;
+      const active = sessions.filter(s => s.status === "active").length;
+      const expired = sessions.filter(s => s.status === "expired").length;
+      const deleted = sessions.filter(s => s.status === "deleted").length;
+      const errors = sessions.filter(s => s.status === "error").length;
+      const totalProducts = sessions.reduce((sum, s) => sum + (s.extractedProducts || 0), 0);
+
+      res.json({
+        total,
+        scraping,
+        done,
+        paidClicked,
+        active,
+        expired,
+        deleted,
+        errors,
+        totalProducts,
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   app.get("/api/admin/magic-import/sessions", requireAuth, requireSuperAdmin, async (_req: Request, res: Response) => {
     try {
       const sessions = await storage.getMagicImportSessions();
@@ -222,8 +251,8 @@ export function registerMagicImportRoutes(
         await storage.updateSubscription(subscription.id, {
           planId: startPlan.id,
           status: "active",
-          currentPeriodStart: new Date(),
-          currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+          startsAt: new Date(),
+          endsAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
         });
       }
 
@@ -372,13 +401,15 @@ async function createProductsForTenant(sessionId: string, tenantId: string) {
         }
       }
 
+      const sku = `MI-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`.toUpperCase();
       const created = await storage.createProduct({
         tenantId,
         name: product.name,
+        sku,
         description: product.description || "",
         price: String(product.price || 0),
         categoryId,
-        status: "active",
+        isActive: true,
       });
 
       if (product.imageUrl && isAllowedImageUrl(product.imageUrl)) {
