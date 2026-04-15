@@ -21,10 +21,16 @@ interface ExtractionProgress {
   products: ExtractedProduct[];
 }
 
+interface ExtractOptions {
+  maxProducts?: number;
+}
+
 export async function extractProductsFromPosts(
   scrapeResult: ScrapeResult,
   onProgress?: (progress: ExtractionProgress) => void,
+  options?: ExtractOptions,
 ): Promise<ExtractedProduct[]> {
+  const maxProducts = options?.maxProducts ?? 20;
   const postsWithContent = scrapeResult.posts.filter(
     (p) => p.text.length > 15 || p.imageUrls.length > 0,
   );
@@ -150,7 +156,7 @@ export async function extractProductsFromPosts(
       console.error(`Error extracting batch ${batchIdx}:`, err);
     }
 
-    if (allProducts.length >= 20) break;
+    if (allProducts.length >= maxProducts) break;
   }
 
   onProgress?.({
@@ -159,7 +165,7 @@ export async function extractProductsFromPosts(
     products: allProducts,
   });
 
-  return allProducts.slice(0, 20);
+  return allProducts.slice(0, maxProducts);
 }
 
 function buildExtractionPrompt(postsText: string, channelTitle: string): string {

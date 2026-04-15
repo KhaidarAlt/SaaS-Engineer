@@ -317,9 +317,9 @@ export function registerMagicImportRoutes(
         aiRopEnabled: z.boolean().optional(),
         smartCatalogEnabled: z.boolean().optional(),
       });
-      const updates = bodySchema.parse(req.body);
+      const toggles = bodySchema.parse(req.body);
 
-      const updated = await storage.updateTenant(tenant.id, updates);
+      const updated = await storage.updateTenantToggles(tenant.id, toggles);
       res.json(updated);
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : "Ошибка";
@@ -426,12 +426,12 @@ async function runImportPipeline(sessionId: string, telegramChannel: string) {
 
 async function runFullScrape(sessionId: string, telegramChannel: string, tenantId: string) {
   try {
-    const scrapeResult = await scrapeTelegramChannel(telegramChannel, { maxPages: 50 });
+    const scrapeResult = await scrapeTelegramChannel(telegramChannel, { maxPages: Infinity });
 
     const existingProducts = await storage.getProducts(tenantId);
     const existingNames = new Set(existingProducts.map(p => p.name.toLowerCase()));
 
-    const products = await extractProductsFromPosts(scrapeResult);
+    const products = await extractProductsFromPosts(scrapeResult, undefined, { maxProducts: Infinity });
     const newProducts = products.filter(p => !existingNames.has(p.name.toLowerCase()));
 
     if (newProducts.length > 0) {

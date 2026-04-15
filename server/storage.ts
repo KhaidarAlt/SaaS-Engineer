@@ -403,6 +403,7 @@ export interface IStorage {
   getMagicImportSessions(): Promise<MagicImportSession[]>;
   getExpiredTrialSessions(): Promise<MagicImportSession[]>;
   getMediaDeletionSessions(): Promise<MagicImportSession[]>;
+  updateTenantToggles(tenantId: string, toggles: { aiRopEnabled?: boolean; smartCatalogEnabled?: boolean }): Promise<Tenant | undefined>;
   getMagicImportStats(): Promise<{
     total_sessions: number;
     scraping: number;
@@ -2802,6 +2803,19 @@ export class DatabaseStorage implements IStorage {
         isNull(magicImportSessions.mediaDeletedAt),
       ),
     );
+  }
+
+  async updateTenantToggles(tenantId: string, toggles: { aiRopEnabled?: boolean; smartCatalogEnabled?: boolean }): Promise<Tenant | undefined> {
+    const updateData: Record<string, boolean> = {};
+    if (toggles.aiRopEnabled !== undefined) updateData.aiRopEnabled = toggles.aiRopEnabled;
+    if (toggles.smartCatalogEnabled !== undefined) updateData.smartCatalogEnabled = toggles.smartCatalogEnabled;
+
+    if (Object.keys(updateData).length === 0) {
+      return this.getTenant(tenantId);
+    }
+
+    const [updated] = await db.update(tenants).set(updateData).where(eq(tenants.id, tenantId)).returning();
+    return updated;
   }
 
   async getMagicImportStats(): Promise<{
