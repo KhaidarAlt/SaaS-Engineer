@@ -3334,8 +3334,24 @@ export async function registerRoutes(
   app.get("/api/catalog/:slug", async (req, res) => {
     try {
       const tenant = await storage.getTenantBySlug(req.params.slug);
-      if (!tenant || tenant.status !== "active") {
+      if (!tenant || tenant.status === "banned") {
         return res.status(404).json({ message: "Каталог не найден" });
+      }
+
+      if (tenant.status === "suspended") {
+        return res.json({
+          tenant: {
+            id: tenant.id,
+            name: tenant.name,
+            slug: tenant.slug,
+            status: tenant.status,
+            importSource: (tenant as any).importSource,
+            contactPhone: tenant.contactPhone,
+          },
+          products: [],
+          categories: [],
+          promotions: [],
+        });
       }
 
       const products = await storage.getProducts(tenant.id);
@@ -3377,6 +3393,8 @@ export async function registerRoutes(
           id: tenant.id,
           name: tenant.name,
           slug: tenant.slug,
+          status: tenant.status,
+          importSource: (tenant as any).importSource,
           logoUrl: tenant.logoUrl,
           description: tenant.description,
           contactPhone: tenant.contactPhone,
@@ -3407,7 +3425,7 @@ export async function registerRoutes(
   app.get("/api/catalog/:slug/promo-blocks", async (req, res) => {
     try {
       const tenant = await storage.getTenantBySlug(req.params.slug);
-      if (!tenant || tenant.status !== "active") {
+      if (!tenant || (tenant.status !== "active" && tenant.status !== "demo")) {
         return res.status(404).json({ message: "Каталог не найден" });
       }
 

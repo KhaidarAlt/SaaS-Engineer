@@ -55,6 +55,7 @@ import TermsPageKz from "@/pages/legal/TermsPageKz";
 import RefundPage from "@/pages/legal/RefundPage";
 import RefundPageKz from "@/pages/legal/RefundPageKz";
 import ContactsPage from "@/pages/legal/ContactsPage";
+import MagicImportPage from "@/pages/MagicImportPage";
 
 function ProtectedRoute({ 
   component: Component,
@@ -194,6 +195,8 @@ function Router() {
       <Route path="/refund" component={RefundPage} />
       <Route path="/refund-kz" component={RefundPageKz} />
       <Route path="/contacts" component={ContactsPage} />
+
+      <Route path="/magic-import" component={MagicImportPage} />
       
       <Route path="/login">
         <PublicRoute component={LoginPage} />

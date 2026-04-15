@@ -9,6 +9,12 @@ import {
   Ban,
   Play,
   Calendar,
+  Wand2,
+  Bot,
+  ShoppingBag,
+  Lock,
+  Unlock,
+  CheckCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,21 +51,30 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { TableRowSkeleton } from "@/components/LoadingSpinner";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Tenant, Subscription, Plan } from "@shared/schema";
 
+interface MagicImportSession {
+  id: string;
+  tenantId?: string;
+  status: string;
+}
+
 interface TenantWithDetails extends Tenant {
   subscription?: Subscription & { plan?: Plan };
   ownerEmail?: string;
   daysLeft?: number;
+  magicImportSessionId?: string;
 }
 
 export default function TenantsPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [magicImportOnly, setMagicImportOnly] = useState(false);
   const [extendDialogOpen, setExtendDialogOpen] = useState(false);
   const [selectedTenant, setSelectedTenant] = useState<TenantWithDetails | null>(null);
   const [extendDays, setExtendDays] = useState("30");
@@ -70,6 +85,10 @@ export default function TenantsPage() {
     queryKey: ["/api/admin/tenants"],
   });
 
+  const { data: miSessions } = useQuery<MagicImportSession[]>({
+    queryKey: ["/api/admin/magic-import/sessions"],
+  });
+
   const updateStatusMutation = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
       return apiRequest("PATCH", `/api/admin/tenants/${id}`, { status });
@@ -77,6 +96,33 @@ export default function TenantsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/tenants"] });
       toast({ title: "Статус обновлён" });
+    },
+  });
+
+  const toggleMutation = useMutation({
+    mutationFn: async ({ tenantId, field, value }: { tenantId: string; field: string; value: boolean }) => {
+      return apiRequest("PATCH", `/api/admin/tenants/${tenantId}/toggles`, { [field]: value });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/tenants"] });
+      toast({ title: "Настройки обновлены" });
+    },
+    onError: () => {
+      toast({ title: "Ошибка обновления", variant: "destructive" });
+    },
+  });
+
+  const confirmPaymentMutation = useMutation({
+    mutationFn: async (sessionId: string) => {
+      return apiRequest("POST", `/api/admin/magic-import/${sessionId}/confirm-payment`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/tenants"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/magic-import/sessions"] });
+      toast({ title: "Оплата подтверждена, магазин активирован" });
+    },
+    onError: () => {
+      toast({ title: "Ошибка подтверждения", variant: "destructive" });
     },
   });
 
@@ -100,12 +146,18 @@ export default function TenantsPage() {
     },
   });
 
+  const miSessionsByTenant = new Map<string, MagicImportSession>();
+  miSessions?.forEach((s) => {
+    if (s.tenantId) miSessionsByTenant.set(s.tenantId, s);
+  });
+
   const filteredTenants = tenants?.filter((tenant) => {
     const matchesSearch =
       tenant.name.toLowerCase().includes(search.toLowerCase()) ||
       tenant.slug.toLowerCase().includes(search.toLowerCase());
     const matchesStatus = statusFilter === "all" || tenant.status === statusFilter;
-    return matchesSearch && matchesStatus;
+    const matchesMI = !magicImportOnly || !!(tenant as any).importSource?.startsWith("telegram:");
+    return matchesSearch && matchesStatus && matchesMI;
   });
 
   const formatDate = (date: string | Date) => {
@@ -120,6 +172,8 @@ export default function TenantsPage() {
     switch (status) {
       case "active":
         return { label: "Активен", variant: "default" as const };
+      case "demo":
+        return { label: "Демо", variant: "outline" as const };
       case "suspended":
         return { label: "Приостановлен", variant: "secondary" as const };
       case "banned":
@@ -174,10 +228,21 @@ export default function TenantsPage() {
                 <SelectContent>
                   <SelectItem value="all">Все статусы</SelectItem>
                   <SelectItem value="active">Активные</SelectItem>
+                  <SelectItem value="demo">Демо</SelectItem>
                   <SelectItem value="suspended">Приостановленные</SelectItem>
                   <SelectItem value="banned">Заблокированные</SelectItem>
                 </SelectContent>
               </Select>
+              <Button
+                variant={magicImportOnly ? "default" : "outline"}
+                size="sm"
+                className="gap-1.5 shrink-0"
+                onClick={() => setMagicImportOnly(!magicImportOnly)}
+                data-testid="button-filter-magic-import"
+              >
+                <Wand2 className="h-3.5 w-3.5" />
+                Magic Import
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -191,6 +256,8 @@ export default function TenantsPage() {
                   <TableHead>Владелец</TableHead>
                   <TableHead>Тариф</TableHead>
                   <TableHead>Статус</TableHead>
+                  <TableHead className="text-center">SC</TableHead>
+                  <TableHead className="text-center">AI-РОП</TableHead>
                   <TableHead>Подписка до</TableHead>
                   <TableHead>Дней осталось</TableHead>
                   <TableHead className="w-16"></TableHead>
@@ -198,7 +265,7 @@ export default function TenantsPage() {
               </TableHeader>
               <TableBody>
                 {isLoading ? (
-                  [...Array(5)].map((_, i) => <TableRowSkeleton key={i} cols={7} />)
+                  [...Array(5)].map((_, i) => <TableRowSkeleton key={i} cols={9} />)
                 ) : filteredTenants && filteredTenants.length > 0 ? (
                   filteredTenants.map((tenant, index) => (
                     <motion.tr
@@ -224,9 +291,30 @@ export default function TenantsPage() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <Badge variant={getStatusBadge(tenant.status).variant}>
-                          {getStatusBadge(tenant.status).label}
-                        </Badge>
+                        <div className="flex items-center gap-1.5">
+                          <Badge variant={getStatusBadge(tenant.status).variant}>
+                            {getStatusBadge(tenant.status).label}
+                          </Badge>
+                          {(tenant as any).importSource?.startsWith("telegram:") && (
+                            <Badge variant="outline" className="text-[10px] gap-0.5">
+                              <Wand2 className="h-2.5 w-2.5" />MI
+                            </Badge>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Switch
+                          checked={(tenant as any).smartCatalogEnabled !== false}
+                          onCheckedChange={(v) => toggleMutation.mutate({ tenantId: tenant.id, field: "smartCatalogEnabled", value: v })}
+                          data-testid={`toggle-sc-${tenant.id}`}
+                        />
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Switch
+                          checked={(tenant as any).aiRopEnabled === true}
+                          onCheckedChange={(v) => toggleMutation.mutate({ tenantId: tenant.id, field: "aiRopEnabled", value: v })}
+                          data-testid={`toggle-airop-${tenant.id}`}
+                        />
                       </TableCell>
                       <TableCell className="text-muted-foreground">
                         {tenant.subscription?.endsAt
@@ -264,6 +352,21 @@ export default function TenantsPage() {
                               <Calendar className="h-4 w-4 mr-2" />
                               Продлить подписку
                             </DropdownMenuItem>
+                            {(() => {
+                              const miSession = miSessionsByTenant.get(tenant.id);
+                              if (miSession && (miSession.status === "paid_clicked" || tenant.status === "demo" || tenant.status === "suspended")) {
+                                return (
+                                  <DropdownMenuItem
+                                    onClick={() => confirmPaymentMutation.mutate(miSession.id)}
+                                    data-testid={`button-confirm-payment-${tenant.id}`}
+                                  >
+                                    <CheckCircle className="h-4 w-4 mr-2" />
+                                    Подтвердить оплату
+                                  </DropdownMenuItem>
+                                );
+                              }
+                              return null;
+                            })()}
                             <DropdownMenuSeparator />
                             {tenant.status === "active" ? (
                               <DropdownMenuItem
@@ -297,7 +400,7 @@ export default function TenantsPage() {
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={7} className="h-48">
+                    <TableCell colSpan={9} className="h-48">
                       <div className="flex flex-col items-center justify-center text-center">
                         <Building2 className="h-12 w-12 text-muted-foreground/50 mb-3" />
                         <p className="font-medium">Нет тенантов</p>

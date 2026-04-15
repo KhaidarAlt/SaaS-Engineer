@@ -7,6 +7,10 @@ import {
   AlertCircle,
   CheckCircle2,
   Clock,
+  Wand2,
+  ArrowRight,
+  CreditCard,
+  Zap,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +25,13 @@ interface AdminStats {
   expiringSubscriptions: number;
   totalUsers: number;
   totalRevenue: number;
+}
+
+interface MagicImportStats {
+  total_sessions: number;
+  completed: number;
+  paid_clicked: number;
+  active: number;
 }
 
 interface RecentTenant {
@@ -87,6 +98,10 @@ export default function AdminOverview() {
 
   const { data: recentTenants, isLoading: tenantsLoading } = useQuery<RecentTenant[]>({
     queryKey: ["/api/admin/tenants", { limit: 5 }],
+  });
+
+  const { data: miStats } = useQuery<MagicImportStats>({
+    queryKey: ["/api/admin/magic-import/stats"],
   });
 
   const formatCurrency = (value: number) => {
@@ -254,7 +269,88 @@ export default function AdminOverview() {
             </Card>
           </motion.div>
         </div>
+
+        {miStats && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.6 }}
+          >
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Wand2 className="h-5 w-5 text-primary" />
+                  Magic Import воронка
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  <FunnelStep
+                    testId="funnel-started"
+                    label="Начали"
+                    value={miStats.total_sessions}
+                    icon={Zap}
+                    color="text-blue-500 bg-blue-500/10"
+                  />
+                  <FunnelStep
+                    testId="funnel-completed"
+                    label="Заполнили форму"
+                    value={miStats.completed}
+                    icon={ArrowRight}
+                    color="text-amber-500 bg-amber-500/10"
+                    pct={miStats.total_sessions > 0 ? Math.round((miStats.completed / miStats.total_sessions) * 100) : 0}
+                  />
+                  <FunnelStep
+                    testId="funnel-paid-clicked"
+                    label='Нажали "Оплатил"'
+                    value={miStats.paid_clicked}
+                    icon={CreditCard}
+                    color="text-purple-500 bg-purple-500/10"
+                    pct={miStats.completed > 0 ? Math.round((miStats.paid_clicked / miStats.completed) * 100) : 0}
+                  />
+                  <FunnelStep
+                    testId="funnel-active"
+                    label="Активированы"
+                    value={miStats.active}
+                    icon={CheckCircle2}
+                    color="text-green-500 bg-green-500/10"
+                    pct={miStats.paid_clicked > 0 ? Math.round((miStats.active / miStats.paid_clicked) * 100) : 0}
+                  />
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
       </div>
     </DashboardLayout>
+  );
+}
+
+function FunnelStep({
+  testId,
+  label,
+  value,
+  icon: Icon,
+  color,
+  pct,
+}: {
+  testId: string;
+  label: string;
+  value: number;
+  icon: React.ElementType;
+  color: string;
+  pct?: number;
+}) {
+  return (
+    <div className="text-center space-y-2" data-testid={testId}>
+      <div className={`w-10 h-10 rounded-lg flex items-center justify-center mx-auto ${color}`}>
+        <Icon className="h-5 w-5" />
+      </div>
+      <p className="text-2xl font-bold">{value}</p>
+      <p className="text-xs text-muted-foreground">{label}</p>
+      {pct !== undefined && pct > 0 && (
+        <Badge variant="secondary" className="text-[10px]">{pct}%</Badge>
+      )}
+    </div>
   );
 }
