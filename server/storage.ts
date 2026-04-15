@@ -403,6 +403,17 @@ export interface IStorage {
   getMagicImportSessions(): Promise<MagicImportSession[]>;
   getExpiredTrialSessions(): Promise<MagicImportSession[]>;
   getMediaDeletionSessions(): Promise<MagicImportSession[]>;
+  getMagicImportStats(): Promise<{
+    total: number;
+    scraping: number;
+    done: number;
+    paidClicked: number;
+    active: number;
+    expired: number;
+    deleted: number;
+    errors: number;
+    totalProducts: number;
+  }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2790,6 +2801,31 @@ export class DatabaseStorage implements IStorage {
         lte(magicImportSessions.trialExpiresAt, fiveDaysAgo),
       ),
     );
+  }
+
+  async getMagicImportStats(): Promise<{
+    total: number;
+    scraping: number;
+    done: number;
+    paidClicked: number;
+    active: number;
+    expired: number;
+    deleted: number;
+    errors: number;
+    totalProducts: number;
+  }> {
+    const sessions = await db.select().from(magicImportSessions);
+    return {
+      total: sessions.length,
+      scraping: sessions.filter(s => s.status === "scraping").length,
+      done: sessions.filter(s => s.status === "done").length,
+      paidClicked: sessions.filter(s => s.paidClickedAt !== null).length,
+      active: sessions.filter(s => s.status === "active").length,
+      expired: sessions.filter(s => s.status === "expired").length,
+      deleted: sessions.filter(s => s.status === "deleted").length,
+      errors: sessions.filter(s => s.status === "error").length,
+      totalProducts: sessions.reduce((sum, s) => sum + (s.extractedProducts || 0), 0),
+    };
   }
 }
 

@@ -11,7 +11,7 @@ const extractedProductsCache = new Map<string, ExtractedProduct[]>();
 const IMAGE_FETCH_TIMEOUT = 15_000;
 const IMAGE_MAX_SIZE = 10 * 1024 * 1024;
 
-function sendSSE(sessionId: string, data: any) {
+function sendSSE(sessionId: string, data: object) {
   const client = sseClients.get(sessionId);
   if (client && !client.writableEnded) {
     client.write(`data: ${JSON.stringify(data)}\n\n`);
@@ -32,7 +32,7 @@ export function registerMagicImportRoutes(
   requireAuth: (req: Request, res: Response, next: NextFunction) => void,
   requireSuperAdmin: (req: Request, res: Response, next: NextFunction) => void,
 ) {
-  app.get("/api/magic-import/stream/:sessionId", (req, res) => {
+  app.get("/api/magic-import/:sessionId/stream", (req, res) => {
     const { sessionId } = req.params;
     res.writeHead(200, {
       "Content-Type": "text/event-stream",
@@ -47,8 +47,8 @@ export function registerMagicImportRoutes(
 
   app.post("/api/magic-import/start", async (req: Request, res: Response) => {
     try {
-      const schema = z.object({ telegramChannel: z.string().min(1) });
-      const { telegramChannel } = schema.parse(req.body);
+      const bodySchema = z.object({ telegramChannel: z.string().min(1) });
+      const { telegramChannel } = bodySchema.parse(req.body);
 
       const cleanChannel = telegramChannel.replace(/^@/, '').replace(/^https?:\/\/(t\.me|telegram\.me)\//i, '').replace(/\/$/, '');
       const session = await storage.createMagicImportSession({
@@ -62,11 +62,12 @@ export function registerMagicImportRoutes(
 
       res.json({ sessionId: session.id });
 
-      runImportPipeline(session.id, telegramChannel).catch((err) => {
+      runImportPipeline(session.id, cleanChannel).catch((err) => {
         console.error("Magic import pipeline error:", err);
       });
-    } catch (error: any) {
-      res.status(400).json({ message: error.message || "Ошибка запуска импорта" });
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : "Ошибка запуска импорта";
+      res.status(400).json({ message: msg });
     }
   });
 
@@ -83,20 +84,25 @@ export function registerMagicImportRoutes(
         scrapedPosts: session.scrapedPosts,
         errorMessage: session.errorMessage,
       });
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : "Ошибка";
+      res.status(500).json({ message: msg });
     }
   });
 
-  app.post("/api/magic-import/complete", async (req: Request, res: Response) => {
+  app.post("/api/magic-import/:sessionId/complete", async (req: Request, res: Response) => {
     try {
-      const schema = z.object({
-        sessionId: z.string(),
+      const bodySchema = z.object({
         email: z.string().email(),
         password: z.string().min(6),
         storeName: z.string().min(1),
+        phone: z.string().optional(),
+        city: z.string().optional(),
+        address: z.string().optional(),
+        workingHours: z.string().optional(),
       });
-      const { sessionId, email, password, storeName } = schema.parse(req.body);
+      const { email, password, storeName, phone, city, address, workingHours } = bodySchema.parse(req.body);
+      const sessionId = req.params.sessionId;
 
       const session = await storage.getMagicImportSession(sessionId);
       if (!session || session.status !== "done") {
@@ -126,6 +132,9 @@ export function registerMagicImportRoutes(
         importSource: `telegram:${session.telegramChannel}`,
         magicImportSessionId: sessionId,
         aiRopEnabled: false,
+        contactPhone: phone,
+        address: address ? `${city ? city + ', ' : ''}${address}` : city,
+        workingHours,
         status: "active",
       });
 
@@ -138,18 +147,17 @@ export function registerMagicImportRoutes(
       });
 
       const freePlan = await storage.getDefaultPlan();
+      const trialExpiresAt = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
       if (freePlan) {
-        const trialEnd = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
         await storage.createSubscription({
           tenantId: tenant.id,
           planId: freePlan.id,
           status: "trial",
           startsAt: new Date(),
-          endsAt: trialEnd,
+          endsAt: trialExpiresAt,
         });
       }
 
-      const trialExpiresAt = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
       await storage.updateMagicImportSession(sessionId, {
         tenantId: tenant.id,
         userId: user.id,
@@ -162,22 +170,27 @@ export function registerMagicImportRoutes(
 
       if (req.login) {
         await new Promise<void>((resolve, reject) => {
-          req.login(user, (err: any) => {
+          req.login(user, (err: Error | null) => {
             if (err) reject(err);
             else resolve();
           });
         });
       }
 
+      const platformDomain = process.env.PLATFORM_DOMAIN || "botfactory.kz";
+      const catalogUrl = `https://${uniqueSlug}.${platformDomain}`;
+
       res.json({
         success: true,
         tenantId: tenant.id,
         slug: uniqueSlug,
+        catalogUrl,
         trialExpiresAt,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Magic import complete error:", error);
-      res.status(500).json({ message: error.message || "Ошибка создания магазина" });
+      const msg = error instanceof Error ? error.message : "Ошибка создания магазина";
+      res.status(500).json({ message: msg });
     }
   });
 
@@ -191,11 +204,22 @@ export function registerMagicImportRoutes(
 
       await storage.updateMagicImportSession(session.id, {
         paidClickedAt: new Date(),
+        status: "paid_clicked",
       });
 
+      if (session.tenantId) {
+        const tenant = await storage.getTenant(session.tenantId);
+        if (tenant) {
+          sendTelegramNotification(
+            `💰 Magic Import: оплата нажата!\nМагазин: ${tenant.name}\nEmail: ${session.email}\nКанал: @${session.telegramChannel}`
+          );
+        }
+      }
+
       res.json({ success: true });
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : "Ошибка";
+      res.status(500).json({ message: msg });
     }
   });
 
@@ -203,30 +227,11 @@ export function registerMagicImportRoutes(
 
   app.get("/api/admin/magic-import/stats", requireAuth, requireSuperAdmin, async (_req: Request, res: Response) => {
     try {
-      const sessions = await storage.getMagicImportSessions();
-      const total = sessions.length;
-      const scraping = sessions.filter(s => s.status === "scraping").length;
-      const done = sessions.filter(s => s.status === "done").length;
-      const paidClicked = sessions.filter(s => s.paidClickedAt).length;
-      const active = sessions.filter(s => s.status === "active").length;
-      const expired = sessions.filter(s => s.status === "expired").length;
-      const deleted = sessions.filter(s => s.status === "deleted").length;
-      const errors = sessions.filter(s => s.status === "error").length;
-      const totalProducts = sessions.reduce((sum, s) => sum + (s.extractedProducts || 0), 0);
-
-      res.json({
-        total,
-        scraping,
-        done,
-        paidClicked,
-        active,
-        expired,
-        deleted,
-        errors,
-        totalProducts,
-      });
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      const stats = await storage.getMagicImportStats();
+      res.json(stats);
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : "Ошибка";
+      res.status(500).json({ message: msg });
     }
   });
 
@@ -234,12 +239,13 @@ export function registerMagicImportRoutes(
     try {
       const sessions = await storage.getMagicImportSessions();
       res.json(sessions);
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : "Ошибка";
+      res.status(500).json({ message: msg });
     }
   });
 
-  app.post("/api/admin/magic-import/:sessionId/activate", requireAuth, requireSuperAdmin, async (req: Request, res: Response) => {
+  app.post("/api/admin/magic-import/:sessionId/confirm-payment", requireAuth, requireSuperAdmin, async (req: Request, res: Response) => {
     try {
       const session = await storage.getMagicImportSession(req.params.sessionId);
       if (!session) return res.status(404).json({ message: "Сессия не найдена" });
@@ -267,26 +273,35 @@ export function registerMagicImportRoutes(
       await storage.updateMagicImportSession(session.id, {
         status: "active",
         activatedAt: new Date(),
+        fullScrapeTriggeredAt: new Date(),
+      });
+
+      runFullScrape(session.id, session.telegramChannel, session.tenantId).catch((err) => {
+        console.error("Full scrape error:", err);
       });
 
       res.json({ success: true });
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : "Ошибка";
+      res.status(500).json({ message: msg });
     }
   });
 
-  app.post("/api/admin/tenants/:tenantId/toggle-ai-rop", requireAuth, requireSuperAdmin, async (req: Request, res: Response) => {
+  app.patch("/api/admin/tenants/:tenantId/toggles", requireAuth, requireSuperAdmin, async (req: Request, res: Response) => {
     try {
       const tenant = await storage.getTenant(req.params.tenantId);
       if (!tenant) return res.status(404).json({ message: "Тенант не найден" });
 
-      const updated = await storage.updateTenant(tenant.id, {
-        aiRopEnabled: !tenant.aiRopEnabled,
+      const bodySchema = z.object({
+        aiRopEnabled: z.boolean().optional(),
       });
+      const updates = bodySchema.parse(req.body);
 
+      const updated = await storage.updateTenant(tenant.id, updates);
       res.json(updated);
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : "Ошибка";
+      res.status(500).json({ message: msg });
     }
   });
 }
@@ -323,6 +338,9 @@ async function runImportPipeline(sessionId: string, telegramChannel: string) {
     if (scrapeResult.posts.length === 0) {
       throw new Error("Канал не содержит постов с товарами");
     }
+
+    const postsWithImages = scrapeResult.posts.filter(p => p.imageUrls.length > 0);
+    scrapeResult.posts = postsWithImages.length > 0 ? postsWithImages.slice(0, 20) : scrapeResult.posts.slice(0, 20);
 
     sendSSE(sessionId, {
       type: "progress",
@@ -370,14 +388,69 @@ async function runImportPipeline(sessionId: string, telegramChannel: string) {
       })),
       channelTitle: scrapeResult.channelTitle,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : "Неизвестная ошибка";
     console.error("Import pipeline error:", error);
     await storage.updateMagicImportSession(sessionId, {
       status: "error",
-      errorMessage: error.message,
-      progressMessage: `Ошибка: ${error.message}`,
+      errorMessage: msg,
+      progressMessage: `Ошибка: ${msg}`,
     });
-    sendSSE(sessionId, { type: "error", message: error.message });
+    sendSSE(sessionId, { type: "error", message: msg });
+  }
+}
+
+async function runFullScrape(sessionId: string, telegramChannel: string, tenantId: string) {
+  try {
+    const scrapeResult = await scrapeTelegramChannel(telegramChannel, { maxPages: 10 });
+
+    const existingProducts = await storage.getProducts(tenantId);
+    const existingNames = new Set(existingProducts.map(p => p.name.toLowerCase()));
+
+    const products = await extractProductsFromPosts(scrapeResult);
+    const newProducts = products.filter(p => !existingNames.has(p.name.toLowerCase()));
+
+    if (newProducts.length > 0) {
+      const objectStorageService = new ObjectStorageService();
+      const categories = await storage.getCategories(tenantId);
+      const categoryMap = new Map(categories.map(c => [c.name, c.id]));
+
+      for (const product of newProducts) {
+        try {
+          let categoryId: string | null = null;
+          if (product.category) {
+            if (categoryMap.has(product.category)) {
+              categoryId = categoryMap.get(product.category)!;
+            } else {
+              const cat = await storage.createCategory({ tenantId, name: product.category });
+              categoryMap.set(product.category, cat.id);
+              categoryId = cat.id;
+            }
+          }
+
+          const sku = `MI-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`.toUpperCase();
+          const created = await storage.createProduct({
+            tenantId,
+            name: product.name,
+            sku,
+            description: product.description || "",
+            price: String(product.price || 0),
+            categoryId,
+            isActive: true,
+          });
+
+          if (product.imageUrl && isAllowedImageUrl(product.imageUrl)) {
+            await downloadAndUploadImage(product.imageUrl, created.id, tenantId, objectStorageService);
+          }
+        } catch (err) {
+          console.error(`Full scrape: failed to create product ${product.name}:`, err);
+        }
+      }
+    }
+
+    console.log(`Full scrape completed for session=${sessionId}: ${newProducts.length} new products added`);
+  } catch (err) {
+    console.error(`Full scrape failed for session=${sessionId}:`, err);
   }
 }
 
@@ -385,7 +458,7 @@ async function createProductsForTenant(sessionId: string, tenantId: string) {
   const products = extractedProductsCache.get(sessionId);
   if (!products || products.length === 0) return;
 
-  const objectStorage = new ObjectStorageService();
+  const objectStorageService = new ObjectStorageService();
   const categoryMap = new Map<string, string>();
 
   for (const product of products) {
@@ -395,10 +468,7 @@ async function createProductsForTenant(sessionId: string, tenantId: string) {
         if (categoryMap.has(product.category)) {
           categoryId = categoryMap.get(product.category)!;
         } else {
-          const cat = await storage.createCategory({
-            tenantId,
-            name: product.category,
-          });
+          const cat = await storage.createCategory({ tenantId, name: product.category });
           categoryMap.set(product.category, cat.id);
           categoryId = cat.id;
         }
@@ -416,35 +486,7 @@ async function createProductsForTenant(sessionId: string, tenantId: string) {
       });
 
       if (product.imageUrl && isAllowedImageUrl(product.imageUrl)) {
-        try {
-          const controller = new AbortController();
-          const timeout = setTimeout(() => controller.abort(), IMAGE_FETCH_TIMEOUT);
-          const imgResp = await fetch(product.imageUrl, { signal: controller.signal });
-          clearTimeout(timeout);
-
-          if (imgResp.ok) {
-            const contentLength = parseInt(imgResp.headers.get("content-length") || "0");
-            if (contentLength > IMAGE_MAX_SIZE) continue;
-
-            const buffer = Buffer.from(await imgResp.arrayBuffer());
-            if (buffer.length > IMAGE_MAX_SIZE) continue;
-
-            const contentType = imgResp.headers.get("content-type") || "image/jpeg";
-            if (!contentType.startsWith("image/")) continue;
-
-            const uploadedUrl = await objectStorage.uploadBuffer(buffer, contentType);
-
-            await storage.createProductImage({
-              productId: created.id,
-              tenantId,
-              url: uploadedUrl,
-              isMain: true,
-              sortOrder: 0,
-            });
-          }
-        } catch (imgErr) {
-          console.error(`Failed to download image for product ${product.name}:`, imgErr);
-        }
+        await downloadAndUploadImage(product.imageUrl, created.id, tenantId, objectStorageService);
       }
     } catch (err) {
       console.error(`Failed to create product ${product.name}:`, err);
@@ -452,6 +494,68 @@ async function createProductsForTenant(sessionId: string, tenantId: string) {
   }
 
   extractedProductsCache.delete(sessionId);
+}
+
+async function downloadAndUploadImage(
+  imageUrl: string,
+  productId: string,
+  tenantId: string,
+  objectStorageService: ObjectStorageService,
+) {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), IMAGE_FETCH_TIMEOUT);
+    const imgResp = await fetch(imageUrl, { signal: controller.signal });
+    clearTimeout(timeout);
+
+    if (!imgResp.ok) return;
+
+    const contentLength = parseInt(imgResp.headers.get("content-length") || "0");
+    if (contentLength > IMAGE_MAX_SIZE) return;
+
+    const buffer = Buffer.from(await imgResp.arrayBuffer());
+    if (buffer.length > IMAGE_MAX_SIZE) return;
+
+    const contentType = imgResp.headers.get("content-type") || "image/jpeg";
+    if (!contentType.startsWith("image/")) return;
+
+    const uploadedUrl = await objectStorageService.uploadBuffer(buffer, contentType);
+
+    await storage.createProductImage({
+      productId,
+      tenantId,
+      url: uploadedUrl,
+      isMain: true,
+      sortOrder: 0,
+    });
+  } catch (imgErr) {
+    console.error(`Failed to download image for product ${productId}:`, imgErr);
+  }
+}
+
+async function deleteObjectStorageFile(url: string): Promise<void> {
+  try {
+    const objectStorageService = new ObjectStorageService();
+    if (url.startsWith("/objects/")) {
+      await objectStorageService.deleteObject(url.replace("/objects/", ""));
+    }
+  } catch (err) {
+    console.error(`Failed to delete object storage file ${url}:`, err);
+  }
+}
+
+function sendTelegramNotification(text: string) {
+  const botToken = process.env.TELEGRAM_BOT_TOKEN;
+  const chatId = process.env.TELEGRAM_ADMIN_CHAT_ID;
+  if (!botToken || !chatId) return;
+
+  fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ chat_id: chatId, text, parse_mode: "HTML" }),
+  }).catch((err) => {
+    console.error("Failed to send Telegram notification:", err);
+  });
 }
 
 export function startMagicImportTrialWorker() {
@@ -475,6 +579,7 @@ export function startMagicImportTrialWorker() {
           for (const product of products) {
             const images = await storage.getProductImages(product.id, session.tenantId);
             for (const image of images) {
+              await deleteObjectStorageFile(image.url);
               await storage.deleteProductImage(image.id, session.tenantId);
             }
             await storage.deleteProduct(product.id, session.tenantId);

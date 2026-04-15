@@ -309,6 +309,24 @@ export class ObjectStorageService {
 
     return `/objects/uploads/${objectId}`;
   }
+
+  async deleteObject(objectPath: string): Promise<void> {
+    const privateObjectDir = this.getPrivateObjectDir();
+    if (!privateObjectDir) {
+      throw new Error("PRIVATE_OBJECT_DIR not set");
+    }
+
+    const fullPath = `${privateObjectDir}/${objectPath}`;
+    const { bucketName, objectName } = parseObjectPath(fullPath);
+
+    const bucket = objectStorageClient.bucket(bucketName);
+    const file = bucket.file(objectName);
+
+    const [exists] = await file.exists();
+    if (exists) {
+      await file.delete();
+    }
+  }
 }
 
 function parseObjectPath(path: string): {
