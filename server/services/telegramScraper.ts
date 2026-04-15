@@ -72,18 +72,22 @@ export async function scrapeTelegramChannel(
     if (pagePosts.length === 0) break;
 
     if (cutoffDate) {
-      const postsInRange: ScrapedPost[] = [];
-      for (const post of pagePosts) {
-        if (post.date) {
-          const postDate = new Date(post.date);
-          if (postDate < cutoffDate) {
-            reachedCutoff = true;
-            break;
-          }
-        }
-        postsInRange.push(post);
-      }
+      // Keep all posts that are within the date range (or have no date)
+      const postsInRange = pagePosts.filter(post => {
+        if (!post.date) return true;
+        return new Date(post.date) >= cutoffDate;
+      });
       allPosts.push(...postsInRange);
+
+      // Stop pagination only when EVERY dated post on this page is older than cutoff.
+      // This handles pinned posts (old date but appears at top) correctly: a single
+      // out-of-range post is filtered out, but doesn't stop traversal early.
+      const datedPosts = pagePosts.filter(p => !!p.date);
+      const allOlderThanCutoff =
+        datedPosts.length > 0 && datedPosts.every(p => new Date(p.date!) < cutoffDate);
+      if (allOlderThanCutoff) {
+        reachedCutoff = true;
+      }
     } else {
       allPosts.push(...pagePosts);
     }

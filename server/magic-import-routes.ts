@@ -687,6 +687,11 @@ async function runFullScrape(sessionId: string, telegramChannel: string | null |
     const existingNames = new Set(existingProducts.map(p => p.name.toLowerCase()));
 
     const remainingSlots = Math.max(0, productLimit - existingProducts.length);
+    if (remainingSlots === 0) {
+      console.log(`[FullScrape] Tenant ${tenantId} already at product limit (${productLimit}), skipping extraction`);
+      return { productsCreated: 0, total: existingProducts.length, limitReached: true };
+    }
+
     const products = await extractProductsFromPosts(scrapeResult, undefined, { maxProducts: remainingSlots });
     const newProducts = products.filter(p => !existingNames.has(p.name.toLowerCase()));
 
