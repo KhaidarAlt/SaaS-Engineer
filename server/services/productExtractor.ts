@@ -11,6 +11,7 @@ export interface ExtractedProduct {
   description: string;
   price: number;
   category: string;
+  sku: string;
   imageUrl?: string;
 }
 
@@ -129,6 +130,9 @@ export async function extractProductsFromPosts(
         }
         if (!product.description) {
           product.description = "";
+        }
+        if (!product.sku) {
+          product.sku = `MI-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`.toUpperCase();
         }
 
         const matchingPost = batch.find(

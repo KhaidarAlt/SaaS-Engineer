@@ -51,6 +51,11 @@ export function registerMagicImportRoutes(
       const { telegramChannel } = bodySchema.parse(req.body);
 
       const cleanChannel = telegramChannel.replace(/^@/, '').replace(/^https?:\/\/(t\.me|telegram\.me)\//i, '').replace(/\/$/, '');
+
+      if (!/^[a-zA-Z][a-zA-Z0-9_]{3,31}$/.test(cleanChannel)) {
+        return res.status(400).json({ message: "Некорректное имя канала" });
+      }
+
       const session = await storage.createMagicImportSession({
         telegramChannel: cleanChannel,
         channelUrl: `https://t.me/s/${cleanChannel}`,
@@ -303,6 +308,7 @@ export function registerMagicImportRoutes(
 
       const bodySchema = z.object({
         aiRopEnabled: z.boolean().optional(),
+        smartCatalogEnabled: z.boolean().optional(),
       });
       const updates = bodySchema.parse(req.body);
 
@@ -437,11 +443,10 @@ async function runFullScrape(sessionId: string, telegramChannel: string, tenantI
             }
           }
 
-          const sku = `MI-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`.toUpperCase();
           const created = await storage.createProduct({
             tenantId,
             name: product.name,
-            sku,
+            sku: product.sku || `MI-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`.toUpperCase(),
             description: product.description || "",
             price: String(product.price || 0),
             categoryId,
@@ -483,11 +488,10 @@ async function createProductsForTenant(sessionId: string, tenantId: string) {
         }
       }
 
-      const sku = `MI-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`.toUpperCase();
       const created = await storage.createProduct({
         tenantId,
         name: product.name,
-        sku,
+        sku: product.sku || `MI-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`.toUpperCase(),
         description: product.description || "",
         price: String(product.price || 0),
         categoryId,
@@ -593,6 +597,7 @@ export function startMagicImportTrialWorker() {
           }
         }
         await storage.updateMagicImportSession(session.id, {
+          status: "deleted",
           mediaDeletedAt: new Date(),
         });
         console.log(`Magic import media deleted: session=${session.id}`);

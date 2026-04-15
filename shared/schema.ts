@@ -85,6 +85,7 @@ export const tenants = pgTable("tenants", {
   catalogTemplate: text("catalog_template").notNull().default("universal"), // universal, fashion, food
   commissionRates: jsonb("commission_rates").$type<Record<string, number>>(),
   aiRopEnabled: boolean("ai_rop_enabled").notNull().default(false),
+  smartCatalogEnabled: boolean("smart_catalog_enabled").notNull().default(false),
   importSource: text("import_source"),
   magicImportSessionId: varchar("magic_import_session_id"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
