@@ -101,11 +101,12 @@ export function registerMagicImportRoutes(
         password: z.string().min(6),
         storeName: z.string().min(1),
         phone: z.string().optional(),
+        notificationPhone: z.string().optional(),
         city: z.string().optional(),
         address: z.string().optional(),
         workingHours: z.string().optional(),
       });
-      const { email, password, storeName, phone, city, address, workingHours } = bodySchema.parse(req.body);
+      const { email, password, storeName, phone, notificationPhone, city, address, workingHours } = bodySchema.parse(req.body);
       const sessionId = req.params.sessionId;
 
       const session = await storage.getMagicImportSession(sessionId);
@@ -137,6 +138,7 @@ export function registerMagicImportRoutes(
         magicImportSessionId: sessionId,
         aiRopEnabled: false,
         contactPhone: phone,
+        notificationPhone: notificationPhone || phone,
         address: address ? `${city ? city + ', ' : ''}${address}` : city,
         workingHours,
         status: "demo",
@@ -473,6 +475,7 @@ async function runFullScrape(sessionId: string, telegramChannel: string, tenantI
             price: String(product.price || 0),
             categoryId,
             isActive: true,
+            inStock: true,
           });
 
           if (product.imageUrl && isAllowedImageUrl(product.imageUrl)) {
@@ -519,6 +522,7 @@ async function createProductsForTenant(sessionId: string, tenantId: string) {
         price: String(product.price || 0),
         categoryId,
         isActive: true,
+        inStock: true,
       });
 
       if (product.imageUrl && isAllowedImageUrl(product.imageUrl)) {

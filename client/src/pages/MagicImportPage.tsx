@@ -63,6 +63,7 @@ export default function MagicImportPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [phone, setPhone] = useState("");
+  const [notificationPhone, setNotificationPhone] = useState("");
   const [city, setCity] = useState("");
   const [address, setAddress] = useState("");
   const [workingHours, setWorkingHours] = useState("");
@@ -207,6 +208,7 @@ export default function MagicImportPage() {
         password,
         storeName,
         phone: phone || undefined,
+        notificationPhone: notificationPhone || undefined,
         city: city || undefined,
         address: address || undefined,
         workingHours: workingHours || undefined,
@@ -286,6 +288,8 @@ export default function MagicImportPage() {
       setPassword={setPassword}
       phone={phone}
       setPhone={setPhone}
+      notificationPhone={notificationPhone}
+      setNotificationPhone={setNotificationPhone}
       city={city}
       setCity={setCity}
       address={address}
@@ -413,6 +417,8 @@ function OnboardingScreen({
   setPassword,
   phone,
   setPhone,
+  notificationPhone,
+  setNotificationPhone,
   city,
   setCity,
   address,
@@ -436,6 +442,8 @@ function OnboardingScreen({
   setPassword: (v: string) => void;
   phone: string;
   setPhone: (v: string) => void;
+  notificationPhone: string;
+  setNotificationPhone: (v: string) => void;
   city: string;
   setCity: (v: string) => void;
   address: string;
@@ -497,8 +505,13 @@ function OnboardingScreen({
                 <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Минимум 6 символов" data-testid="input-password" />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="phone">WhatsApp телефон</Label>
+                <Label htmlFor="phone">Номер телефона для отображения в магазине</Label>
                 <Input id="phone" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+7 777 123 4567" data-testid="input-phone" />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="notificationPhone">Номер WhatsApp для получения заявок</Label>
+                <Input id="notificationPhone" value={notificationPhone} onChange={(e) => setNotificationPhone(e.target.value)} placeholder="+7 777 123 4567" data-testid="input-notification-phone" />
+                <p className="text-xs text-muted-foreground">На этот номер будут приходить заказы из магазина</p>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
