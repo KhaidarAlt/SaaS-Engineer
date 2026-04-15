@@ -947,7 +947,7 @@ export async function registerRoutes(
           return res.type("text/plain").status(403).send("not allowed");
         }
         const r = await pool.query(
-          "SELECT id FROM tenants WHERE slug = $1 AND status = 'active' LIMIT 1",
+          "SELECT id FROM tenants WHERE slug = $1 AND status IN ('active', 'demo') LIMIT 1",
           [slug]
         );
         if (r.rowCount && r.rowCount > 0) {
