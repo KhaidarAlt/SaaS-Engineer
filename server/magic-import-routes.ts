@@ -50,8 +50,11 @@ export function registerMagicImportRoutes(
       const schema = z.object({ telegramChannel: z.string().min(1) });
       const { telegramChannel } = schema.parse(req.body);
 
+      const cleanChannel = telegramChannel.replace(/^@/, '').replace(/^https?:\/\/(t\.me|telegram\.me)\//i, '').replace(/\/$/, '');
       const session = await storage.createMagicImportSession({
-        telegramChannel,
+        telegramChannel: cleanChannel,
+        channelUrl: `https://t.me/s/${cleanChannel}`,
+        channelUsername: cleanChannel,
         status: "scraping",
         progressPct: 0,
         progressMessage: "Начинаем сканирование канала...",
@@ -124,7 +127,7 @@ export function registerMagicImportRoutes(
         magicImportSessionId: sessionId,
         aiRopEnabled: false,
         status: "active",
-      } as any);
+      });
 
       const user = await storage.createUser({
         email,
@@ -259,7 +262,7 @@ export function registerMagicImportRoutes(
       await storage.updateTenant(session.tenantId, {
         aiRopEnabled: true,
         status: "active",
-      } as any);
+      });
 
       await storage.updateMagicImportSession(session.id, {
         status: "active",
@@ -279,7 +282,7 @@ export function registerMagicImportRoutes(
 
       const updated = await storage.updateTenant(tenant.id, {
         aiRopEnabled: !tenant.aiRopEnabled,
-      } as any);
+      });
 
       res.json(updated);
     } catch (error: any) {
@@ -459,7 +462,7 @@ export function startMagicImportTrialWorker() {
       const expired = await storage.getExpiredTrialSessions();
       for (const session of expired) {
         if (session.tenantId) {
-          await storage.updateTenant(session.tenantId, { status: "suspended" } as any);
+          await storage.updateTenant(session.tenantId, { status: "suspended" });
         }
         await storage.updateMagicImportSession(session.id, { status: "expired" });
         console.log(`Magic import trial expired: session=${session.id}, tenant=${session.tenantId}`);

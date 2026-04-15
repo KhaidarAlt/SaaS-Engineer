@@ -3137,6 +3137,8 @@ export type CrmLead = typeof crmLeads.$inferSelect;
 export const magicImportSessions = pgTable("magic_import_sessions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   telegramChannel: text("telegram_channel").notNull(),
+  channelUrl: text("channel_url"),
+  channelUsername: text("channel_username"),
   email: text("email"),
   storeName: text("store_name"),
   status: text("status").notNull().default("scraping"),
@@ -3151,6 +3153,7 @@ export const magicImportSessions = pgTable("magic_import_sessions", {
   mediaDeletedAt: timestamp("media_deleted_at"),
   paidClickedAt: timestamp("paid_clicked_at"),
   activatedAt: timestamp("activated_at"),
+  fullScrapeTriggeredAt: timestamp("full_scrape_triggered_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
