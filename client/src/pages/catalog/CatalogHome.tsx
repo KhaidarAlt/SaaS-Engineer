@@ -146,7 +146,7 @@ function ProductCard({
   const { addItem } = useCart();
   const { toast } = useToast();
   
-  const isInStock = product.alwaysInStock || product.stockQty > 0;
+  const isInStock = product.alwaysInStock || product.inStock || product.stockQty > 0;
 
   const formatPrice = (value: number | string) => {
     const num = typeof value === "string" ? parseFloat(value) : value;
@@ -333,7 +333,7 @@ function QuickViewModal({
 
   if (!product) return null;
 
-  const isInStock = product.alwaysInStock || product.stockQty > 0;
+  const isInStock = product.alwaysInStock || product.inStock || product.stockQty > 0;
   const shortDescription = product.description
     ? product.description.substring(0, 200) + (product.description.length > 200 ? "..." : "")
     : "";
@@ -803,7 +803,7 @@ export default function CatalogHome({ basePath: parentBasePath }: { basePath?: s
         matchesCategory = subcatIds.includes(product.categoryId);
       }
     }
-    const isInStock = product.alwaysInStock || product.stockQty > 0;
+    const isInStock = product.alwaysInStock || product.inStock || product.stockQty > 0;
     const matchesStock =
       stockFilter === "all" ||
       (stockFilter === "in_stock" && isInStock) ||
@@ -1268,7 +1268,7 @@ export default function CatalogHome({ basePath: parentBasePath }: { basePath?: s
             {viewMode === 'list' && (
               <div className="flex flex-col gap-4">
                 {sortedProducts.map((product) => {
-                  const isInStock = product.alwaysInStock || product.stockQty > 0;
+                  const isInStock = product.alwaysInStock || product.inStock || product.stockQty > 0;
                   const formatPrice = (value: number | string) => {
                     const num = typeof value === "string" ? parseFloat(value) : value;
                     return new Intl.NumberFormat("ru-KZ").format(num) + " ₸";
@@ -1373,7 +1373,7 @@ export default function CatalogHome({ basePath: parentBasePath }: { basePath?: s
                     </thead>
                     <tbody>
                       {sortedProducts.map((product) => {
-                        const isInStock = product.alwaysInStock || product.stockQty > 0;
+                        const isInStock = product.alwaysInStock || product.inStock || product.stockQty > 0;
                         const formatPrice = (value: number | string) => {
                           const num = typeof value === "string" ? parseFloat(value) : value;
                           return new Intl.NumberFormat("ru-KZ").format(num) + " ₸";

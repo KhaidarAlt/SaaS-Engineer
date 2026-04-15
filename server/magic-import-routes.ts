@@ -476,6 +476,7 @@ async function runFullScrape(sessionId: string, telegramChannel: string, tenantI
             categoryId,
             isActive: true,
             inStock: true,
+            alwaysInStock: true,
           });
 
           if (product.imageUrl && isAllowedImageUrl(product.imageUrl)) {
@@ -523,6 +524,7 @@ async function createProductsForTenant(sessionId: string, tenantId: string) {
         categoryId,
         isActive: true,
         inStock: true,
+        alwaysInStock: true,
       });
 
       if (product.imageUrl && isAllowedImageUrl(product.imageUrl)) {

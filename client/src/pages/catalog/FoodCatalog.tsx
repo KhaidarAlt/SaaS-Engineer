@@ -911,7 +911,7 @@ function DishCard({
   isAdding: boolean;
   slug: string;
 }) {
-  const isInStock = product.alwaysInStock || product.stockQty > 0;
+  const isInStock = product.alwaysInStock || product.inStock || product.stockQty > 0;
   const imgUrl = resolveImageUrl(product.mainImageUrl);
   const productTags = (product.tags || []).slice(0, 3);
 

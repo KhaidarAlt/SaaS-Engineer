@@ -187,7 +187,7 @@ export default function ProductDetailPage() {
     product: ProductWithPrice;
     onAddToCart: (product: ProductWithPrice) => void;
   }) => {
-    const isInStock = product.alwaysInStock || product.stockQty > 0;
+    const isInStock = product.alwaysInStock || product.inStock || product.stockQty > 0;
 
     return (
       <motion.div
@@ -360,7 +360,7 @@ export default function ProductDetailPage() {
     }
   };
 
-  const isInStock = product.alwaysInStock || product.stockQty > 0;
+  const isInStock = product.alwaysInStock || product.inStock || product.stockQty > 0;
 
   return (
     <div className="min-h-screen bg-background overflow-x-hidden">
