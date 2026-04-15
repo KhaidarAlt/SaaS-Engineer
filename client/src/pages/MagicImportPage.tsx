@@ -258,6 +258,7 @@ export default function MagicImportPage() {
     return <SuccessScreen
       resultData={resultData}
       totalPostsFound={totalPostsFound}
+      productsCount={extractedProducts.length}
       paidClicked={paidClicked}
       isPaying={isPaying}
       copied={copied}
@@ -658,6 +659,7 @@ function PreviewCard({ product }: { product: ExtractedProduct }) {
 function SuccessScreen({
   resultData,
   totalPostsFound,
+  productsCount,
   paidClicked,
   isPaying,
   copied,
@@ -668,6 +670,7 @@ function SuccessScreen({
 }: {
   resultData: { catalogUrl: string; slug: string; tenantId: string; trialExpiresAt: string };
   totalPostsFound: number;
+  productsCount: number;
   paidClicked: boolean;
   isPaying: boolean;
   copied: boolean;
@@ -676,9 +679,7 @@ function SuccessScreen({
   onNavigate: (path: string) => void;
   sessionId: string;
 }) {
-  const trialDate = new Date(resultData.trialExpiresAt);
-  const daysLeft = Math.max(0, Math.ceil((trialDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
-  const hasLargeChannel = totalPostsFound >= 30;
+  const hasLargeChannel = totalPostsFound > 20;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-green-500/5 flex items-center justify-center px-4">
@@ -709,7 +710,7 @@ function SuccessScreen({
             </div>
           ) : (
             <p className="text-muted-foreground">
-              Ваш каталог готов. Пробный период: {daysLeft} {daysLeft === 1 ? "день" : "дня"}.
+              Создан магазин из {productsCount || 20} товаров.
             </p>
           )}
         </div>

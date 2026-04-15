@@ -366,7 +366,7 @@ async function runImportPipeline(sessionId: string, telegramChannel: string) {
 
     scrapeResult.posts = postsWithImages.length > 0 ? postsWithImages : scrapeResult.posts;
 
-    const progressMsg = totalPostsFound >= 30
+    const progressMsg = totalPostsFound > 20
       ? `Найдено ${totalPostsFound}+ позиций — отбираем 20 лучших для вашего магазина...`
       : `Найдено ${totalPostsFound} постов. Анализируем товары...`;
 
@@ -400,8 +400,8 @@ async function runImportPipeline(sessionId: string, telegramChannel: string) {
       extractedProductsData: products,
     });
 
-    const completeMsg = totalPostsFound >= 30
-      ? `Готово! В канале ${totalPostsFound}+ позиций — каталог создан из ${products.length} лучших`
+    const completeMsg = totalPostsFound > 20
+      ? `Готово! В вашем канале ${totalPostsFound}+ позиций — каталог создан из 20 лучших`
       : `Готово! Создан каталог из ${products.length} товаров`;
 
     await storage.updateMagicImportSession(sessionId, {
