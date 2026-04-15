@@ -1,9 +1,33 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { z } from "zod";
+import multer from "multer";
 import { storage } from "./storage";
 import { scrapeTelegramChannel } from "./services/telegramScraper";
 import { extractProductsFromPosts, type ExtractedProduct } from "./services/productExtractor";
+import { parseFileToText, extractProductsFromFileText } from "./services/fileCatalogExtractor";
 import { ObjectStorageService } from "./replit_integrations/object_storage";
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 20 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = [
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "application/vnd.ms-excel",
+      "application/pdf",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/msword",
+      "text/csv",
+    ];
+    const ext = file.originalname.split(".").pop()?.toLowerCase() ?? "";
+    const allowedExt = ["xlsx", "xls", "pdf", "docx", "doc", "csv"];
+    if (allowed.includes(file.mimetype) || allowedExt.includes(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error("Неподдерживаемый формат файла. Используйте Excel, PDF или DOCX"));
+    }
+  },
+});
 
 const sseClients = new Map<string, Response>();
 
@@ -75,6 +99,32 @@ export function registerMagicImportRoutes(
     }
   });
 
+  app.post("/api/magic-import/upload-start", upload.single("file"), async (req: Request, res: Response) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: "Файл не загружен" });
+      }
+
+      const { buffer, originalname, mimetype } = req.file;
+      const session = await storage.createMagicImportSession({
+        sourceType: "file",
+        sourceFileName: originalname,
+        status: "scraping",
+        progressPct: 0,
+        progressMessage: "Читаем файл...",
+      });
+
+      res.json({ sessionId: session.id });
+
+      runFileImportPipeline(session.id, buffer, mimetype, originalname).catch((err) => {
+        console.error("File import pipeline error:", err);
+      });
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : "Ошибка загрузки файла";
+      res.status(400).json({ message: msg });
+    }
+  });
+
   app.get("/api/magic-import/:sessionId/status", async (req: Request, res: Response) => {
     try {
       const session = await storage.getMagicImportSession(req.params.sessionId);
@@ -131,10 +181,14 @@ export function registerMagicImportRoutes(
         counter++;
       }
 
+      const importSource = session.sourceType === "file"
+        ? `file:${session.sourceFileName ?? "upload"}`
+        : `telegram:${session.telegramChannel}`;
+
       const tenant = await storage.createTenant({
         name: storeName,
         slug: uniqueSlug,
-        importSource: `telegram:${session.telegramChannel}`,
+        importSource,
         magicImportSessionId: sessionId,
         aiRopEnabled: false,
         contactPhone: phone,
@@ -216,8 +270,11 @@ export function registerMagicImportRoutes(
       if (session.tenantId) {
         const tenant = await storage.getTenant(session.tenantId);
         if (tenant) {
+          const sourceInfo = session.sourceType === "file"
+            ? `Файл: ${session.sourceFileName ?? "upload"}`
+            : `Канал: @${session.telegramChannel}`;
           sendTelegramNotification(
-            `💰 Magic Import: оплата нажата!\nМагазин: ${tenant.name}\nEmail: ${session.email}\nКанал: @${session.telegramChannel}`
+            `💰 Magic Import: оплата нажата!\nМагазин: ${tenant.name}\nEmail: ${session.email}\n${sourceInfo}`
           );
         }
       }
@@ -439,7 +496,80 @@ async function runImportPipeline(sessionId: string, telegramChannel: string) {
   }
 }
 
-async function runFullScrape(sessionId: string, telegramChannel: string, tenantId: string) {
+async function runFileImportPipeline(sessionId: string, buffer: Buffer, mimetype: string, filename: string) {
+  try {
+    sendSSE(sessionId, { type: "progress", pct: 5, message: "Читаем файл..." });
+    await storage.updateMagicImportSession(sessionId, {
+      progressPct: 5,
+      progressMessage: "Читаем файл...",
+    });
+
+    const text = await parseFileToText(buffer, mimetype, filename);
+
+    sendSSE(sessionId, { type: "progress", pct: 12, message: "Файл загружен. Запускаем ИИ-анализ..." });
+    await storage.updateMagicImportSession(sessionId, {
+      progressPct: 12,
+      progressMessage: "Файл загружен. Запускаем ИИ-анализ...",
+    });
+
+    const products = await extractProductsFromFileText(text, (progress) => {
+      sendSSE(sessionId, {
+        type: "progress",
+        pct: progress.pct,
+        message: progress.message,
+        productsCount: progress.products.length,
+        totalPostsFound: 0,
+      });
+    });
+
+    if (products.length === 0) {
+      throw new Error("В файле не найдены товары. Проверьте формат прайс-листа.");
+    }
+
+    await storage.updateMagicImportSession(sessionId, {
+      extractedProductsData: products,
+    });
+
+    const completeMsg = `Готово! ИИ распознал ${products.length} товаров из файла`;
+
+    await storage.updateMagicImportSession(sessionId, {
+      extractedProducts: products.length,
+      progressPct: 100,
+      progressMessage: completeMsg,
+      status: "done",
+    });
+
+    sendSSE(sessionId, {
+      type: "complete",
+      pct: 100,
+      message: completeMsg,
+      productsCount: products.length,
+      totalPostsFound: products.length,
+      products: products.map((p) => ({
+        name: p.name,
+        price: p.price,
+        category: p.category,
+        imageUrl: undefined,
+      })),
+      channelTitle: filename,
+    });
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : "Неизвестная ошибка";
+    console.error("File import pipeline error:", error);
+    await storage.updateMagicImportSession(sessionId, {
+      status: "error",
+      errorMessage: msg,
+      progressMessage: `Ошибка: ${msg}`,
+    });
+    sendSSE(sessionId, { type: "error", message: msg });
+  }
+}
+
+async function runFullScrape(sessionId: string, telegramChannel: string | null | undefined, tenantId: string) {
+  if (!telegramChannel) {
+    console.log(`Full scrape skipped for session=${sessionId}: source is file, not telegram`);
+    return;
+  }
   try {
     const scrapeResult = await scrapeTelegramChannel(telegramChannel, { maxPages: Infinity });
 

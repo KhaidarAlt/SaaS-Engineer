@@ -3137,9 +3137,11 @@ export type CrmLead = typeof crmLeads.$inferSelect;
 // ============ MAGIC IMPORT SESSIONS ============
 export const magicImportSessions = pgTable("magic_import_sessions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  telegramChannel: text("telegram_channel").notNull(),
+  sourceType: text("source_type").notNull().default("telegram"),
+  telegramChannel: text("telegram_channel"),
   channelUrl: text("channel_url"),
   channelUsername: text("channel_username"),
+  sourceFileName: text("source_file_name"),
   email: text("email"),
   storeName: text("store_name"),
   status: text("status").notNull().default("scraping"),

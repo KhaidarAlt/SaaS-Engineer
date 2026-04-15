@@ -17,6 +17,9 @@ import {
   ArrowRight,
   MessageCircle,
   Bot,
+  Upload,
+  FileText,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -78,6 +81,9 @@ export default function MagicImportPage() {
   const [paidClicked, setPaidClicked] = useState(false);
   const [isPaying, setIsPaying] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [sourceType, setSourceType] = useState<"telegram" | "file">("telegram");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [fileError, setFileError] = useState("");
 
   const feedRef = useRef<HTMLDivElement>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -192,6 +198,44 @@ export default function MagicImportPage() {
     }
   };
 
+  const handleFileStart = async () => {
+    if (!selectedFile) {
+      setFileError("Выберите файл для загрузки");
+      return;
+    }
+    setFileError("");
+    setIsStarting(true);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", selectedFile);
+
+      const res = await fetch("/api/magic-import/upload-start", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "Ошибка загрузки файла");
+      }
+
+      const data = await res.json();
+      setSessionId(data.sessionId);
+      setSseMessages([]);
+      setExtractedProducts([]);
+      setTotalPostsFound(0);
+      setScrapingDone(false);
+      setStep("onboarding");
+      connectSSE(data.sessionId);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Не удалось начать импорт";
+      toast({ title: "Ошибка", description: msg, variant: "destructive" });
+    } finally {
+      setIsStarting(false);
+    }
+  };
+
   const handleComplete = async () => {
     if (!sessionId || !email || !password || !storeName) {
       toast({
@@ -254,6 +298,12 @@ export default function MagicImportPage() {
       channelError={channelError}
       isStarting={isStarting}
       onStart={handleStart}
+      sourceType={sourceType}
+      setSourceType={setSourceType}
+      selectedFile={selectedFile}
+      setSelectedFile={setSelectedFile}
+      fileError={fileError}
+      onFileStart={handleFileStart}
     />;
   }
 
@@ -308,13 +358,46 @@ function HeroSection({
   channelError,
   isStarting,
   onStart,
+  sourceType,
+  setSourceType,
+  selectedFile,
+  setSelectedFile,
+  fileError,
+  onFileStart,
 }: {
   channelUrl: string;
   setChannelUrl: (v: string) => void;
   channelError: string;
   isStarting: boolean;
   onStart: () => void;
+  sourceType: "telegram" | "file";
+  setSourceType: (v: "telegram" | "file") => void;
+  selectedFile: File | null;
+  setSelectedFile: (f: File | null) => void;
+  fileError: string;
+  onFileStart: () => void;
 }) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const file = e.dataTransfer.files[0];
+    if (file) setSelectedFile(file);
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) setSelectedFile(file);
+  };
+
+  const getFileIcon = (name: string) => {
+    const ext = name.split(".").pop()?.toLowerCase();
+    if (ext === "pdf") return "📄";
+    if (["xlsx", "xls", "csv"].includes(ext ?? "")) return "📊";
+    if (["docx", "doc"].includes(ext ?? "")) return "📝";
+    return "📎";
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5 flex flex-col">
       <header className="px-6 py-4 flex items-center justify-between">
@@ -340,46 +423,158 @@ function HeroSection({
               AI-импорт
             </Badge>
             <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight leading-tight" data-testid="heading-hero">
-              Превратите ваш Telegram-канал в интернет-магазин за{" "}
+              Создайте интернет-магазин за{" "}
               <span className="text-primary">60 секунд</span>
             </h1>
             <p className="text-lg text-muted-foreground max-w-xl mx-auto" data-testid="text-hero-sub">
-              ИИ автоматически найдёт товары, определит цены и создаст каталог.
-              Просто вставьте ссылку на канал.
+              ИИ автоматически найдёт товары, определит цены и создаст каталог
+              из вашего Telegram-канала или прайс-листа.
             </p>
           </div>
 
-          <div className="max-w-md mx-auto space-y-3">
-            <div className="flex gap-2">
-              <Input
-                placeholder="@channel или t.me/channel"
-                value={channelUrl}
-                onChange={(e) => setChannelUrl(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && onStart()}
-                className="h-12 text-base"
-                data-testid="input-channel"
-              />
-              <Button
-                size="lg"
-                className="h-12 px-6 gap-2"
-                onClick={onStart}
-                disabled={isStarting}
-                data-testid="button-start"
+          <div className="max-w-md mx-auto space-y-4">
+            <div className="flex rounded-xl border bg-muted/30 p-1 gap-1" data-testid="source-type-tabs">
+              <button
+                className={`flex-1 flex items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-medium transition-all ${
+                  sourceType === "telegram"
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+                onClick={() => setSourceType("telegram")}
+                data-testid="tab-telegram"
               >
-                {isStarting ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Zap className="h-4 w-4" />
-                )}
-                Начать
-              </Button>
+                <Send className="h-4 w-4" />
+                Telegram-канал
+              </button>
+              <button
+                className={`flex-1 flex items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-medium transition-all ${
+                  sourceType === "file"
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+                onClick={() => setSourceType("file")}
+                data-testid="tab-file"
+              >
+                <Upload className="h-4 w-4" />
+                Прайс-лист
+              </button>
             </div>
-            {channelError && (
-              <p className="text-sm text-destructive flex items-center gap-1" data-testid="text-channel-error">
-                <AlertCircle className="h-3.5 w-3.5" />
-                {channelError}
-              </p>
-            )}
+
+            <AnimatePresence mode="wait">
+              {sourceType === "telegram" ? (
+                <motion.div
+                  key="telegram"
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.2 }}
+                  className="space-y-2"
+                >
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="@channel или t.me/channel"
+                      value={channelUrl}
+                      onChange={(e) => setChannelUrl(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && onStart()}
+                      className="h-12 text-base"
+                      data-testid="input-channel"
+                    />
+                    <Button
+                      size="lg"
+                      className="h-12 px-6 gap-2"
+                      onClick={onStart}
+                      disabled={isStarting}
+                      data-testid="button-start"
+                    >
+                      {isStarting ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Zap className="h-4 w-4" />
+                      )}
+                      Начать
+                    </Button>
+                  </div>
+                  {channelError && (
+                    <p className="text-sm text-destructive flex items-center gap-1" data-testid="text-channel-error">
+                      <AlertCircle className="h-3.5 w-3.5" />
+                      {channelError}
+                    </p>
+                  )}
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="file"
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.2 }}
+                  className="space-y-2"
+                >
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".xlsx,.xls,.pdf,.docx,.doc,.csv"
+                    className="hidden"
+                    onChange={handleFileChange}
+                    data-testid="input-file"
+                  />
+                  {selectedFile ? (
+                    <div className="flex items-center gap-3 rounded-xl border bg-background p-3">
+                      <span className="text-2xl">{getFileIcon(selectedFile.name)}</span>
+                      <div className="flex-1 text-left min-w-0">
+                        <p className="text-sm font-medium truncate">{selectedFile.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {(selectedFile.size / 1024 / 1024).toFixed(1)} МБ
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => setSelectedFile(null)}
+                        className="text-muted-foreground hover:text-foreground p-1 rounded"
+                        data-testid="button-clear-file"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div
+                      className="border-2 border-dashed border-muted-foreground/30 rounded-xl p-8 cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-all"
+                      onClick={() => fileInputRef.current?.click()}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={handleFileDrop}
+                      data-testid="dropzone-file"
+                    >
+                      <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                        <FileText className="h-10 w-10 opacity-50" />
+                        <p className="text-sm font-medium">Перетащите файл или нажмите для выбора</p>
+                        <p className="text-xs opacity-70">Excel, PDF, DOCX — до 20 МБ</p>
+                      </div>
+                    </div>
+                  )}
+
+                  <Button
+                    size="lg"
+                    className="w-full h-12 gap-2"
+                    onClick={onFileStart}
+                    disabled={isStarting || !selectedFile}
+                    data-testid="button-file-start"
+                  >
+                    {isStarting ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Zap className="h-4 w-4" />
+                    )}
+                    Создать магазин из файла
+                  </Button>
+
+                  {fileError && (
+                    <p className="text-sm text-destructive flex items-center gap-1" data-testid="text-file-error">
+                      <AlertCircle className="h-3.5 w-3.5" />
+                      {fileError}
+                    </p>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
           <div className="flex flex-wrap items-center justify-center gap-6 pt-4 text-sm text-muted-foreground">
