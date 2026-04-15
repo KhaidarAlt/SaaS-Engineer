@@ -3515,7 +3515,7 @@ export async function registerRoutes(
   app.get("/api/catalog/:slug/product/:productId", async (req, res) => {
     try {
       const tenant = await storage.getTenantBySlug(req.params.slug);
-      if (!tenant || tenant.status !== "active") {
+      if (!tenant || (tenant.status !== "active" && tenant.status !== "demo")) {
         return res.status(404).json({ message: "Каталог не найден" });
       }
 
@@ -3655,7 +3655,7 @@ export async function registerRoutes(
       }
 
       const tenant = await storage.getTenantBySlug(req.params.slug);
-      if (!tenant || tenant.status !== "active") {
+      if (!tenant || (tenant.status !== "active" && tenant.status !== "demo")) {
         return res.status(404).json({ message: "Каталог не найден" });
       }
 
