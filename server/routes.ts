@@ -3339,6 +3339,14 @@ export async function registerRoutes(
       }
 
       if (tenant.status === "suspended") {
+        let mediaDeletedAt: Date | null = null;
+        if (tenant.importSource) {
+          const sessions = await storage.getMagicImportSessions();
+          const session = sessions.find(s => s.tenantId === tenant.id);
+          if (session) {
+            mediaDeletedAt = session.mediaDeletedAt;
+          }
+        }
         return res.json({
           tenant: {
             id: tenant.id,
@@ -3347,6 +3355,7 @@ export async function registerRoutes(
             status: tenant.status,
             importSource: tenant.importSource,
             contactPhone: tenant.contactPhone,
+            mediaDeletedAt,
           },
           products: [],
           categories: [],

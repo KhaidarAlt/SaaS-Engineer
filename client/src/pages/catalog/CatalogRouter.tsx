@@ -18,7 +18,7 @@ interface ProductWithPrice extends Product {
 }
 
 interface CatalogData {
-  tenant: Tenant;
+  tenant: Tenant & { mediaDeletedAt?: string | null };
   products: ProductWithPrice[];
   categories: Category[];
   promotions: Promotion[];
@@ -77,9 +77,11 @@ export default function CatalogRouter() {
           <p className="text-muted-foreground">
             Пробный период истёк. Свяжитесь с владельцем магазина для активации.
           </p>
-          <p className="text-xs text-muted-foreground/70">
-            Медиафайлы удалены для экономии места
-          </p>
+          {tenant.mediaDeletedAt && (
+            <p className="text-xs text-muted-foreground/70" data-testid="text-media-deleted">
+              Медиафайлы удалены для экономии места
+            </p>
+          )}
           {tenant.contactPhone && (
             <a
               href={`https://wa.me/${tenant.contactPhone.replace(/\D/g, "")}`}

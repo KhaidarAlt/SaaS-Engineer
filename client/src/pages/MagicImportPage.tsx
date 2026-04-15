@@ -140,7 +140,9 @@ export default function MagicImportPage() {
           });
           es.close();
         }
-      } catch {}
+      } catch (parseError: unknown) {
+        console.error("SSE parse error:", parseError);
+      }
     };
 
     es.onerror = () => {
@@ -175,8 +177,8 @@ export default function MagicImportPage() {
       setScrapingDone(false);
       setStep("onboarding");
       connectSSE(data.sessionId);
-    } catch (err: any) {
-      const msg = err?.message || "Не удалось начать импорт";
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Не удалось начать импорт";
       toast({ title: "Ошибка", description: msg, variant: "destructive" });
     } finally {
       setIsStarting(false);
@@ -207,8 +209,8 @@ export default function MagicImportPage() {
       setResultData(data);
       setStep("success");
       await refreshUser();
-    } catch (err: any) {
-      const msg = err?.message || "Ошибка создания магазина";
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Ошибка создания магазина";
       toast({ title: "Ошибка", description: msg, variant: "destructive" });
     } finally {
       setIsSubmitting(false);
