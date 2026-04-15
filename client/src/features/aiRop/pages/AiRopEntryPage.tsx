@@ -28,7 +28,7 @@ const TAB_COMPONENTS: Record<string, () => JSX.Element> = {
 
 export default function AiRopEntryPage() {
   const { user } = useAuth();
-  const tenant = user?.tenant as any;
+  const tenant = user?.tenant;
 
   const { data: status, isLoading } = useQuery({
     queryKey: AI_ROP_KEYS.onboardingStatus,

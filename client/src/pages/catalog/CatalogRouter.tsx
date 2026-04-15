@@ -18,7 +18,7 @@ interface ProductWithPrice extends Product {
 }
 
 interface CatalogData {
-  tenant: Tenant & { catalogTemplate?: string };
+  tenant: Tenant;
   products: ProductWithPrice[];
   categories: Category[];
   promotions: Promotion[];
@@ -59,7 +59,7 @@ export default function CatalogRouter() {
     );
   }
 
-  const tenant = data.tenant as any;
+  const tenant = data.tenant;
   const template = tenant.catalogTemplate || "universal";
   const isDemo = tenant.status === "demo" && tenant.importSource?.startsWith("telegram:");
   const isSuspended = tenant.status === "suspended";
@@ -76,6 +76,9 @@ export default function CatalogRouter() {
           </h1>
           <p className="text-muted-foreground">
             Пробный период истёк. Свяжитесь с владельцем магазина для активации.
+          </p>
+          <p className="text-xs text-muted-foreground/70">
+            Медиафайлы удалены для экономии места
           </p>
           {tenant.contactPhone && (
             <a

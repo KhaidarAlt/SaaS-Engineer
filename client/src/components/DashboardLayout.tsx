@@ -194,7 +194,8 @@ export function DashboardLayout({ children, isSuperAdmin = false }: DashboardLay
   const trialExpired = isTrialExpired(billing);
   const paidActive = hasActivePaidPlan(billing);
   const isBillingPage = location === "/dashboard/billing";
-  const shouldBlockAccess = trialExpired && !paidActive && !isSuperAdmin && !isBillingPage;
+  const tenantSuspended = !isSuperAdmin && user?.tenant?.status === "suspended";
+  const shouldBlockAccess = (trialExpired && !paidActive && !isSuperAdmin && !isBillingPage) || tenantSuspended;
 
   useEffect(() => {
     if (isSuperAdmin || !user || user.role === "superadmin") return;
@@ -439,16 +440,36 @@ export function DashboardLayout({ children, isSuperAdmin = false }: DashboardLay
 
         <main className="p-4 lg:p-6 relative">
           {shouldBlockAccess && (
-            <div className="absolute inset-0 z-30 bg-background/80 backdrop-blur-sm flex items-start justify-center pt-20" data-testid="trial-expired-overlay">
+            <div className="absolute inset-0 z-30 bg-background/80 backdrop-blur-sm flex items-start justify-center pt-20" data-testid={tenantSuspended ? "suspended-overlay" : "trial-expired-overlay"}>
               <div className="text-center max-w-md p-6">
                 <Lock className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-                <h3 className="text-xl font-bold mb-2">Пробный период завершён</h3>
-                <p className="text-muted-foreground mb-4">
-                  Выберите тариф, чтобы продолжить работу с платформой
-                </p>
-                <Button onClick={() => setShowPlanPopup(true)} data-testid="button-open-plan-popup">
-                  Выбрать тариф
-                </Button>
+                {tenantSuspended ? (
+                  <>
+                    <h3 className="text-xl font-bold mb-2">Магазин приостановлен</h3>
+                    <p className="text-muted-foreground mb-4">
+                      Пробный период истёк. Свяжитесь с администратором для активации магазина.
+                    </p>
+                    <a
+                      href="https://wa.me/77001234567"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
+                      data-testid="link-whatsapp-suspended"
+                    >
+                      Написать в WhatsApp
+                    </a>
+                  </>
+                ) : (
+                  <>
+                    <h3 className="text-xl font-bold mb-2">Пробный период завершён</h3>
+                    <p className="text-muted-foreground mb-4">
+                      Выберите тариф, чтобы продолжить работу с платформой
+                    </p>
+                    <Button onClick={() => setShowPlanPopup(true)} data-testid="button-open-plan-popup">
+                      Выбрать тариф
+                    </Button>
+                  </>
+                )}
               </div>
             </div>
           )}

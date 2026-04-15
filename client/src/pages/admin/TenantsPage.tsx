@@ -49,6 +49,16 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
@@ -79,6 +89,8 @@ export default function TenantsPage() {
   const [selectedTenant, setSelectedTenant] = useState<TenantWithDetails | null>(null);
   const [extendDays, setExtendDays] = useState("30");
   const [extendReason, setExtendReason] = useState("");
+  const [toggleConfirmOpen, setToggleConfirmOpen] = useState(false);
+  const [pendingToggle, setPendingToggle] = useState<{ tenantId: string; tenantName: string; field: string; label: string; value: boolean } | null>(null);
   const { toast } = useToast();
 
   const { data: tenants, isLoading } = useQuery<TenantWithDetails[]>({
@@ -295,7 +307,7 @@ export default function TenantsPage() {
                           <Badge variant={getStatusBadge(tenant.status).variant}>
                             {getStatusBadge(tenant.status).label}
                           </Badge>
-                          {(tenant as any).importSource?.startsWith("telegram:") && (
+                          {tenant.importSource?.startsWith("telegram:") && (
                             <Badge variant="outline" className="text-[10px] gap-0.5">
                               <Wand2 className="h-2.5 w-2.5" />MI
                             </Badge>
@@ -303,18 +315,30 @@ export default function TenantsPage() {
                         </div>
                       </TableCell>
                       <TableCell className="text-center">
-                        <Switch
-                          checked={(tenant as any).smartCatalogEnabled !== false}
-                          onCheckedChange={(v) => toggleMutation.mutate({ tenantId: tenant.id, field: "smartCatalogEnabled", value: v })}
-                          data-testid={`toggle-sc-${tenant.id}`}
-                        />
+                        <div className="flex items-center justify-center gap-1.5">
+                          {!tenant.smartCatalogEnabled && <Lock className="h-3 w-3 text-muted-foreground" />}
+                          <Switch
+                            checked={tenant.smartCatalogEnabled !== false}
+                            onCheckedChange={(v) => {
+                              setPendingToggle({ tenantId: tenant.id, tenantName: tenant.name, field: "smartCatalogEnabled", label: "SmartCatalog", value: v });
+                              setToggleConfirmOpen(true);
+                            }}
+                            data-testid={`toggle-sc-${tenant.id}`}
+                          />
+                        </div>
                       </TableCell>
                       <TableCell className="text-center">
-                        <Switch
-                          checked={(tenant as any).aiRopEnabled === true}
-                          onCheckedChange={(v) => toggleMutation.mutate({ tenantId: tenant.id, field: "aiRopEnabled", value: v })}
-                          data-testid={`toggle-airop-${tenant.id}`}
-                        />
+                        <div className="flex items-center justify-center gap-1.5">
+                          {!tenant.aiRopEnabled && <Lock className="h-3 w-3 text-muted-foreground" />}
+                          <Switch
+                            checked={tenant.aiRopEnabled === true}
+                            onCheckedChange={(v) => {
+                              setPendingToggle({ tenantId: tenant.id, tenantName: tenant.name, field: "aiRopEnabled", label: "AI-РОП", value: v });
+                              setToggleConfirmOpen(true);
+                            }}
+                            data-testid={`toggle-airop-${tenant.id}`}
+                          />
+                        </div>
                       </TableCell>
                       <TableCell className="text-muted-foreground">
                         {tenant.subscription?.endsAt
@@ -463,6 +487,43 @@ export default function TenantsPage() {
             </div>
           </DialogContent>
         </Dialog>
+
+        <AlertDialog open={toggleConfirmOpen} onOpenChange={setToggleConfirmOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Подтвердите действие</AlertDialogTitle>
+              <AlertDialogDescription>
+                {pendingToggle?.value
+                  ? `Включить ${pendingToggle?.label} для «${pendingToggle?.tenantName}»?`
+                  : `Отключить ${pendingToggle?.label} для «${pendingToggle?.tenantName}»?`}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel
+                onClick={() => setPendingToggle(null)}
+                data-testid="button-toggle-cancel"
+              >
+                Отмена
+              </AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => {
+                  if (pendingToggle) {
+                    toggleMutation.mutate({
+                      tenantId: pendingToggle.tenantId,
+                      field: pendingToggle.field,
+                      value: pendingToggle.value,
+                    });
+                  }
+                  setPendingToggle(null);
+                  setToggleConfirmOpen(false);
+                }}
+                data-testid="button-toggle-confirm"
+              >
+                Подтвердить
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </DashboardLayout>
   );
