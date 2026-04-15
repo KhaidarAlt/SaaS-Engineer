@@ -214,7 +214,7 @@ function UpgradeModal({
       return res.json();
     },
     onSuccess: () => {
-      setStep("payment");
+      setStep("done");
       queryClient.invalidateQueries({ queryKey: ["/api/scrape-packages/my"] });
     },
     onError: (err: unknown) => {
@@ -227,11 +227,6 @@ function UpgradeModal({
     setStep("select");
     setSelectedPkg(null);
     onClose();
-  };
-
-  const handleRequest = () => {
-    if (!selectedPkg) return;
-    requestMutation.mutate(selectedPkg);
   };
 
   const selectedPackage = PACKAGES.find(p => p.type === selectedPkg);
@@ -281,11 +276,11 @@ function UpgradeModal({
             </div>
             <Button
               className="w-full"
-              onClick={handleRequest}
-              disabled={!selectedPkg || requestMutation.isPending}
+              onClick={() => { if (selectedPkg) setStep("payment"); }}
+              disabled={!selectedPkg}
               data-testid="button-confirm-package"
             >
-              {requestMutation.isPending ? "Отправляем запрос..." : "Выбрать пакет"}
+              Далее — к оплате
             </Button>
           </>
         )}
@@ -314,19 +309,24 @@ function UpgradeModal({
                 </div>
               </div>
               <p className="text-sm text-muted-foreground text-center">
-                После подтверждения оплаты администратором лимит будет увеличен автоматически
+                После нажатия «Я оплатил» мы уведомим администратора, и лимит будет увеличен
               </p>
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" className="flex-1" onClick={handleClose}>
-                Закрыть
+              <Button variant="outline" className="flex-1" onClick={() => setStep("select")}>
+                Назад
               </Button>
               <Button
                 className="flex-1 gap-2"
-                onClick={() => setStep("done")}
+                onClick={() => requestMutation.mutate(selectedPkg!)}
+                disabled={requestMutation.isPending}
                 data-testid="button-paid-confirmed"
               >
-                <Check className="h-4 w-4" />
+                {requestMutation.isPending ? (
+                  <span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full inline-block" />
+                ) : (
+                  <Check className="h-4 w-4" />
+                )}
                 Я оплатил
               </Button>
             </div>

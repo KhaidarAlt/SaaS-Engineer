@@ -509,6 +509,19 @@ async function checkPlanLimit(tenantId: string, limitType: LimitType): Promise<{
     };
   }
 
+  // For magic-import tenants, additionally enforce catalogProductLimit
+  if (limitType === "products") {
+    const tenant = await storage.getTenant(tenantId);
+    if (tenant && tenant.importSource && tenant.catalogProductLimit != null) {
+      if (current >= tenant.catalogProductLimit) {
+        return {
+          allowed: false,
+          message: `Достигнут лимит каталога (${current}/${tenant.catalogProductLimit} товаров). Купите пакет расширения в разделе «Каталог».`,
+        };
+      }
+    }
+  }
+
   return { allowed: true };
 }
 
@@ -2358,6 +2371,7 @@ export async function registerRoutes(
       const existingProduct = existingProducts.find(p => p.sku === productData.sku);
 
       if (mode === "upsert" && existingProduct) {
+        // Updating an existing product — no limit check needed
         const updateData: any = {};
         if (fieldsToUpdate?.price && productData.price) {
           updateData.price = productData.price;
@@ -2376,6 +2390,12 @@ export async function registerRoutes(
           await storage.updateProduct(existingProduct.id, tenantId, updateData);
         }
         return res.json({ created: false, updated: true, id: existingProduct.id });
+      }
+
+      // Creating a new product — check plan & catalog limits
+      const limitCheck = await checkPlanLimit(tenantId, "products");
+      if (!limitCheck.allowed) {
+        return res.status(403).json({ message: limitCheck.message });
       }
 
       const product = await storage.createProduct({

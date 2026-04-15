@@ -460,6 +460,16 @@ export function registerMagicImportRoutes(
     }
   });
 
+  app.get("/api/admin/scrape-packages/tenant/:tenantId", requireAuth, requireSuperAdmin, async (req: Request, res: Response) => {
+    try {
+      const packages = await storage.getScrapePackagesByTenant(req.params.tenantId);
+      res.json(packages);
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : "Ошибка";
+      res.status(500).json({ message: msg });
+    }
+  });
+
   app.patch("/api/admin/tenants/:tenantId/toggles", requireAuth, requireSuperAdmin, async (req: Request, res: Response) => {
     try {
       const tenant = await storage.getTenant(req.params.tenantId);

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import {
   Search,
@@ -15,6 +15,8 @@ import {
   Lock,
   Unlock,
   CheckCircle,
+  Package,
+  History,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -81,6 +83,16 @@ interface TenantWithDetails extends Tenant {
   magicImportSessionId?: string;
 }
 
+interface ScrapePackage {
+  id: string;
+  packageType: string;
+  priceKzt: number;
+  productsAdded: number;
+  status: string;
+  requestedAt: string;
+  confirmedAt?: string;
+}
+
 export default function TenantsPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -91,7 +103,9 @@ export default function TenantsPage() {
   const [extendReason, setExtendReason] = useState("");
   const [toggleConfirmOpen, setToggleConfirmOpen] = useState(false);
   const [pendingToggle, setPendingToggle] = useState<{ tenantId: string; tenantName: string; field: string; label: string; value: boolean } | null>(null);
+  const [packageHistoryTenant, setPackageHistoryTenant] = useState<TenantWithDetails | null>(null);
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const { data: tenants, isLoading } = useQuery<TenantWithDetails[]>({
     queryKey: ["/api/admin/tenants"],
@@ -99,6 +113,11 @@ export default function TenantsPage() {
 
   const { data: miSessions } = useQuery<MagicImportSession[]>({
     queryKey: ["/api/admin/magic-import/sessions"],
+  });
+
+  const { data: tenantPackages, isLoading: packagesLoading } = useQuery<ScrapePackage[]>({
+    queryKey: ["/api/admin/scrape-packages/tenant", packageHistoryTenant?.id],
+    enabled: !!packageHistoryTenant?.id,
   });
 
   const updateStatusMutation = useMutation({
@@ -270,6 +289,7 @@ export default function TenantsPage() {
                   <TableHead>Статус</TableHead>
                   <TableHead className="text-center">SC</TableHead>
                   <TableHead className="text-center">AI-РОП</TableHead>
+                  <TableHead className="text-center">Лимит</TableHead>
                   <TableHead>Подписка до</TableHead>
                   <TableHead>Дней осталось</TableHead>
                   <TableHead className="w-16"></TableHead>
@@ -277,7 +297,7 @@ export default function TenantsPage() {
               </TableHeader>
               <TableBody>
                 {isLoading ? (
-                  [...Array(5)].map((_, i) => <TableRowSkeleton key={i} cols={9} />)
+                  [...Array(5)].map((_, i) => <TableRowSkeleton key={i} cols={10} />)
                 ) : filteredTenants && filteredTenants.length > 0 ? (
                   filteredTenants.map((tenant, index) => (
                     <motion.tr
@@ -340,6 +360,21 @@ export default function TenantsPage() {
                           />
                         </div>
                       </TableCell>
+                      <TableCell className="text-center">
+                        {tenant.importSource ? (
+                          <button
+                            type="button"
+                            onClick={() => setPackageHistoryTenant(tenant)}
+                            className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                            data-testid={`limit-cell-${tenant.id}`}
+                          >
+                            <Package className="h-3 w-3" />
+                            {(tenant.catalogProductLimit ?? 200).toLocaleString("ru-KZ")}
+                          </button>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
                       <TableCell className="text-muted-foreground">
                         {tenant.subscription?.endsAt
                           ? formatDate(tenant.subscription.endsAt)
@@ -376,6 +411,12 @@ export default function TenantsPage() {
                               <Calendar className="h-4 w-4 mr-2" />
                               Продлить подписку
                             </DropdownMenuItem>
+                            {tenant.importSource && (
+                              <DropdownMenuItem onClick={() => setPackageHistoryTenant(tenant)} data-testid={`menu-packages-${tenant.id}`}>
+                                <History className="h-4 w-4 mr-2" />
+                                Лимит / История пакетов
+                              </DropdownMenuItem>
+                            )}
                             {(() => {
                               const miSession = miSessionsByTenant.get(tenant.id);
                               if (miSession && (miSession.status === "paid_clicked" || tenant.status === "demo" || tenant.status === "suspended")) {
@@ -484,6 +525,51 @@ export default function TenantsPage() {
                   Продлить
                 </Button>
               </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={!!packageHistoryTenant} onOpenChange={(open) => { if (!open) setPackageHistoryTenant(null); }}>
+          <DialogContent className="sm:max-w-lg">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Package className="h-5 w-5 text-primary" />
+                Лимит товаров — {packageHistoryTenant?.name}
+              </DialogTitle>
+              <DialogDescription>
+                Текущий лимит: <strong>{(packageHistoryTenant?.catalogProductLimit ?? 200).toLocaleString("ru-KZ")}</strong> товаров · Источник: {packageHistoryTenant?.importSource || "—"}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3 mt-2">
+              <p className="text-sm font-medium text-muted-foreground">История покупок пакетов</p>
+              {packagesLoading ? (
+                <div className="space-y-2">
+                  {[...Array(2)].map((_, i) => (
+                    <div key={i} className="h-12 bg-muted rounded-lg animate-pulse" />
+                  ))}
+                </div>
+              ) : tenantPackages && tenantPackages.length > 0 ? (
+                <div className="space-y-2">
+                  {tenantPackages.map((pkg) => (
+                    <div key={pkg.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+                      <div>
+                        <p className="text-sm font-medium">+{pkg.productsAdded.toLocaleString("ru-KZ")} товаров</p>
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(pkg.requestedAt).toLocaleDateString("ru-RU")} · {pkg.priceKzt.toLocaleString("ru-KZ")} ₸
+                        </p>
+                      </div>
+                      <Badge variant={pkg.status === "paid" ? "default" : "secondary"}>
+                        {pkg.status === "paid" ? "Оплачен" : "Ожидание"}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-6">
+                  <Package className="h-8 w-8 text-muted-foreground/50 mx-auto mb-2" />
+                  <p className="text-sm text-muted-foreground">Пакеты не покупались</p>
+                </div>
+              )}
             </div>
           </DialogContent>
         </Dialog>
