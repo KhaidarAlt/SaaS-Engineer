@@ -6,7 +6,6 @@ import { extractProductsFromPosts, type ExtractedProduct } from "./services/prod
 import { ObjectStorageService } from "./replit_integrations/object_storage";
 
 const sseClients = new Map<string, Response>();
-const extractedProductsCache = new Map<string, ExtractedProduct[]>();
 
 const IMAGE_FETCH_TIMEOUT = 15_000;
 const IMAGE_MAX_SIZE = 10 * 1024 * 1024;
@@ -282,12 +281,20 @@ export function registerMagicImportRoutes(
       });
 
       const tenant = await storage.getTenant(session.tenantId);
-      if (tenant && session.email) {
+      if (tenant) {
         const platformDomain = process.env.PLATFORM_DOMAIN || "botfactory.kz";
         const catalogUrl = `https://${tenant.slug}.${platformDomain}`;
         sendTelegramNotification(
           `✅ Магазин активирован!\n\nМагазин: ${tenant.name}\nEmail: ${session.email}\nКаталог: ${catalogUrl}\nПлан: ${startPlan.name}\nПериод: 30 дней`
         );
+
+        if (tenant.contactPhone) {
+          sendWhatsAppActivation(
+            session.tenantId,
+            tenant.contactPhone,
+            `🎉 Ваш магазин "${tenant.name}" активирован!\n\nВаш каталог: ${catalogUrl}\nПлан: ${startPlan.name}\nПериод: 30 дней\n\nСпасибо за оплату!`
+          );
+        }
       }
 
       runFullScrape(session.id, session.telegramChannel, session.tenantId).catch((err) => {
@@ -381,7 +388,9 @@ async function runImportPipeline(sessionId: string, telegramChannel: string) {
       throw new Error("Не удалось извлечь товары из постов канала");
     }
 
-    extractedProductsCache.set(sessionId, products);
+    await storage.updateMagicImportSession(sessionId, {
+      extractedProductsData: products,
+    });
 
     await storage.updateMagicImportSession(sessionId, {
       extractedProducts: products.length,
@@ -469,7 +478,8 @@ async function runFullScrape(sessionId: string, telegramChannel: string, tenantI
 }
 
 async function createProductsForTenant(sessionId: string, tenantId: string) {
-  const products = extractedProductsCache.get(sessionId);
+  const session = await storage.getMagicImportSession(sessionId);
+  const products = session?.extractedProductsData;
   if (!products || products.length === 0) return;
 
   const objectStorageService = new ObjectStorageService();
@@ -505,8 +515,6 @@ async function createProductsForTenant(sessionId: string, tenantId: string) {
       console.error(`Failed to create product ${product.name}:`, err);
     }
   }
-
-  extractedProductsCache.delete(sessionId);
 }
 
 async function downloadAndUploadImage(
@@ -554,6 +562,24 @@ async function deleteObjectStorageFile(url: string): Promise<void> {
     }
   } catch (err) {
     console.error(`Failed to delete object storage file ${url}:`, err);
+  }
+}
+
+async function sendWhatsAppActivation(tenantId: string, phone: string, text: string) {
+  try {
+    const { wahaService } = await import("./services/waha");
+    const wahaInstances = await storage.getWahaInstances(tenantId);
+    const activeInstance = wahaInstances.find(i => i.status === "active");
+
+    if (activeInstance) {
+      const chatId = phone.replace(/\D/g, "") + "@c.us";
+      await wahaService.sendTextMessage(activeInstance.instanceName, chatId, text);
+      console.log(`[MagicImport] WhatsApp activation sent to ${phone}`);
+    } else {
+      console.log(`[MagicImport] No active WAHA instance for tenant ${tenantId}, skipping WhatsApp`);
+    }
+  } catch (err) {
+    console.error("[MagicImport] Failed to send WhatsApp activation:", err);
   }
 }
 

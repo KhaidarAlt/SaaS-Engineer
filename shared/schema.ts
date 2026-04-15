@@ -3147,6 +3147,7 @@ export const magicImportSessions = pgTable("magic_import_sessions", {
   userId: varchar("user_id").references(() => users.id),
   scrapedPosts: integer("scraped_posts").default(0),
   extractedProducts: integer("extracted_products").default(0),
+  extractedProductsData: jsonb("extracted_products_data").$type<Array<{ name: string; description: string; price: number; category: string; sku: string; imageUrl?: string }>>(),
   progressPct: integer("progress_pct").default(0),
   progressMessage: text("progress_message"),
   errorMessage: text("error_message"),

@@ -404,15 +404,15 @@ export interface IStorage {
   getExpiredTrialSessions(): Promise<MagicImportSession[]>;
   getMediaDeletionSessions(): Promise<MagicImportSession[]>;
   getMagicImportStats(): Promise<{
-    total: number;
+    total_sessions: number;
     scraping: number;
-    done: number;
-    paidClicked: number;
+    completed: number;
+    paid_clicked: number;
     active: number;
     expired: number;
     deleted: number;
     errors: number;
-    totalProducts: number;
+    total_products: number;
   }>;
 }
 
@@ -2805,27 +2805,27 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getMagicImportStats(): Promise<{
-    total: number;
+    total_sessions: number;
     scraping: number;
-    done: number;
-    paidClicked: number;
+    completed: number;
+    paid_clicked: number;
     active: number;
     expired: number;
     deleted: number;
     errors: number;
-    totalProducts: number;
+    total_products: number;
   }> {
     const sessions = await db.select().from(magicImportSessions);
     return {
-      total: sessions.length,
+      total_sessions: sessions.length,
       scraping: sessions.filter(s => s.status === "scraping").length,
-      done: sessions.filter(s => s.status === "done").length,
-      paidClicked: sessions.filter(s => s.paidClickedAt !== null).length,
+      completed: sessions.filter(s => s.status === "done").length,
+      paid_clicked: sessions.filter(s => s.paidClickedAt !== null).length,
       active: sessions.filter(s => s.status === "active").length,
       expired: sessions.filter(s => s.status === "expired").length,
       deleted: sessions.filter(s => s.status === "deleted").length,
       errors: sessions.filter(s => s.status === "error").length,
-      totalProducts: sessions.reduce((sum, s) => sum + (s.extractedProducts || 0), 0),
+      total_products: sessions.reduce((sum, s) => sum + (s.extractedProducts || 0), 0),
     };
   }
 }
