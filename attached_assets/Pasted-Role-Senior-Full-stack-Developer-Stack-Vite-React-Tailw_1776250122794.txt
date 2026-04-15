@@ -1,0 +1,71 @@
+Role: Senior Full-stack Developer.
+Stack: Vite, React, Tailwind CSS (Frontend) | Node.js, Express (Backend) | PostgreSQL, Drizzle ORM (Database).
+Main Goal: Build a "Magic Link" landing page that converts Telegram channels into instant stores, with a Manual Admin CRM.
+
+1. LANDING PAGE DESIGN & FLOW (The "Magic Import" Page)
+Hero Section: High-converting layout.
+
+Headline: "Превратите ваш Telegram-канал в интернет-магазин за 60 секунд".
+
+Sub-headline: "ИИ сам создаст витрину: распознает товары на фото и извлечет цены. Без ручного ввода."
+
+Input: URL-field for Telegram Channel + "Создать мой магазин бесплатно" button.
+
+Onboarding Process (Split-Screen): After clicking "Create", show a split-screen:
+
+Left (Form): "Пока ИИ работает, заполните данные магазина": Fields for Shop Name, WhatsApp (for orders), City.
+
+Right (AI Live Logs): A scrolling list of real-time status updates: "Connecting to channel...", "Found post with image...", "Gemini AI: Extracted Bosch Oven - 120,000 KZT".
+
+Result: Redirect to a "Demo Store" (React Web App) showing the first 20 processed products.
+
+2. DATABASE SCHEMA (Drizzle ORM)
+Shops: id, owner_id (nullable for demo), name, whatsapp, city, tg_channel_url, status (demo, pending, active).
+
+Features: shop_id, smart_catalog_enabled (default: false), ai_rop_enabled (default: false).
+
+Products: id, shop_id, name, price, description, category, image_url, msg_id.
+
+Users: id, phone, tg_id, role (user/admin).
+
+3. AI & SCRAPER LOGIC
+Scraper: Use gramjs (session-based) to fetch the last 20 posts.
+
+Vision AI: Use @google/generative-ai (Gemini 1.5 Flash).
+
+Logic: Send photo + text to Gemini.
+
+Prompt: "Analyze this post. Identify the product. Extract Name, Price (OCR from image if needed), and Category. Return strict JSON."
+
+Full Sync: Implement an async background job that scrapes the entire channel history only after the Admin confirms payment.
+
+4. ADMIN PANEL (Owner CRM)
+Dashboard: List all shops with status filters.
+
+Shop Management:
+
+Confirm Payment button: Changes status to active + Triggers Full History Scrape.
+
+SmartCatalog Toggle: Unlocks the Web Store for the client.
+
+AI ROP Toggle: Unlocks the "AI Consultant" module (Upsell for 15,000 KZT/mo).
+
+Notifications: Send a Telegram message to the Admin (Me) when a user clicks "I have paid" in the demo store.
+
+5. CLIENT DASHBOARD
+Product Manager: Edit/Delete products extracted by AI.
+
+AI ROP Section: (Locked unless toggled by Admin). Setup for the AI Consultant bot.
+
+Settings: Add custom Bot Token for branded bots.
+
+6. TECHNICAL INSTRUCTIONS FOR AGENT
+Mobile-First: Use Tailwind for a responsive UI (most users are on mobile).
+
+Storage: Store images in /public/uploads.
+
+Auth: Simple Phone/Telegram login for the "Claim Store" action.
+
+Security: Create an /admin route protected by a simple password or admin role check.
+
+Environment: Use .env for GEMINI_API_KEY, TG_API_ID, TG_API_HASH.
