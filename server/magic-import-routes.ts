@@ -135,7 +135,7 @@ export function registerMagicImportRoutes(
         contactPhone: phone,
         address: address ? `${city ? city + ', ' : ''}${address}` : city,
         workingHours,
-        status: "active",
+        status: "demo",
       });
 
       const user = await storage.createUser({
@@ -276,6 +276,15 @@ export function registerMagicImportRoutes(
         fullScrapeTriggeredAt: new Date(),
       });
 
+      const tenant = await storage.getTenant(session.tenantId);
+      if (tenant && session.email) {
+        const platformDomain = process.env.PLATFORM_DOMAIN || "botfactory.kz";
+        const catalogUrl = `https://${tenant.slug}.${platformDomain}`;
+        sendTelegramNotification(
+          `✅ Магазин активирован!\n\nМагазин: ${tenant.name}\nEmail: ${session.email}\nКаталог: ${catalogUrl}\nПлан: ${startPlan.name}\nПериод: 30 дней`
+        );
+      }
+
       runFullScrape(session.id, session.telegramChannel, session.tenantId).catch((err) => {
         console.error("Full scrape error:", err);
       });
@@ -402,7 +411,7 @@ async function runImportPipeline(sessionId: string, telegramChannel: string) {
 
 async function runFullScrape(sessionId: string, telegramChannel: string, tenantId: string) {
   try {
-    const scrapeResult = await scrapeTelegramChannel(telegramChannel, { maxPages: 10 });
+    const scrapeResult = await scrapeTelegramChannel(telegramChannel, { maxPages: 50 });
 
     const existingProducts = await storage.getProducts(tenantId);
     const existingNames = new Set(existingProducts.map(p => p.name.toLowerCase()));
@@ -580,13 +589,10 @@ export function startMagicImportTrialWorker() {
             const images = await storage.getProductImages(product.id, session.tenantId);
             for (const image of images) {
               await deleteObjectStorageFile(image.url);
-              await storage.deleteProductImage(image.id, session.tenantId);
             }
-            await storage.deleteProduct(product.id, session.tenantId);
           }
         }
         await storage.updateMagicImportSession(session.id, {
-          status: "deleted",
           mediaDeletedAt: new Date(),
         });
         console.log(`Magic import media deleted: session=${session.id}`);

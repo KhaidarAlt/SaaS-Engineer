@@ -1,4 +1,4 @@
-import { eq, and, desc, sql, gte, lte, ne, inArray } from "drizzle-orm";
+import { eq, and, desc, sql, gte, lte, ne, inArray, isNull } from "drizzle-orm";
 import { db } from "./db";
 import {
   users, tenants, subscriptions, plans, products, categories,
@@ -2794,11 +2794,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getMediaDeletionSessions(): Promise<MagicImportSession[]> {
-    const fiveDaysAgo = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000);
+    const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
     return db.select().from(magicImportSessions).where(
       and(
         eq(magicImportSessions.status, "expired"),
-        lte(magicImportSessions.trialExpiresAt, fiveDaysAgo),
+        lte(magicImportSessions.trialExpiresAt, twoDaysAgo),
+        isNull(magicImportSessions.mediaDeletedAt),
       ),
     );
   }
