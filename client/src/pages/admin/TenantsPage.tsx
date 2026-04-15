@@ -168,7 +168,7 @@ export default function TenantsPage() {
       tenant.name.toLowerCase().includes(search.toLowerCase()) ||
       tenant.slug.toLowerCase().includes(search.toLowerCase());
     const matchesStatus = statusFilter === "all" || tenant.status === statusFilter;
-    const matchesMI = !magicImportOnly || !!(tenant as any).importSource?.startsWith("telegram:");
+    const matchesMI = !magicImportOnly || !!tenant.importSource?.startsWith("telegram:");
     return matchesSearch && matchesStatus && matchesMI;
   });
 

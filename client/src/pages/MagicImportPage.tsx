@@ -33,7 +33,9 @@ interface SSEMessage {
   type: string;
   pct?: number;
   message?: string;
-  product?: { name: string; price: string; imageUrl?: string };
+  productsCount?: number;
+  products?: Array<{ name: string; price: string | number; category?: string; imageUrl?: string }>;
+  channelTitle?: string;
   error?: string;
 }
 
@@ -118,18 +120,14 @@ export default function MagicImportPage() {
         const data: SSEMessage = JSON.parse(event.data);
         setSseMessages((prev) => [...prev, data]);
 
-        if (data.type === "product_extracted" && data.product) {
-          setExtractedProducts((prev) => [
-            ...prev,
-            {
-              name: data.product!.name,
-              price: parseFloat(data.product!.price) || 0,
-              imageUrl: data.product!.imageUrl,
-            },
-          ]);
-        }
-
-        if (data.type === "done") {
+        if (data.type === "complete" && data.products) {
+          setExtractedProducts(
+            data.products.map((p: { name: string; price: string | number; imageUrl?: string }) => ({
+              name: p.name,
+              price: typeof p.price === "number" ? p.price : parseFloat(p.price) || 0,
+              imageUrl: p.imageUrl,
+            }))
+          );
           setScrapingDone(true);
           es.close();
         }
@@ -782,12 +780,10 @@ function getMessageStyle(msg: SSEMessage): string {
       return "text-muted-foreground bg-muted/50";
     case "progress":
       return "text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-500/10";
-    case "product_extracted":
-      return "text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-500/10";
+    case "complete":
+      return "text-green-700 dark:text-green-300 bg-green-100 dark:bg-green-500/20 font-semibold";
     case "error":
       return "text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/10";
-    case "done":
-      return "text-green-700 dark:text-green-300 bg-green-100 dark:bg-green-500/20 font-semibold";
     default:
       return "text-muted-foreground";
   }
@@ -799,12 +795,10 @@ function getMessageIcon(msg: SSEMessage): string {
       return "🔗";
     case "progress":
       return "📡";
-    case "product_extracted":
-      return "✅";
+    case "complete":
+      return "🎉";
     case "error":
       return "❌";
-    case "done":
-      return "🎉";
     default:
       return "•";
   }
