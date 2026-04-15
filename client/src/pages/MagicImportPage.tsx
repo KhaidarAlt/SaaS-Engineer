@@ -34,6 +34,7 @@ interface SSEMessage {
   pct?: number;
   message?: string;
   productsCount?: number;
+  totalPostsFound?: number;
   products?: Array<{ name: string; price: string | number; category?: string; imageUrl?: string }>;
   channelTitle?: string;
   error?: string;
@@ -72,6 +73,7 @@ export default function MagicImportPage() {
     tenantId: string;
     trialExpiresAt: string;
   } | null>(null);
+  const [totalPostsFound, setTotalPostsFound] = useState<number>(0);
   const [paidClicked, setPaidClicked] = useState(false);
   const [isPaying, setIsPaying] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -128,6 +130,9 @@ export default function MagicImportPage() {
               imageUrl: p.imageUrl,
             }))
           );
+          if (data.totalPostsFound) {
+            setTotalPostsFound(data.totalPostsFound);
+          }
           setScrapingDone(true);
           es.close();
         }
@@ -252,6 +257,7 @@ export default function MagicImportPage() {
   if (step === "success" && resultData) {
     return <SuccessScreen
       resultData={resultData}
+      totalPostsFound={totalPostsFound}
       paidClicked={paidClicked}
       isPaying={isPaying}
       copied={copied}
@@ -651,6 +657,7 @@ function PreviewCard({ product }: { product: ExtractedProduct }) {
 
 function SuccessScreen({
   resultData,
+  totalPostsFound,
   paidClicked,
   isPaying,
   copied,
@@ -660,6 +667,7 @@ function SuccessScreen({
   sessionId,
 }: {
   resultData: { catalogUrl: string; slug: string; tenantId: string; trialExpiresAt: string };
+  totalPostsFound: number;
   paidClicked: boolean;
   isPaying: boolean;
   copied: boolean;
@@ -670,6 +678,7 @@ function SuccessScreen({
 }) {
   const trialDate = new Date(resultData.trialExpiresAt);
   const daysLeft = Math.max(0, Math.ceil((trialDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
+  const hasLargeChannel = totalPostsFound >= 30;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-green-500/5 flex items-center justify-center px-4">
@@ -689,9 +698,20 @@ function SuccessScreen({
             <Check className="h-8 w-8 text-green-500" />
           </motion.div>
           <h1 className="text-2xl font-bold" data-testid="heading-success">Магазин создан!</h1>
-          <p className="text-muted-foreground">
-            Ваш каталог готов. Пробный период: {daysLeft} дня.
-          </p>
+          {hasLargeChannel ? (
+            <div className="space-y-1">
+              <p className="text-muted-foreground">
+                Сканер нашёл <span className="font-semibold text-foreground">{totalPostsFound}+ позиций</span> в вашем канале.
+              </p>
+              <p className="text-muted-foreground text-sm">
+                Магазин запущен с 20 лучшими — остальные добавятся автоматически после активации.
+              </p>
+            </div>
+          ) : (
+            <p className="text-muted-foreground">
+              Ваш каталог готов. Пробный период: {daysLeft} {daysLeft === 1 ? "день" : "дня"}.
+            </p>
+          )}
         </div>
 
         <Card>

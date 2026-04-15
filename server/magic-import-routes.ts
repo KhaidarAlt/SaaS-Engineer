@@ -349,30 +349,37 @@ function slugifyRu(text: string): string {
 
 async function runImportPipeline(sessionId: string, telegramChannel: string) {
   try {
-    sendSSE(sessionId, { type: "progress", pct: 5, message: "Загрузка постов из канала..." });
+    sendSSE(sessionId, { type: "progress", pct: 5, message: "Сканируем канал..." });
     await storage.updateMagicImportSession(sessionId, {
       progressPct: 5,
-      progressMessage: "Загрузка постов из канала...",
+      progressMessage: "Сканируем канал...",
     });
 
-    const scrapeResult = await scrapeTelegramChannel(telegramChannel);
+    const scrapeResult = await scrapeTelegramChannel(telegramChannel, { maxPages: 5 });
 
     if (scrapeResult.posts.length === 0) {
       throw new Error("Канал не содержит постов с товарами");
     }
 
     const postsWithImages = scrapeResult.posts.filter(p => p.imageUrls.length > 0);
-    scrapeResult.posts = postsWithImages.length > 0 ? postsWithImages.slice(0, 20) : scrapeResult.posts.slice(0, 20);
+    const totalPostsFound = postsWithImages.length > 0 ? postsWithImages.length : scrapeResult.posts.length;
+
+    scrapeResult.posts = postsWithImages.length > 0 ? postsWithImages : scrapeResult.posts;
+
+    const progressMsg = totalPostsFound >= 30
+      ? `Найдено ${totalPostsFound}+ позиций — отбираем 20 лучших для вашего магазина...`
+      : `Найдено ${totalPostsFound} постов. Анализируем товары...`;
 
     sendSSE(sessionId, {
       type: "progress",
       pct: 10,
-      message: `Найдено ${scrapeResult.posts.length} постов. Извлекаем товары...`,
+      message: progressMsg,
+      totalPostsFound,
     });
     await storage.updateMagicImportSession(sessionId, {
-      scrapedPosts: scrapeResult.posts.length,
+      scrapedPosts: totalPostsFound,
       progressPct: 10,
-      progressMessage: `Найдено ${scrapeResult.posts.length} постов`,
+      progressMessage: progressMsg,
     });
 
     const products = await extractProductsFromPosts(scrapeResult, (progress) => {
@@ -381,6 +388,7 @@ async function runImportPipeline(sessionId: string, telegramChannel: string) {
         pct: progress.pct,
         message: progress.message,
         productsCount: progress.products.length,
+        totalPostsFound,
       });
     });
 
@@ -392,18 +400,23 @@ async function runImportPipeline(sessionId: string, telegramChannel: string) {
       extractedProductsData: products,
     });
 
+    const completeMsg = totalPostsFound >= 30
+      ? `Готово! В канале ${totalPostsFound}+ позиций — каталог создан из ${products.length} лучших`
+      : `Готово! Создан каталог из ${products.length} товаров`;
+
     await storage.updateMagicImportSession(sessionId, {
       extractedProducts: products.length,
       progressPct: 100,
-      progressMessage: `Готово! Извлечено ${products.length} товаров`,
+      progressMessage: completeMsg,
       status: "done",
     });
 
     sendSSE(sessionId, {
       type: "complete",
       pct: 100,
-      message: `Готово! Извлечено ${products.length} товаров`,
+      message: completeMsg,
       productsCount: products.length,
+      totalPostsFound,
       products: products.map((p) => ({
         name: p.name,
         price: p.price,

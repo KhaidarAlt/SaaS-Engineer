@@ -54,7 +54,7 @@ export async function extractProductsFromPosts(
 
     onProgress?.({
       pct,
-      message: `Анализ постов (${batchIdx + 1}/${batches.length})...`,
+      message: `Анализируем позиции ${batchIdx + 1}/${batches.length} — отобрано ${allProducts.length} товаров...`,
       products: allProducts,
     });
 
