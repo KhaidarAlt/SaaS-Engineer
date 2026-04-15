@@ -2850,11 +2850,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async confirmScrapePackage(id: string, confirmedBy: string): Promise<ScrapePackage | undefined> {
+    // Atomic: only transition from pending → paid; concurrent/duplicate calls are no-ops
     const [pkg] = await db.update(scrapePackages).set({
       status: "paid",
       confirmedAt: new Date(),
       confirmedBy,
-    }).where(eq(scrapePackages.id, id)).returning();
+    }).where(and(eq(scrapePackages.id, id), eq(scrapePackages.status, "pending"))).returning();
     return pkg;
   }
 

@@ -330,10 +330,12 @@ export function registerMagicImportRoutes(
         });
       }
 
+      const existingTenant = await storage.getTenant(session.tenantId);
       await storage.updateTenant(session.tenantId, {
         aiRopEnabled: true,
         status: "active",
-        catalogProductLimit: 200,
+        // Only set to 200 if no higher limit exists (don't downgrade tenants who already bought packages)
+        catalogProductLimit: Math.max(existingTenant?.catalogProductLimit ?? 0, 200),
       });
 
       await storage.updateMagicImportSession(session.id, {
@@ -425,9 +427,12 @@ export function registerMagicImportRoutes(
     try {
       const pkg = await storage.getScrapePackage(req.params.packageId);
       if (!pkg) return res.status(404).json({ message: "Пакет не найден" });
-      if (pkg.status === "paid") return res.status(400).json({ message: "Пакет уже подтверждён" });
 
+      // Atomic conditional update: returns undefined if already paid (race-safe)
       const confirmed = await storage.confirmScrapePackage(pkg.id, req.user!.id);
+      if (!confirmed) {
+        return res.status(400).json({ message: "Пакет уже подтверждён" });
+      }
 
       const tenant = await storage.getTenant(pkg.tenantId);
       if (tenant) {
