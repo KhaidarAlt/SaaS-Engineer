@@ -13,6 +13,7 @@ export interface ScrapeResult {
 
 interface ScrapeOptions {
   maxPages?: number;
+  cutoffDate?: Date;
 }
 
 export async function scrapeTelegramChannel(
@@ -26,12 +27,14 @@ export async function scrapeTelegramChannel(
   }
 
   const maxPages = options?.maxPages ?? 1;
+  const cutoffDate = options?.cutoffDate;
   const allPosts: ScrapedPost[] = [];
   let channelTitle = cleanUsername;
   let beforeId: number | undefined;
   let pagesLoaded = 0;
+  let reachedCutoff = false;
 
-  while (pagesLoaded < maxPages) {
+  while (pagesLoaded < maxPages && !reachedCutoff) {
     let url = `https://t.me/s/${cleanUsername}`;
     if (beforeId) {
       url += `?before=${beforeId}`;
@@ -68,7 +71,24 @@ export async function scrapeTelegramChannel(
     const pagePosts = extractPosts(html);
     if (pagePosts.length === 0) break;
 
-    allPosts.push(...pagePosts);
+    if (cutoffDate) {
+      const postsInRange: ScrapedPost[] = [];
+      for (const post of pagePosts) {
+        if (post.date) {
+          const postDate = new Date(post.date);
+          if (postDate < cutoffDate) {
+            reachedCutoff = true;
+            break;
+          }
+        }
+        postsInRange.push(post);
+      }
+      allPosts.push(...postsInRange);
+    } else {
+      allPosts.push(...pagePosts);
+    }
+
+    if (reachedCutoff) break;
 
     const minPostId = Math.min(
       ...pagePosts.filter(p => p.postId !== undefined).map(p => p.postId!)

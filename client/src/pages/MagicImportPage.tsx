@@ -70,6 +70,7 @@ export default function MagicImportPage() {
   const [city, setCity] = useState("");
   const [address, setAddress] = useState("");
   const [workingHours, setWorkingHours] = useState("");
+  const [scrapeDepthMonths, setScrapeDepthMonths] = useState(3);
 
   const [resultData, setResultData] = useState<{
     catalogUrl: string;
@@ -256,6 +257,7 @@ export default function MagicImportPage() {
         city: city || undefined,
         address: address || undefined,
         workingHours: workingHours || undefined,
+        scrapeDepthMonths,
       });
       const data = await res.json();
       setResultData(data);
@@ -346,6 +348,9 @@ export default function MagicImportPage() {
       setAddress={setAddress}
       workingHours={workingHours}
       setWorkingHours={setWorkingHours}
+      scrapeDepthMonths={scrapeDepthMonths}
+      setScrapeDepthMonths={setScrapeDepthMonths}
+      isTelegramSource={sourceType === "telegram"}
       isSubmitting={isSubmitting}
       onComplete={handleComplete}
     />
@@ -620,6 +625,9 @@ function OnboardingScreen({
   setAddress,
   workingHours,
   setWorkingHours,
+  scrapeDepthMonths,
+  setScrapeDepthMonths,
+  isTelegramSource,
   isSubmitting,
   onComplete,
 }: {
@@ -645,6 +653,9 @@ function OnboardingScreen({
   setAddress: (v: string) => void;
   workingHours: string;
   setWorkingHours: (v: string) => void;
+  scrapeDepthMonths: number;
+  setScrapeDepthMonths: (v: number) => void;
+  isTelegramSource: boolean;
   isSubmitting: boolean;
   onComplete: () => void;
 }) {
@@ -722,6 +733,31 @@ function OnboardingScreen({
                 <Label htmlFor="address">Адрес</Label>
                 <Input id="address" value={address} onChange={(e) => setAddress(e.target.value)} placeholder="ул. Абая 1" data-testid="input-address" />
               </div>
+
+              {isTelegramSource && (
+                <div className="space-y-2 pt-1">
+                  <Label>Глубина сканирования (до оплаты — 1 мес.)</Label>
+                  <p className="text-xs text-muted-foreground">После оплаты ИИ просканирует канал за выбранный период и добавит до 200 товаров</p>
+                  <div className="flex gap-2 flex-wrap" data-testid="scrape-depth-selector">
+                    {[1, 2, 3, 4, 5, 6].map((m) => (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => setScrapeDepthMonths(m)}
+                        data-testid={`depth-btn-${m}`}
+                        className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${
+                          scrapeDepthMonths === m
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "bg-background text-foreground border-border hover:border-primary"
+                        }`}
+                      >
+                        {m} мес.
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground">Выбрано: {scrapeDepthMonths} {scrapeDepthMonths === 1 ? "месяц" : scrapeDepthMonths < 5 ? "месяца" : "месяцев"}</p>
+                </div>
+              )}
             </div>
 
             {scrapingDone && extractedProducts.length > 0 && (

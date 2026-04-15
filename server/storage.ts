@@ -67,6 +67,8 @@ import {
   type CrmLead, type InsertCrmLead,
   magicImportSessions,
   type MagicImportSession, type InsertMagicImportSession,
+  scrapePackages,
+  type ScrapePackage, type InsertScrapePackage,
 } from "@shared/schema";
 import bcrypt from "bcryptjs";
 
@@ -415,6 +417,13 @@ export interface IStorage {
     errors: number;
     total_products: number;
   }>;
+
+  // Scrape Packages
+  createScrapePackage(data: InsertScrapePackage): Promise<ScrapePackage>;
+  getScrapePackage(id: string): Promise<ScrapePackage | undefined>;
+  getScrapePackagesByTenant(tenantId: string): Promise<ScrapePackage[]>;
+  getPendingScrapePackages(): Promise<ScrapePackage[]>;
+  confirmScrapePackage(id: string, confirmedBy: string): Promise<ScrapePackage | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2816,6 +2825,37 @@ export class DatabaseStorage implements IStorage {
 
     const [updated] = await db.update(tenants).set(updateData).where(eq(tenants.id, tenantId)).returning();
     return updated;
+  }
+
+  async createScrapePackage(data: InsertScrapePackage): Promise<ScrapePackage> {
+    const [pkg] = await db.insert(scrapePackages).values(data).returning();
+    return pkg;
+  }
+
+  async getScrapePackage(id: string): Promise<ScrapePackage | undefined> {
+    const [pkg] = await db.select().from(scrapePackages).where(eq(scrapePackages.id, id));
+    return pkg;
+  }
+
+  async getScrapePackagesByTenant(tenantId: string): Promise<ScrapePackage[]> {
+    return db.select().from(scrapePackages)
+      .where(eq(scrapePackages.tenantId, tenantId))
+      .orderBy(desc(scrapePackages.requestedAt));
+  }
+
+  async getPendingScrapePackages(): Promise<ScrapePackage[]> {
+    return db.select().from(scrapePackages)
+      .where(eq(scrapePackages.status, "pending"))
+      .orderBy(desc(scrapePackages.requestedAt));
+  }
+
+  async confirmScrapePackage(id: string, confirmedBy: string): Promise<ScrapePackage | undefined> {
+    const [pkg] = await db.update(scrapePackages).set({
+      status: "paid",
+      confirmedAt: new Date(),
+      confirmedBy,
+    }).where(eq(scrapePackages.id, id)).returning();
+    return pkg;
   }
 
   async getMagicImportStats(): Promise<{

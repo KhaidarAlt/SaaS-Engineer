@@ -88,6 +88,7 @@ export const tenants = pgTable("tenants", {
   smartCatalogEnabled: boolean("smart_catalog_enabled").notNull().default(false),
   importSource: text("import_source"),
   magicImportSessionId: varchar("magic_import_session_id"),
+  catalogProductLimit: integer("catalog_product_limit").notNull().default(200),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -3157,6 +3158,7 @@ export const magicImportSessions = pgTable("magic_import_sessions", {
   mediaDeletedAt: timestamp("media_deleted_at"),
   paidClickedAt: timestamp("paid_clicked_at"),
   activatedAt: timestamp("activated_at"),
+  scrapeDepthMonths: integer("scrape_depth_months").default(3),
   fullScrapeTriggeredAt: timestamp("full_scrape_triggered_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
@@ -3176,3 +3178,31 @@ export const magicImportSessionsRelations = relations(magicImportSessions, ({ on
 export const insertMagicImportSessionSchema = createInsertSchema(magicImportSessions).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertMagicImportSession = z.infer<typeof insertMagicImportSessionSchema>;
 export type MagicImportSession = typeof magicImportSessions.$inferSelect;
+
+// ============ SCRAPE PACKAGES ============
+export const scrapePackages = pgTable("scrape_packages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull().references(() => tenants.id),
+  packageType: text("package_type").notNull(), // '1000' | '5000'
+  priceKzt: integer("price_kzt").notNull(), // 6990 | 12990
+  productsAdded: integer("products_added").notNull(), // 1000 | 5000
+  status: text("status").notNull().default("pending"), // 'pending' | 'paid'
+  requestedAt: timestamp("requested_at").notNull().defaultNow(),
+  confirmedAt: timestamp("confirmed_at"),
+  confirmedBy: varchar("confirmed_by").references(() => users.id),
+});
+
+export const scrapePackagesRelations = relations(scrapePackages, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [scrapePackages.tenantId],
+    references: [tenants.id],
+  }),
+  confirmedByUser: one(users, {
+    fields: [scrapePackages.confirmedBy],
+    references: [users.id],
+  }),
+}));
+
+export const insertScrapePackageSchema = createInsertSchema(scrapePackages).omit({ id: true, requestedAt: true });
+export type InsertScrapePackage = z.infer<typeof insertScrapePackageSchema>;
+export type ScrapePackage = typeof scrapePackages.$inferSelect;

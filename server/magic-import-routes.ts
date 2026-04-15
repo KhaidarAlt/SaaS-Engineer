@@ -155,8 +155,9 @@ export function registerMagicImportRoutes(
         city: z.string().optional(),
         address: z.string().optional(),
         workingHours: z.string().optional(),
+        scrapeDepthMonths: z.number().int().min(1).max(6).optional().default(3),
       });
-      const { email, password, storeName, phone, notificationPhone, city, address, workingHours } = bodySchema.parse(req.body);
+      const { email, password, storeName, phone, notificationPhone, city, address, workingHours, scrapeDepthMonths } = bodySchema.parse(req.body);
       const sessionId = req.params.sessionId;
 
       const session = await storage.getMagicImportSession(sessionId);
@@ -224,6 +225,7 @@ export function registerMagicImportRoutes(
         email,
         storeName,
         trialExpiresAt,
+        scrapeDepthMonths,
       });
 
       await createProductsForTenant(sessionId, tenant.id);
@@ -331,6 +333,7 @@ export function registerMagicImportRoutes(
       await storage.updateTenant(session.tenantId, {
         aiRopEnabled: true,
         status: "active",
+        catalogProductLimit: 200,
       });
 
       await storage.updateMagicImportSession(session.id, {
@@ -361,6 +364,96 @@ export function registerMagicImportRoutes(
       });
 
       res.json({ success: true });
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : "Ошибка";
+      res.status(500).json({ message: msg });
+    }
+  });
+
+  // === Scrape Package routes ===
+
+  app.post("/api/scrape-packages/request", requireAuth, async (req: Request, res: Response) => {
+    try {
+      if (!req.user?.tenantId) return res.status(403).json({ message: "Доступ запрещён" });
+
+      const bodySchema = z.object({
+        packageType: z.enum(["1000", "5000"]),
+      });
+      const { packageType } = bodySchema.parse(req.body);
+
+      const priceKzt = packageType === "1000" ? 6990 : 12990;
+      const productsAdded = packageType === "1000" ? 1000 : 5000;
+
+      const existing = await storage.getScrapePackagesByTenant(req.user.tenantId);
+      const hasPending = existing.some(p => p.status === "pending");
+      if (hasPending) {
+        return res.status(400).json({ message: "У вас уже есть неподтверждённый запрос на пакет" });
+      }
+
+      const pkg = await storage.createScrapePackage({
+        tenantId: req.user.tenantId,
+        packageType,
+        priceKzt,
+        productsAdded,
+        status: "pending",
+      });
+
+      const tenant = await storage.getTenant(req.user.tenantId);
+      sendTelegramNotification(
+        `📦 Запрос пакета продуктов!\nМагазин: ${tenant?.name}\nПакет: +${productsAdded} товаров за ${priceKzt}₸\nID пакета: ${pkg.id}`
+      );
+
+      res.json({ success: true, package: pkg });
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : "Ошибка";
+      res.status(500).json({ message: msg });
+    }
+  });
+
+  app.get("/api/scrape-packages/my", requireAuth, async (req: Request, res: Response) => {
+    try {
+      if (!req.user?.tenantId) return res.status(403).json({ message: "Доступ запрещён" });
+      const packages = await storage.getScrapePackagesByTenant(req.user.tenantId);
+      res.json(packages);
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : "Ошибка";
+      res.status(500).json({ message: msg });
+    }
+  });
+
+  app.post("/api/admin/scrape-packages/:packageId/confirm", requireAuth, requireSuperAdmin, async (req: Request, res: Response) => {
+    try {
+      const pkg = await storage.getScrapePackage(req.params.packageId);
+      if (!pkg) return res.status(404).json({ message: "Пакет не найден" });
+      if (pkg.status === "paid") return res.status(400).json({ message: "Пакет уже подтверждён" });
+
+      const confirmed = await storage.confirmScrapePackage(pkg.id, req.user!.id);
+
+      const tenant = await storage.getTenant(pkg.tenantId);
+      if (tenant) {
+        const newLimit = (tenant.catalogProductLimit ?? 200) + pkg.productsAdded;
+        await storage.updateTenant(pkg.tenantId, { catalogProductLimit: newLimit });
+
+        sendTelegramNotification(
+          `✅ Пакет подтверждён!\nМагазин: ${tenant.name}\n+${pkg.productsAdded} товаров\nНовый лимит: ${newLimit}`
+        );
+      }
+
+      res.json({ success: true, package: confirmed });
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : "Ошибка";
+      res.status(500).json({ message: msg });
+    }
+  });
+
+  app.get("/api/admin/scrape-packages/pending", requireAuth, requireSuperAdmin, async (_req: Request, res: Response) => {
+    try {
+      const packages = await storage.getPendingScrapePackages();
+      const result = await Promise.all(packages.map(async (pkg) => {
+        const tenant = await storage.getTenant(pkg.tenantId);
+        return { ...pkg, tenantName: tenant?.name ?? "Неизвестный" };
+      }));
+      res.json(result);
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : "Ошибка";
       res.status(500).json({ message: msg });
@@ -414,7 +507,8 @@ async function runImportPipeline(sessionId: string, telegramChannel: string) {
       progressMessage: "Сканируем канал...",
     });
 
-    const scrapeResult = await scrapeTelegramChannel(telegramChannel, { maxPages: 5 });
+    const demoCutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const scrapeResult = await scrapeTelegramChannel(telegramChannel, { maxPages: 5, cutoffDate: demoCutoff });
 
     if (scrapeResult.posts.length === 0) {
       throw new Error("Канал не содержит постов с товарами");
@@ -571,12 +665,19 @@ async function runFullScrape(sessionId: string, telegramChannel: string | null |
     return;
   }
   try {
-    const scrapeResult = await scrapeTelegramChannel(telegramChannel, { maxPages: Infinity });
+    const session = await storage.getMagicImportSession(sessionId);
+    const tenant = await storage.getTenant(tenantId);
+    const depthMonths = session?.scrapeDepthMonths ?? 3;
+    const productLimit = tenant?.catalogProductLimit ?? 200;
+    const cutoffDate = new Date(Date.now() - depthMonths * 30 * 24 * 60 * 60 * 1000);
+
+    const scrapeResult = await scrapeTelegramChannel(telegramChannel, { maxPages: 50, cutoffDate });
 
     const existingProducts = await storage.getProducts(tenantId);
     const existingNames = new Set(existingProducts.map(p => p.name.toLowerCase()));
 
-    const products = await extractProductsFromPosts(scrapeResult, undefined, { maxProducts: Infinity });
+    const remainingSlots = Math.max(0, productLimit - existingProducts.length);
+    const products = await extractProductsFromPosts(scrapeResult, undefined, { maxProducts: remainingSlots });
     const newProducts = products.filter(p => !existingNames.has(p.name.toLowerCase()));
 
     if (newProducts.length > 0) {

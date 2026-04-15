@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import {
   Building2,
@@ -11,11 +11,15 @@ import {
   ArrowRight,
   CreditCard,
   Zap,
+  Package,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { CardSkeleton } from "@/components/LoadingSpinner";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 interface AdminStats {
   totalTenants: number;
@@ -32,6 +36,17 @@ interface MagicImportStats {
   completed: number;
   paid_clicked: number;
   active: number;
+}
+
+interface PendingScrapePackage {
+  id: string;
+  tenantId: string;
+  tenantName: string;
+  packageType: string;
+  priceKzt: number;
+  productsAdded: number;
+  status: string;
+  requestedAt: string;
 }
 
 interface RecentTenant {
@@ -92,6 +107,9 @@ function StatCard({
 }
 
 export default function AdminOverview() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
   const { data: stats, isLoading: statsLoading } = useQuery<AdminStats>({
     queryKey: ["/api/admin/stats"],
   });
@@ -102,6 +120,26 @@ export default function AdminOverview() {
 
   const { data: miStats } = useQuery<MagicImportStats>({
     queryKey: ["/api/admin/magic-import/stats"],
+  });
+
+  const { data: pendingPackages } = useQuery<PendingScrapePackage[]>({
+    queryKey: ["/api/admin/scrape-packages/pending"],
+    refetchInterval: 30_000,
+  });
+
+  const confirmPackageMutation = useMutation({
+    mutationFn: async (packageId: string) => {
+      const res = await apiRequest("POST", `/api/admin/scrape-packages/${packageId}/confirm`);
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Пакет подтверждён", description: "Лимит тенанта увеличен" });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/scrape-packages/pending"] });
+    },
+    onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : "Ошибка";
+      toast({ title: "Ошибка", description: msg, variant: "destructive" });
+    },
   });
 
   const formatCurrency = (value: number) => {
@@ -269,6 +307,50 @@ export default function AdminOverview() {
             </Card>
           </motion.div>
         </div>
+
+        {pendingPackages && pendingPackages.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.55 }}
+          >
+            <Card className="border-orange-400/50">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Package className="h-5 w-5 text-orange-500" />
+                  Запросы на пакеты товаров
+                  <Badge variant="secondary" className="ml-1">{pendingPackages.length}</Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {pendingPackages.map((pkg) => (
+                    <div key={pkg.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+                      <div>
+                        <p className="font-medium">{pkg.tenantName}</p>
+                        <p className="text-sm text-muted-foreground">
+                          +{pkg.productsAdded.toLocaleString("ru-KZ")} товаров · {pkg.priceKzt.toLocaleString("ru-KZ")} ₸
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(pkg.requestedAt).toLocaleString("ru-RU")}
+                        </p>
+                      </div>
+                      <Button
+                        size="sm"
+                        onClick={() => confirmPackageMutation.mutate(pkg.id)}
+                        disabled={confirmPackageMutation.isPending}
+                        data-testid={`confirm-package-${pkg.id}`}
+                      >
+                        <CheckCircle2 className="h-4 w-4 mr-1" />
+                        Подтвердить
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
 
         {miStats && (
           <motion.div
