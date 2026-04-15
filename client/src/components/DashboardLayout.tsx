@@ -450,7 +450,7 @@ export function DashboardLayout({ children, isSuperAdmin = false }: DashboardLay
                       Пробный период истёк. Свяжитесь с администратором для активации магазина.
                     </p>
                     <a
-                      href="https://wa.me/77001234567"
+                      href={`https://wa.me/${(user?.tenant?.contactPhone || "77786016143").replace(/\D/g, "")}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
