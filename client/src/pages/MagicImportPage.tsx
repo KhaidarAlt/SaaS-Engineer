@@ -179,6 +179,7 @@ export default function MagicImportPage() {
       setSessionId(data.sessionId);
       setSseMessages([]);
       setExtractedProducts([]);
+      setTotalPostsFound(0);
       setScrapingDone(false);
       setStep("onboarding");
       connectSSE(data.sessionId);

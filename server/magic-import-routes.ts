@@ -366,7 +366,7 @@ async function runImportPipeline(sessionId: string, telegramChannel: string) {
 
     scrapeResult.posts = postsWithImages.length > 0 ? postsWithImages : scrapeResult.posts;
 
-    const progressMsg = totalPostsFound > 20
+    const progressMsg = totalPostsFound >= 30
       ? `Найдено ${totalPostsFound}+ позиций — отбираем 20 лучших для вашего магазина...`
       : `Найдено ${totalPostsFound} постов. Анализируем товары...`;
 
