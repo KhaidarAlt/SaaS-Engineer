@@ -65,6 +65,8 @@ import {
   type BankProduct,
   crmLeads, messagingMessages,
   type CrmLead, type InsertCrmLead,
+  magicImportSessions,
+  type MagicImportSession, type InsertMagicImportSession,
 } from "@shared/schema";
 import bcrypt from "bcryptjs";
 
@@ -393,6 +395,14 @@ export interface IStorage {
   updateCrmLead(id: string, tenantId: string, data: Partial<Pick<CrmLead, 'status' | 'notes' | 'qualifiedAt'>>): Promise<CrmLead | undefined>;
   syncCrmLeadsFromMessages(tenantId: string): Promise<number>;
   autoClassifyCrmLeads(tenantId: string): Promise<number>;
+
+  // Magic Import Sessions
+  createMagicImportSession(data: InsertMagicImportSession): Promise<MagicImportSession>;
+  getMagicImportSession(id: string): Promise<MagicImportSession | undefined>;
+  updateMagicImportSession(id: string, data: Partial<InsertMagicImportSession>): Promise<MagicImportSession | undefined>;
+  getMagicImportSessions(): Promise<MagicImportSession[]>;
+  getExpiredTrialSessions(): Promise<MagicImportSession[]>;
+  getMediaDeletionSessions(): Promise<MagicImportSession[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2739,6 +2749,47 @@ export class DatabaseStorage implements IStorage {
       }
     }
     return classified;
+  }
+
+  async createMagicImportSession(data: InsertMagicImportSession): Promise<MagicImportSession> {
+    const [session] = await db.insert(magicImportSessions).values(data).returning();
+    return session;
+  }
+
+  async getMagicImportSession(id: string): Promise<MagicImportSession | undefined> {
+    const [session] = await db.select().from(magicImportSessions).where(eq(magicImportSessions.id, id));
+    return session;
+  }
+
+  async updateMagicImportSession(id: string, data: Partial<InsertMagicImportSession>): Promise<MagicImportSession | undefined> {
+    const [session] = await db.update(magicImportSessions).set({
+      ...data,
+      updatedAt: new Date(),
+    }).where(eq(magicImportSessions.id, id)).returning();
+    return session;
+  }
+
+  async getMagicImportSessions(): Promise<MagicImportSession[]> {
+    return db.select().from(magicImportSessions).orderBy(desc(magicImportSessions.createdAt));
+  }
+
+  async getExpiredTrialSessions(): Promise<MagicImportSession[]> {
+    return db.select().from(magicImportSessions).where(
+      and(
+        inArray(magicImportSessions.status, ["done", "paid_clicked"]),
+        lte(magicImportSessions.trialExpiresAt, new Date()),
+      ),
+    );
+  }
+
+  async getMediaDeletionSessions(): Promise<MagicImportSession[]> {
+    const fiveDaysAgo = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000);
+    return db.select().from(magicImportSessions).where(
+      and(
+        eq(magicImportSessions.status, "expired"),
+        lte(magicImportSessions.trialExpiresAt, fiveDaysAgo),
+      ),
+    );
   }
 }
 

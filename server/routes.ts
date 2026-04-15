@@ -30,6 +30,7 @@ import { registerAiAnalyticsRoutes } from "./ai-analytics-routes.js";
 import { registerAiRopConnectRoutes } from "./ai-rop-connect-routes.js";
 import { registerGrowthRoutes } from "./ai-rop-growth-routes.js";
 import { registerAiCoachRoutes } from "./ai-coach-routes.js";
+import { registerMagicImportRoutes, startMagicImportTrialWorker } from "./magic-import-routes.js";
 import { searchKnowledgeBySimilarity, hasEmbeddings, searchProductsBySimilarity, hasProductEmbeddings, backfillProductEmbeddings, embedProduct } from "./services/embeddings.js";
 import { seedScenarioTemplates } from "./growth/seedScenarioTemplates.js";
 import { startGrowthSyncWorker } from "./growth/syncWorker.js";
@@ -8380,6 +8381,8 @@ ${product.sku ? `- Артикул: ${product.sku}` : ''}
   registerAiRopConnectRoutes(app, storage, requireAuth, requireAiAccess);
   registerGrowthRoutes(app, storage, requireAuth, requireAiAccess);
   registerAiCoachRoutes(app, storage, requireAuth, requireAiAccess);
+  registerMagicImportRoutes(app, requireAuth, requireSuperAdmin);
+  startMagicImportTrialWorker();
 
   return httpServer;
 }

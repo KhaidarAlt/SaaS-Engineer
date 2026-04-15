@@ -84,6 +84,9 @@ export const tenants = pgTable("tenants", {
   showAiConsultant: boolean("show_ai_consultant").notNull().default(true),
   catalogTemplate: text("catalog_template").notNull().default("universal"), // universal, fashion, food
   commissionRates: jsonb("commission_rates").$type<Record<string, number>>(),
+  aiRopEnabled: boolean("ai_rop_enabled").notNull().default(false),
+  importSource: text("import_source"),
+  magicImportSessionId: varchar("magic_import_session_id"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -3129,3 +3132,40 @@ export const crmLeadsRelations = relations(crmLeads, ({ one }) => ({
 export const insertCrmLeadSchema = createInsertSchema(crmLeads).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertCrmLead = z.infer<typeof insertCrmLeadSchema>;
 export type CrmLead = typeof crmLeads.$inferSelect;
+
+// ============ MAGIC IMPORT SESSIONS ============
+export const magicImportSessions = pgTable("magic_import_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  telegramChannel: text("telegram_channel").notNull(),
+  email: text("email"),
+  storeName: text("store_name"),
+  status: text("status").notNull().default("scraping"),
+  tenantId: varchar("tenant_id").references(() => tenants.id),
+  userId: varchar("user_id").references(() => users.id),
+  scrapedPosts: integer("scraped_posts").default(0),
+  extractedProducts: integer("extracted_products").default(0),
+  progressPct: integer("progress_pct").default(0),
+  progressMessage: text("progress_message"),
+  errorMessage: text("error_message"),
+  trialExpiresAt: timestamp("trial_expires_at"),
+  mediaDeletedAt: timestamp("media_deleted_at"),
+  paidClickedAt: timestamp("paid_clicked_at"),
+  activatedAt: timestamp("activated_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const magicImportSessionsRelations = relations(magicImportSessions, ({ one }) => ({
+  tenant: one(tenants, {
+    fields: [magicImportSessions.tenantId],
+    references: [tenants.id],
+  }),
+  user: one(users, {
+    fields: [magicImportSessions.userId],
+    references: [users.id],
+  }),
+}));
+
+export const insertMagicImportSessionSchema = createInsertSchema(magicImportSessions).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertMagicImportSession = z.infer<typeof insertMagicImportSessionSchema>;
+export type MagicImportSession = typeof magicImportSessions.$inferSelect;
