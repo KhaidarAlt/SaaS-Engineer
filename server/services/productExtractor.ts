@@ -58,9 +58,11 @@ export async function extractProductsFromPosts(
       products: allProducts,
     });
 
-    // Build text that includes imageUrl metadata so GPT can return it directly.
-    // This is the key fix: when product info is only in the photo, text is empty
-    // but we still pass the image URL in text so GPT includes it in the response.
+    // Collect all scraped image URLs from this batch for later validation
+    const batchImageUrls = new Set<string>(
+      batch.flatMap((p) => p.imageUrls),
+    );
+
     const postsText = batch
       .map((post, idx) => {
         let entry = `--- Пост ${batchIdx * batchSize + idx + 1} ---\n${post.text || "(текст отсутствует)"}`;
@@ -147,12 +149,15 @@ export async function extractProductsFromPosts(
           product.sku = `MI-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`.toUpperCase();
         }
 
-        // imageUrl is now returned directly by GPT from the [imageUrl: ...] metadata
-        // in the prompt. If GPT didn't return one (e.g. post had no images), keep undefined.
-        if (product.imageUrl && typeof product.imageUrl === "string") {
-          if (!product.imageUrl.startsWith("https://")) {
-            product.imageUrl = undefined;
-          }
+        // Validate imageUrl: must be https, and must match one of the scraped URLs
+        // from this batch (prevents model hallucinations/drift producing external URLs).
+        if (
+          product.imageUrl &&
+          typeof product.imageUrl === "string" &&
+          product.imageUrl.startsWith("https://") &&
+          batchImageUrls.has(product.imageUrl)
+        ) {
+          // valid — keep as-is
         } else {
           product.imageUrl = undefined;
         }
