@@ -58,11 +58,17 @@ export async function extractProductsFromPosts(
       products: allProducts,
     });
 
+    // Build text that includes imageUrl metadata so GPT can return it directly.
+    // This is the key fix: when product info is only in the photo, text is empty
+    // but we still pass the image URL in text so GPT includes it in the response.
     const postsText = batch
       .map((post, idx) => {
-        let entry = `--- Пост ${batchIdx * batchSize + idx + 1} ---\n${post.text}`;
+        let entry = `--- Пост ${batchIdx * batchSize + idx + 1} ---\n${post.text || "(текст отсутствует)"}`;
         if (post.imageUrls.length > 0) {
-          entry += `\n[Изображения: ${post.imageUrls.length} шт]`;
+          entry += `\n[imageUrl: ${post.imageUrls[0]}]`;
+          if (post.imageUrls.length > 1) {
+            entry += `\n[дополнительных фото: ${post.imageUrls.length - 1}]`;
+          }
         }
         return entry;
       })
@@ -108,7 +114,7 @@ export async function extractProductsFromPosts(
           {
             role: "system",
             content:
-              'Ты помощник для извлечения товаров из постов Telegram-канала. Отвечай ТОЛЬКО валидным JSON массивом. Без markdown, без ```json.',
+              'Ты помощник для извлечения товаров из постов Telegram-канала. Отвечай ТОЛЬКО валидным JSON объектом. Без markdown, без ```json.',
           },
           ...messages,
         ],
@@ -141,13 +147,14 @@ export async function extractProductsFromPosts(
           product.sku = `MI-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`.toUpperCase();
         }
 
-        const matchingPost = batch.find(
-          (p) =>
-            p.text.toLowerCase().includes(normalizedName.slice(0, 10)) &&
-            p.imageUrls.length > 0,
-        );
-        if (matchingPost) {
-          product.imageUrl = matchingPost.imageUrls[0];
+        // imageUrl is now returned directly by GPT from the [imageUrl: ...] metadata
+        // in the prompt. If GPT didn't return one (e.g. post had no images), keep undefined.
+        if (product.imageUrl && typeof product.imageUrl === "string") {
+          if (!product.imageUrl.startsWith("https://")) {
+            product.imageUrl = undefined;
+          }
+        } else {
+          product.imageUrl = undefined;
         }
 
         allProducts.push(product);
@@ -173,13 +180,15 @@ function buildExtractionPrompt(postsText: string, channelTitle: string): string 
 
 Для каждого товара верни:
 - name: название товара (кратко, без лишнего)
-- description: описание (2-3 предложения из поста)
+- description: описание (2-3 предложения, из поста или с фото)
 - price: цена в тенге (число, 0 если не указана)
 - category: категория товара
+- imageUrl: скопируй ТОЧНО значение из строки [imageUrl: ...] того поста, откуда взят товар. Если такой строки нет — не включай поле.
 
+ВАЖНО: поле imageUrl должно содержать точный URL из метки [imageUrl: ...], без изменений.
 Если в посте нет товара (просто новости, приветствия, опросы) — пропусти его.
 
-Верни JSON: {"products": [{"name":"...", "description":"...", "price": 0, "category":"..."}]}
+Верни JSON: {"products": [{"name":"...", "description":"...", "price": 0, "category":"...", "imageUrl":"https://..."}]}
 
 Посты:
 ${postsText}`;
