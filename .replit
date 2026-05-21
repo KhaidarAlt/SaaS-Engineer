@@ -1,4 +1,4 @@
-modules = ["nodejs-20", "web", "postgresql-16"]
+modules = ["nodejs-20", "web", "postgresql-16", "python-3.11"]
 run = "npm run dev"
 hidden = [".config", ".git", "generated-icon.png", "node_modules", "dist"]
 
@@ -63,3 +63,7 @@ PLATFORM_DOMAIN = "botfactory.kz"
 VITE_PLATFORM_DOMAIN = "botfactory.kz"
 
 [userenv.production]
+
+[postMerge]
+path = "scripts/post-merge.sh"
+timeoutMs = 20000

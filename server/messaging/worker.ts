@@ -10,6 +10,8 @@ import type { NormalizedOutbound } from "./types";
 
 const BATCH_SIZE = 10;
 const POLL_INTERVAL_MS = 3000;
+const IDLE_POLL_INTERVAL_MS = 30_000;
+const IDLE_THRESHOLD = 3;
 const BACKOFF_SCHEDULE_MS = [
   5_000,        // 5 sec
   15_000,       // 15 sec
@@ -18,7 +20,10 @@ const BACKOFF_SCHEDULE_MS = [
   120_000,      // 2 min
 ];
 
-let workerTimer: ReturnType<typeof setInterval> | null = null;
+let workerTimer: ReturnType<typeof setTimeout> | null = null;
+let workerStopped = true;
+let emptyTickCount = 0;
+let workerRunId = 0;
 
 async function pickBatch(): Promise<
   Array<{
@@ -208,7 +213,11 @@ async function processJob(job: Awaited<ReturnType<typeof pickBatch>>[0]): Promis
 async function tick(): Promise<void> {
   try {
     const batch = await pickBatch();
-    if (batch.length === 0) return;
+    if (batch.length === 0) {
+      emptyTickCount++;
+      return;
+    }
+    emptyTickCount = 0;
 
     for (const job of batch) {
       try {
@@ -289,14 +298,25 @@ export async function startOutboxWorker(): Promise<void> {
     console.error("[OutboxWorker] Failed to clean stuck entries:", e);
   }
 
-  workerTimer = setInterval(tick, POLL_INTERVAL_MS);
-  console.log(`[OutboxWorker] Started (every ${POLL_INTERVAL_MS / 1000}s)`);
+  workerStopped = false;
+  emptyTickCount = 0;
+  const runId = ++workerRunId;
+  const loop = async () => {
+    if (workerStopped || runId !== workerRunId) return;
+    await tick();
+    if (workerStopped || runId !== workerRunId) return;
+    const delay = emptyTickCount >= IDLE_THRESHOLD ? IDLE_POLL_INTERVAL_MS : POLL_INTERVAL_MS;
+    workerTimer = setTimeout(loop, delay);
+  };
+  workerTimer = setTimeout(loop, POLL_INTERVAL_MS);
+  console.log(`[OutboxWorker] Started (active=${POLL_INTERVAL_MS / 1000}s, idle=${IDLE_POLL_INTERVAL_MS / 1000}s after ${IDLE_THRESHOLD} empty ticks)`);
 }
 
 export function stopOutboxWorker(): void {
+  workerStopped = true;
   if (workerTimer) {
-    clearInterval(workerTimer);
+    clearTimeout(workerTimer);
     workerTimer = null;
-    console.log("[OutboxWorker] Stopped");
   }
 }
+

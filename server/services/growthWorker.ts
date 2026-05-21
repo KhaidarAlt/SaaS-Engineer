@@ -4,9 +4,13 @@ import { growthQueue, growthCampaigns, growthEvents } from "@shared/schema";
 import { messagingProvider } from "./messagingProvider";
 
 const INTERVAL_MS = 10_000;
+const IDLE_INTERVAL_MS = 60_000;
+const IDLE_THRESHOLD = 5;
 const BATCH_SIZE = 10;
 
 let running = false;
+let emptyTicks = 0;
+let hadWork = false;
 
 function computeNextQuietEnd(quietStart: number, quietEnd: number): Date {
   const now = new Date();
@@ -44,6 +48,8 @@ async function processQueue() {
       running = false;
       return;
     }
+
+    hadWork = true;
 
     for (const item of pending) {
       try {
@@ -239,17 +245,44 @@ async function processQueue() {
   }
 }
 
-let intervalId: ReturnType<typeof setInterval> | null = null;
+let intervalId: ReturnType<typeof setTimeout> | null = null;
+let stopped = true;
+let growthRunId = 0;
+
+function makeTick(runId: number) {
+  const tick = async () => {
+    if (stopped || runId !== growthRunId) return;
+    hadWork = false;
+    try {
+      await processQueue();
+    } catch (err) {
+      console.error("[GrowthWorker] Tick error:", err);
+    }
+    if (hadWork) {
+      emptyTicks = 0;
+    } else {
+      emptyTicks++;
+    }
+    if (stopped || runId !== growthRunId) return;
+    const delay = emptyTicks >= IDLE_THRESHOLD ? IDLE_INTERVAL_MS : INTERVAL_MS;
+    intervalId = setTimeout(tick, delay);
+  };
+  return tick;
+}
 
 export function startGrowthWorker() {
-  if (intervalId) return;
-  intervalId = setInterval(processQueue, INTERVAL_MS);
-  console.log(`[GrowthWorker] Started (every ${INTERVAL_MS / 1000}s)`);
+  if (!stopped) return;
+  stopped = false;
+  emptyTicks = 0;
+  const runId = ++growthRunId;
+  intervalId = setTimeout(makeTick(runId), INTERVAL_MS);
+  console.log(`[GrowthWorker] Started (active=${INTERVAL_MS / 1000}s, idle=${IDLE_INTERVAL_MS / 1000}s after ${IDLE_THRESHOLD} empty ticks)`);
 }
 
 export function stopGrowthWorker() {
+  stopped = true;
   if (intervalId) {
-    clearInterval(intervalId);
+    clearTimeout(intervalId);
     intervalId = null;
     console.log("[GrowthWorker] Stopped");
   }
