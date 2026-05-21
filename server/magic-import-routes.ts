@@ -475,6 +475,63 @@ export function registerMagicImportRoutes(
     }
   });
 
+  app.post("/api/magic-import/retry-images", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const tenantId = req.user?.tenantId;
+      if (!tenantId) return res.status(403).json({ message: "Доступ запрещён" });
+
+      const tenant = await storage.getTenant(tenantId);
+      if (!tenant?.magicImportSessionId) {
+        return res.status(400).json({ message: "Нет данных о Magic Import для этого магазина" });
+      }
+
+      const session = await storage.getMagicImportSession(tenant.magicImportSessionId);
+      if (!session?.extractedProductsData || session.extractedProductsData.length === 0) {
+        return res.status(400).json({ message: "Нет сохранённых данных о товарах в сессии" });
+      }
+
+      const nameToImageUrl = new Map<string, string>();
+      for (const p of session.extractedProductsData) {
+        if (p.imageUrl && isAllowedImageUrl(p.imageUrl)) {
+          nameToImageUrl.set(p.name.toLowerCase().trim(), p.imageUrl);
+        }
+      }
+
+      const allProducts = await storage.getProducts(tenantId);
+      const objectStorageService = new ObjectStorageService();
+
+      let processed = 0;
+      let succeeded = 0;
+
+      for (const product of allProducts) {
+        const hasMainImage = !!product.mainImageUrl;
+        const productImagesList = hasMainImage ? [] : await storage.getProductImages(product.id, tenantId);
+        const hasImage = hasMainImage || productImagesList.length > 0;
+        if (hasImage) continue;
+
+        const imageUrl = nameToImageUrl.get(product.name.toLowerCase().trim());
+        if (!imageUrl) continue;
+
+        processed++;
+        try {
+          await downloadAndUploadImage(imageUrl, product.id, tenantId, objectStorageService);
+          const newImages = await storage.getProductImages(product.id, tenantId);
+          if (newImages.length > 0) {
+            await storage.updateProduct(product.id, tenantId, { mainImageUrl: newImages[0].url });
+            succeeded++;
+          }
+        } catch (err) {
+          console.error(`Retry image failed for product ${product.id}:`, err);
+        }
+      }
+
+      res.json({ processed, succeeded });
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : "Ошибка";
+      res.status(500).json({ message: msg });
+    }
+  });
+
   app.patch("/api/admin/tenants/:tenantId/toggles", requireAuth, requireSuperAdmin, async (req: Request, res: Response) => {
     try {
       const tenant = await storage.getTenant(req.params.tenantId);

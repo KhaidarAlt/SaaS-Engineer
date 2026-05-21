@@ -21,6 +21,8 @@ import {
   TrendingUp,
   GripVertical,
   ArrowUpDown,
+  ImageOff,
+  RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -74,7 +76,7 @@ import { DashboardLayout } from "@/components/DashboardLayout";
 import { TableRowSkeleton } from "@/components/LoadingSpinner";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import type { Product, Category, CategoryAiPriority } from "@shared/schema";
+import type { Product, Category, CategoryAiPriority, Tenant } from "@shared/schema";
 
 const AVAILABLE_TAGS = [
   { value: "hit", label: "Хит продаж" },
@@ -201,6 +203,43 @@ export default function ProductsPage() {
 
   const { data: priorities } = useQuery<CategoryAiPriority[]>({
     queryKey: ["/api/category-priority"],
+  });
+
+  const { data: tenant } = useQuery<Tenant>({
+    queryKey: ["/api/tenant"],
+  });
+
+  const productsWithoutImages = products?.filter(p => !p.mainImageUrl) ?? [];
+  const hasMagicImportSession = !!tenant?.magicImportSessionId;
+  const showRetryBanner = hasMagicImportSession && productsWithoutImages.length > 0;
+
+  const retryImagesMutation = useMutation<{ processed: number; succeeded: number }, Error>({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/magic-import/retry-images");
+      return res.json() as Promise<{ processed: number; succeeded: number }>;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      if (data.succeeded > 0) {
+        toast({
+          title: `Загружено фото: ${data.succeeded} из ${data.processed}`,
+        });
+      } else if (data.processed === 0) {
+        toast({
+          title: "Товары без фото из Magic Import не найдены",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Не удалось загрузить фото",
+          description: "Возможно, ссылки на изображения устарели",
+          variant: "destructive",
+        });
+      }
+    },
+    onError: () => {
+      toast({ title: "Ошибка загрузки фото", variant: "destructive" });
+    },
   });
 
   const deleteMutation = useMutation({
@@ -518,6 +557,33 @@ export default function ProductsPage() {
         {sortMode && (
           <div className="rounded-md bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 px-4 py-3 text-sm text-blue-800 dark:text-blue-200">
             Перетащите товары для изменения порядка в каталоге. Нажмите «Сохранить порядок» когда закончите.
+          </div>
+        )}
+
+        {showRetryBanner && (
+          <div className="rounded-md bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3" data-testid="banner-retry-images">
+            <div className="flex items-start gap-3">
+              <ImageOff className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                  {productsWithoutImages.length} {productsWithoutImages.length === 1 ? "товар без фото" : productsWithoutImages.length < 5 ? "товара без фото" : "товаров без фото"}
+                </p>
+                <p className="text-sm text-amber-700 dark:text-amber-300">
+                  Фото этих товаров не были загружены при Magic Import. Нажмите кнопку для повторной загрузки.
+                </p>
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => retryImagesMutation.mutate()}
+              disabled={retryImagesMutation.isPending}
+              className="border-amber-300 text-amber-800 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-200 dark:hover:bg-amber-900 shrink-0"
+              data-testid="button-retry-images"
+            >
+              <RefreshCw className={`h-4 w-4 mr-2 ${retryImagesMutation.isPending ? "animate-spin" : ""}`} />
+              {retryImagesMutation.isPending ? "Загрузка..." : "Загрузить фото"}
+            </Button>
           </div>
         )}
 
