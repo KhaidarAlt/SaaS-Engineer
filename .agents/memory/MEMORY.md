@@ -1,0 +1,1 @@
+- [Database driver compatibility](database-driver-compatibility.md) — keep the project’s PostgreSQL driver aligned with the provisioned Replit database endpoint.
